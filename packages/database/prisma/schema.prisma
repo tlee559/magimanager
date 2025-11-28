@@ -1,0 +1,507 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // For migrations (non-pooled connection)
+}
+
+model IdentityProfile {
+  id        String  @id @default(cuid())
+  fullName  String
+  dob       DateTime
+  address   String
+  city      String
+  state     String
+  zipcode   String  @default("")
+  geo       String  // Changed from 'country' to 'geo'
+  website   String?
+  notes     String? // Internal notes about this identity
+
+  // Credentials (sensitive - encrypt in application layer)
+  email           String?   // Gmail for this identity
+  emailPassword   String?   // Encrypted
+  phone           String?   // 2FA phone number
+  twoFactorSecret String?   // 2FA secret (encrypted)
+  backupCodes     String?   // Encrypted JSON array of backup codes
+
+  // Phone verification via TextVerified
+  verificationPhone     String?   // Phone number obtained from TextVerified
+  verificationPhoneId   String?   // TextVerified verification ID (for status checks)
+  verificationStatus    String?   // pending, received, verified, expired
+  verificationCode      String?   // The received SMS code
+  verificationExpiresAt DateTime? // When the verification rental expires
+
+  // Billing info (sensitive - encrypt in application layer)
+  // One card per identity
+  ccNumber          String?   // Full number encrypted
+  ccExp             String?   // Expiration MM/YY
+  ccCvv             String?   // CVV encrypted
+  ccName            String?   // Name on card
+  billingZip        String?   // Billing zipcode
+
+  // Archive status
+  archived    Boolean @default(false)
+  archivedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents IdentityDocument[]
+  adAccounts AdAccount[]
+  gologinProfile GoLoginProfile?
+  activities IdentityActivity[]
+}
+
+model IdentityDocument {
+  id                String   @id @default(cuid())
+  identityProfileId String
+  type              String
+  filePath          String
+  uploadedAt        DateTime @default(now())
+
+  profile IdentityProfile @relation(fields: [identityProfileId], references: [id])
+}
+
+model AdAccount {
+  id                String   @id @default(cuid())
+  internalId        Int      @unique @default(autoincrement()) // Auto-incrementing internal ID number
+  googleCid         String?  @unique // Unique constraint - one CID per account
+  identityProfileId String?  @unique // Unique constraint - one identity per account (1:1 relationship)
+  origin            String   @default("mcc-created") // "mcc-created" | "takeover"
+  status            String   @default("provisioned")
+  warmupTargetSpend Int      @default(5000) // Default $50 warmup target (in cents)
+  currentSpendTotal Int      @default(0)   // All-time spend in cents
+  todaySpend        Int      @default(0)   // Today's spend in cents
+  adsCount          Int      @default(0)
+  campaignsCount    Int      @default(0)
+
+  // Account identifiers
+  mccId             String?   // MCC account ID
+
+  // Operational status
+  accountHealth     String    @default("unknown") // "active" | "suspended" | "unknown"
+  billingStatus     String    @default("not_started") // "not_started" | "pending" | "verified" | "failed"
+  certStatus        String?   // "pending" | "verified" | "errored" | "suspended"
+
+  // Handoff tracking
+  handoffStatus     String      @default("available")  // "available" | "handed-off" | "archived"
+  mediaBuyerId      String?     // FK to MediaBuyer
+  handoffDate       DateTime?
+  handoffNotes      String?
+
+  // Internal notes (deprecated - use thread instead)
+  notes             String?     // Internal notes about this account
+
+  // Google Ads OAuth sync
+  connectionId          String?  // FK to GoogleAdsConnection
+  connectionType        String   @default("manual")  // "manual" | "oauth" | "mcc"
+  syncStatus            String   @default("not_connected")  // "not_connected" | "syncing" | "synced" | "error"
+  lastGoogleSyncAt      DateTime?
+  googleSyncError       String?
+  googleCidVerified     Boolean  @default(false)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  identityProfile IdentityProfile? @relation(fields: [identityProfileId], references: [id])
+  mediaBuyer      MediaBuyer?     @relation(fields: [mediaBuyerId], references: [id])
+  connection      GoogleAdsConnection? @relation(fields: [connectionId], references: [id])
+  thread          AccountThread?
+  checkIns        AccountCheckIn[]
+  activities      AccountActivity[]
+  dailySnapshots  DailySpendSnapshot[]
+}
+
+model GoLoginProfile {
+  id                  String   @id @default(cuid())
+  identityProfileId   String   @unique
+  profileId           String?  // GoLogin's actual profile ID
+  profileName         String?  // Name shown in GoLogin
+  status              String   @default("pending") // pending, ready, error
+  errorMessage        String?  // If creation failed
+
+  // Proxy configuration
+  proxyMode           String   @default("none") // none, http, socks5, gologin
+  proxyHost           String?
+  proxyPort           Int?
+  proxyUsername       String?
+  proxyPassword       String?
+  proxyCountry        String?  // Country code matching identity geo
+
+  // Profile health tracking
+  lastUsedAt          DateTime?
+  fingerprintRefreshedAt DateTime? // When fingerprint was last refreshed
+  browserVersion      String?      // Current Chrome version in profile
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  identityProfile IdentityProfile @relation(fields: [identityProfileId], references: [id])
+}
+
+model MediaBuyer {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  phone     String?
+  notes     String?
+  isActive  Boolean  @default(true)
+  userId    String?  @unique // Link to User model
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  adAccounts AdAccount[]
+  user       User?     @relation(fields: [userId], references: [id])
+}
+
+model AppSettings {
+  id                    String   @id @default(cuid())
+  warmupTargetSpend     Int      @default(5000) // Default $50 warmup target (in cents)
+
+  // API Keys
+  gologinApiKey         String?
+  googleAdsApiKey       String?
+  googleApiKey          String?  // General Google API key
+  textverifiedApiKey    String?  // TextVerified API key for phone verification
+  telegramBotToken      String?  // Telegram bot token from @BotFather
+  telegramChatId        String?  // Telegram chat/group ID for notifications
+
+  updatedAt             DateTime @updatedAt
+}
+
+model ChildAccountJob {
+  id                String   @id @default(cuid())
+  identityProfileId String
+  requestedByUserId String?
+  status            String   @default("queued")
+  googleCid         String?
+  errorMessage      String?
+  createdAt         DateTime @default(now())
+}
+
+// ============================================================================
+// USER & TEAM MANAGEMENT
+// ============================================================================
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+  MEDIA_BUYER
+  ASSISTANT
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model User {
+  id                   String      @id @default(cuid())
+  email                String      @unique
+  name                 String
+  password             String      // Hashed password
+  role                 UserRole    @default(MEDIA_BUYER)
+  status               UserStatus  @default(ACTIVE)
+  firstLogin           Boolean     @default(true)
+  unreadNotifications  Int         @default(0)
+  lastLoginAt          DateTime?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  mediaBuyer           MediaBuyer?
+  threadMessages       ThreadMessage[]
+  accountRequests      AccountRequest[]
+  notifications        Notification[]
+  accountActivities    AccountActivity[]   @relation("AccountActivities")
+  identityActivities   IdentityActivity[]  @relation("IdentityActivities")
+}
+
+// ============================================================================
+// CONVERSATION THREADS
+// ============================================================================
+
+model AccountThread {
+  id          String   @id @default(cuid())
+  adAccountId String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  adAccount AdAccount        @relation(fields: [adAccountId], references: [id])
+  messages  ThreadMessage[]
+}
+
+model ThreadMessage {
+  id             String   @id @default(cuid())
+  threadId       String
+  authorId       String
+  authorName     String
+  authorRole     UserRole
+  message        String   @db.Text
+  isRead         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  editedAt       DateTime?  // Set when message is edited
+
+  thread AccountThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  author User          @relation(fields: [authorId], references: [id])
+}
+
+// ============================================================================
+// ACCOUNT REQUESTS
+// ============================================================================
+
+enum RequestType {
+  CLAIM_EXISTING
+  CREATE_NEW
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  PROFILE_CREATED
+  GOLOGIN_SETUP
+  ACCOUNT_CREATED
+  ASSIGNED
+  ACTIVE
+  REJECTED
+  ARCHIVED
+}
+
+model AccountRequest {
+  id              String        @id @default(cuid())
+  requesterId     String
+  type            RequestType
+  status          RequestStatus @default(PENDING)
+  justification   String        @db.Text
+  existingAccountId String?     // For CLAIM_EXISTING requests
+  createdAccountId  String?     // Filled when approved CREATE_NEW
+  reviewedAt      DateTime?
+  reviewedBy      String?
+  rejectionReason String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  requester User @relation(fields: [requesterId], references: [id])
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+enum NotificationType {
+  NEW_MESSAGE
+  REQUEST_APPROVED
+  REQUEST_REJECTED
+  ACCOUNT_ASSIGNED
+  ACCOUNT_SUSPENDED
+  ACCOUNT_REACTIVATED
+  SYSTEM_ALERT
+}
+
+model Notification {
+  id         String           @id @default(cuid())
+  userId     String?          // Optional - null for system-wide notifications
+  type       NotificationType
+  title      String
+  message    String           @db.Text
+  isRead     Boolean          @default(false)
+  entityId   String?          // ID of related account/request/thread
+  entityType String?          // "account" | "request" | "thread"
+  priority   String           @default("medium") // "low" | "medium" | "high"
+  createdAt  DateTime         @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// DAILY CHECK-INS & ACTIVITY TIMELINE
+// ============================================================================
+
+model AccountCheckIn {
+  id              String   @id @default(cuid())
+  adAccountId     String
+
+  // Daily metrics
+  dailySpend      Decimal  @default(0) @db.Decimal(10, 2)
+  totalSpend      Decimal  @default(0) @db.Decimal(10, 2)
+  adsCount        Int      @default(0)
+  campaignsCount  Int      @default(0)
+
+  // Status at check-in time
+  accountHealth   String   // "active" | "limited" | "suspended" | "banned"
+  billingStatus   String   // "verified" | "pending" | "failed"
+  certStatus      String?
+
+  // Issues/notes
+  issues          String?  @db.Text // Any flags or problems
+  notes           String?  @db.Text // Free-form notes
+
+  checkedAt       DateTime @default(now())
+  checkedBy       String?  // User ID who logged this
+
+  adAccount       AdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+}
+
+model AccountActivity {
+  id              String   @id @default(cuid())
+  adAccountId     String
+
+  action          String   // "CREATED", "GMAIL_SUS", "CERT_SUBMITTED", "APPEAL_DENIED", etc.
+  details         String?  @db.Text // Additional context
+
+  createdAt       DateTime @default(now())
+  createdBy       String?  // User ID who created this entry
+
+  adAccount       AdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  createdByUser   User?     @relation("AccountActivities", fields: [createdBy], references: [id])
+}
+
+model IdentityActivity {
+  id                  String   @id @default(cuid())
+  identityProfileId   String
+
+  action              String   // "CREATED", "DOCUMENT_UPLOADED", "GOLOGIN_CREATED", "GOLOGIN_DELETED", etc.
+  details             String?  @db.Text // Additional context
+
+  createdAt           DateTime @default(now())
+  createdBy           String?  // User ID who created this entry
+
+  identityProfile     IdentityProfile @relation(fields: [identityProfileId], references: [id], onDelete: Cascade)
+  createdByUser       User?           @relation("IdentityActivities", fields: [createdBy], references: [id])
+}
+
+// ============================================================================
+// DISMISSED ALERTS
+// ============================================================================
+
+model DismissedAlert {
+  id              String   @id @default(cuid())
+  adAccountId     String
+  alertType       String   // "suspended", "billing_failed", "no_checkin", "cert_error", "ready_handoff", etc.
+  dismissedBy     String   // User ID who dismissed
+  dismissedAt     DateTime @default(now())
+
+  // Unique constraint: one dismissed alert per account+type combination
+  @@unique([adAccountId, alertType])
+}
+
+// ============================================================================
+// DAILY SPEND HISTORY (for trend tracking)
+// ============================================================================
+
+model DailySpendSnapshot {
+  id              String   @id @default(cuid())
+  adAccountId     String
+  date            DateTime @db.Date  // The date this snapshot represents
+
+  // Daily metrics
+  dailySpend      Decimal  @default(0) @db.Decimal(10, 2)
+  totalSpend      Decimal  @default(0) @db.Decimal(10, 2)
+  adsCount        Int      @default(0)
+  campaignsCount  Int      @default(0)
+
+  // Status at snapshot time
+  accountHealth   String
+  billingStatus   String
+
+  createdAt       DateTime @default(now())
+
+  adAccount       AdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+
+  // One snapshot per account per day
+  @@unique([adAccountId, date])
+  @@index([date])
+}
+
+// ============================================================================
+// TELEGRAM BOT CONVERSATION MEMORY
+// ============================================================================
+
+model BotConversation {
+  id              String   @id @default(cuid())
+  chatId          String   // Telegram chat ID
+  userId          String?  // Telegram user ID (optional for groups)
+
+  // Conversation context (JSON array of last N messages)
+  messages        String   @db.Text  // JSON: [{role: "user"|"assistant", content: string, timestamp: string}]
+
+  // Extracted context from conversation
+  lastIntent      String?  // Last detected intent
+  lastAccountId   String?  // Last mentioned account (for follow-ups)
+  lastTopicType   String?  // "accounts" | "alerts" | "identities" | etc.
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  expiresAt       DateTime // Auto-expire old conversations
+
+  @@unique([chatId, userId])
+  @@index([chatId])
+  @@index([expiresAt])
+}
+
+// ============================================================================
+// WEEKLY STATS SNAPSHOTS (for week-over-week comparisons)
+// ============================================================================
+
+model WeeklyStatsSnapshot {
+  id              String   @id @default(cuid())
+  weekStart       DateTime @db.Date  // Monday of the week
+
+  // Account counts
+  totalAccounts       Int @default(0)
+  activeAccounts      Int @default(0)
+  suspendedAccounts   Int @default(0)
+  bannedAccounts      Int @default(0)
+  limitedAccounts     Int @default(0)
+  archivedAccounts    Int @default(0)
+
+  // Financial metrics (in cents)
+  totalSpend          Int @default(0)
+  weeklySpendDelta    Int @default(0)  // Change from previous week
+
+  // Operational metrics
+  totalAds            Int @default(0)
+  accountsCreated     Int @default(0)  // New accounts this week
+  accountsHandedOff   Int @default(0)  // Accounts handed off this week
+  checkInsCount       Int @default(0)  // Total check-ins this week
+
+  // Identity metrics
+  totalIdentities     Int @default(0)
+  identitiesCreated   Int @default(0)  // New identities this week
+
+  createdAt           DateTime @default(now())
+
+  // One snapshot per week
+  @@unique([weekStart])
+}
+
+// ============================================================================
+// GOOGLE ADS OAUTH CONNECTIONS
+// ============================================================================
+
+model GoogleAdsConnection {
+  id                String   @id @default(cuid())
+
+  // OAuth tokens (encrypted at application layer)
+  accessToken       String   @db.Text
+  refreshToken      String   @db.Text
+  tokenExpiresAt    DateTime
+
+  // Google user info (who granted access)
+  googleUserId      String   // Google account ID
+  googleEmail       String   // Email for reference
+
+  // Connection status
+  status            String   @default("active")  // "active" | "revoked" | "expired"
+  lastSyncAt        DateTime?
+  lastSyncError     String?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Accounts using this connection
+  adAccounts        AdAccount[]
+}

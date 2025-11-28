@@ -1,0 +1,33 @@
+{
+  "name": "@magimanager/core",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./repositories": "./src/repositories/index.ts",
+    "./services": "./src/services/index.ts",
+    "./integrations": "./src/integrations/index.ts",
+    "./api-handlers": "./src/api-handlers/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@magimanager/auth": "*",
+    "@magimanager/database": "*",
+    "@magimanager/shared": "*",
+    "@magimanager/realtime": "*",
+    "bcryptjs": "^3.0.3"
+  },
+  "peerDependencies": {
+    "next": "^15.0.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20",
+    "typescript": "^5"
+  }
+}
