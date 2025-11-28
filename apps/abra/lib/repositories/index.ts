@@ -1,8 +1,18 @@
-// ============================================================================
-// REPOSITORIES INDEX - Central export for all repositories
-// ============================================================================
+// Re-export from @magimanager/core for backward compatibility
+export {
+  identityRepository,
+  accountRepository,
+  userRepository,
+  mediaBuyerRepository,
+  type IdentityFindOptions,
+  type IdentityWithRelations,
+  type AccountFindOptions,
+  type AccountWithRelations,
+  type UserFindOptions,
+  type UserWithRelations,
+  type MediaBuyerFindOptions,
+  type MediaBuyerWithRelations,
+} from "@magimanager/core";
 
-export { identityRepository, type IdentityFindOptions, type IdentityWithRelations } from "./identity.repository";
-export { accountRepository, type AccountFindOptions, type AccountWithRelations } from "./account.repository";
-export { userRepository, type UserFindOptions, type UserWithRelations } from "./user.repository";
-export { prisma } from "./base.repository";
+// Re-export prisma client for backward compatibility
+export { prisma } from "@magimanager/database";

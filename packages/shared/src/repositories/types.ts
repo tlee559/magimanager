@@ -49,7 +49,7 @@ export interface IdentityFindOptions {
   offset?: number;
 }
 
-export interface IdentityWithRelations extends Identity {
+export interface IdentityWithRelations extends Omit<Identity, "documents" | "adAccounts"> {
   documents: IdentityDocument[];
   adAccounts?: { id: string; internalId: number; googleCid: string | null }[];
 }
@@ -89,7 +89,7 @@ export interface AccountFindOptions {
   offset?: number;
 }
 
-export interface AccountWithRelations extends AdAccount {
+export interface AccountWithRelations extends Omit<AdAccount, "identityProfile" | "mediaBuyer" | "connection" | "checkIns" | "activities"> {
   identityProfile?: {
     id: string;
     fullName: string;
@@ -196,7 +196,7 @@ export interface UserFindOptions {
   offset?: number;
 }
 
-export interface UserWithRelations extends User {
+export interface UserWithRelations extends Omit<User, "mediaBuyer"> {
   mediaBuyer?: MediaBuyer;
 }
 
@@ -224,7 +224,7 @@ export interface MediaBuyerFindOptions {
   offset?: number;
 }
 
-export interface MediaBuyerWithRelations extends MediaBuyer {
+export interface MediaBuyerWithRelations extends Omit<MediaBuyer, "adAccounts" | "user"> {
   adAccounts?: AdAccount[];
   user?: User;
 }

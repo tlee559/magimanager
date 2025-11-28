@@ -14,7 +14,7 @@ export interface MediaBuyerFindOptions {
   offset?: number;
 }
 
-export interface MediaBuyerWithRelations extends MediaBuyer {
+export interface MediaBuyerWithRelations extends Omit<MediaBuyer, "user"> {
   user?: {
     id: string;
     name: string;
@@ -65,7 +65,7 @@ class MediaBuyerRepository {
       include: this.buildInclude(options),
     });
 
-    return mediaBuyer as MediaBuyerWithRelations | null;
+    return mediaBuyer as unknown as MediaBuyerWithRelations | null;
   }
 
   async findAll(options: MediaBuyerFindOptions = {}): Promise<MediaBuyerWithRelations[]> {
@@ -77,7 +77,7 @@ class MediaBuyerRepository {
       skip: options.offset,
     });
 
-    return mediaBuyers as MediaBuyerWithRelations[];
+    return mediaBuyers as unknown as MediaBuyerWithRelations[];
   }
 
   async count(options: MediaBuyerFindOptions = {}): Promise<number> {
@@ -101,7 +101,7 @@ class MediaBuyerRepository {
       },
     });
 
-    return mediaBuyer as MediaBuyerWithRelations;
+    return mediaBuyer as unknown as MediaBuyerWithRelations;
   }
 
   async update(
@@ -125,7 +125,7 @@ class MediaBuyerRepository {
       },
     });
 
-    return mediaBuyer as MediaBuyerWithRelations;
+    return mediaBuyer as unknown as MediaBuyerWithRelations;
   }
 
   async delete(id: string): Promise<void> {

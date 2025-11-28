@@ -15,7 +15,7 @@ export interface UserFindOptions {
   offset?: number;
 }
 
-export interface UserWithRelations extends User {
+export interface UserWithRelations extends Omit<User, "mediaBuyer"> {
   mediaBuyer?: {
     id: string;
     name: string;
@@ -64,7 +64,7 @@ class UserRepository {
     if (user) {
       // Remove password from response
       const { password: _, ...userWithoutPassword } = user;
-      return userWithoutPassword as UserWithRelations;
+      return userWithoutPassword as unknown as UserWithRelations;
     }
 
     return null;
@@ -76,7 +76,7 @@ class UserRepository {
       include: { mediaBuyer: true },
     });
 
-    return user as (UserWithRelations & { password: string }) | null;
+    return user as unknown as (UserWithRelations & { password: string }) | null;
   }
 
   async findAll(options: UserFindOptions = {}): Promise<UserWithRelations[]> {
@@ -91,7 +91,7 @@ class UserRepository {
     // Remove passwords from response
     return users.map((user) => {
       const { password: _, ...userWithoutPassword } = user;
-      return userWithoutPassword as UserWithRelations;
+      return userWithoutPassword as unknown as UserWithRelations;
     });
   }
 
@@ -118,7 +118,7 @@ class UserRepository {
     });
 
     const { password: _, ...userWithoutPassword } = user;
-    return userWithoutPassword as UserWithRelations;
+    return userWithoutPassword as unknown as UserWithRelations;
   }
 
   async update(id: string, data: UserUpdateInput): Promise<UserWithRelations> {
@@ -136,7 +136,7 @@ class UserRepository {
     });
 
     const { password: _, ...userWithoutPassword } = user;
-    return userWithoutPassword as UserWithRelations;
+    return userWithoutPassword as unknown as UserWithRelations;
   }
 
   async updatePassword(id: string, newPassword: string): Promise<void> {

@@ -16,7 +16,7 @@ export interface IdentityFindOptions {
   offset?: number;
 }
 
-export interface IdentityWithRelations extends Identity {
+export interface IdentityWithRelations extends Omit<Identity, "documents" | "adAccounts"> {
   documents: IdentityDocument[];
   adAccounts?: { id: string; internalId: number; googleCid: string | null }[];
 }
@@ -69,7 +69,7 @@ class IdentityRepository {
       },
     });
 
-    return identity as IdentityWithRelations | null;
+    return identity as unknown as IdentityWithRelations | null;
   }
 
   async findAll(options: IdentityFindOptions = {}): Promise<IdentityWithRelations[]> {
@@ -81,7 +81,7 @@ class IdentityRepository {
       skip: options.offset,
     });
 
-    return identities as IdentityWithRelations[];
+    return identities as unknown as IdentityWithRelations[];
   }
 
   async count(options: IdentityFindOptions = {}): Promise<number> {
@@ -119,7 +119,7 @@ class IdentityRepository {
       },
     });
 
-    return identity as IdentityWithRelations;
+    return identity as unknown as IdentityWithRelations;
   }
 
   async update(id: string, data: IdentityUpdateInput): Promise<IdentityWithRelations> {
@@ -159,7 +159,7 @@ class IdentityRepository {
       },
     });
 
-    return identity as IdentityWithRelations;
+    return identity as unknown as IdentityWithRelations;
   }
 
   async delete(id: string): Promise<void> {
@@ -189,7 +189,7 @@ class IdentityRepository {
       },
     });
 
-    return document as IdentityDocument;
+    return document as unknown as IdentityDocument;
   }
 
   async removeDocument(documentId: string): Promise<void> {

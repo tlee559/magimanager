@@ -34,7 +34,7 @@ export interface AccountFindOptions {
   offset?: number;
 }
 
-export interface AccountWithRelations extends AdAccount {
+export interface AccountWithRelations extends Omit<AdAccount, "identityProfile" | "mediaBuyer" | "connection" | "checkIns" | "activities"> {
   identityProfile?: {
     id: string;
     fullName: string;
@@ -158,7 +158,7 @@ class AccountRepository {
       },
     });
 
-    return account as AccountWithRelations | null;
+    return account as unknown as AccountWithRelations | null;
   }
 
   async findByInternalId(internalId: number): Promise<AccountWithRelations | null> {
@@ -175,7 +175,7 @@ class AccountRepository {
       },
     });
 
-    return account as AccountWithRelations | null;
+    return account as unknown as AccountWithRelations | null;
   }
 
   async findByGoogleCid(googleCid: string): Promise<AccountWithRelations | null> {
@@ -195,7 +195,7 @@ class AccountRepository {
       },
     });
 
-    return account as AccountWithRelations | null;
+    return account as unknown as AccountWithRelations | null;
   }
 
   async findAll(options: AccountFindOptions = {}): Promise<AccountWithRelations[]> {
@@ -207,7 +207,7 @@ class AccountRepository {
       skip: options.offset,
     });
 
-    return accounts as AccountWithRelations[];
+    return accounts as unknown as AccountWithRelations[];
   }
 
   async count(options: AccountFindOptions = {}): Promise<number> {
@@ -259,7 +259,7 @@ class AccountRepository {
       userId
     );
 
-    return account as AccountWithRelations;
+    return account as unknown as AccountWithRelations;
   }
 
   async update(id: string, data: AdAccountUpdateInput, userId?: string | null): Promise<AccountWithRelations> {
@@ -293,7 +293,7 @@ class AccountRepository {
       },
     });
 
-    return account as AccountWithRelations;
+    return account as unknown as AccountWithRelations;
   }
 
   async delete(id: string): Promise<void> {
@@ -353,7 +353,7 @@ class AccountRepository {
       },
     });
 
-    return activity as AccountActivity;
+    return activity as unknown as AccountActivity;
   }
 
   async addCheckIn(

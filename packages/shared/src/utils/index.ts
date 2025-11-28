@@ -225,3 +225,61 @@ export async function retry<T>(
 
   throw lastError;
 }
+
+/**
+ * Format Date to YYYY-MM-DD string (for input type="date")
+ */
+export function formatDateToInputString(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * Format Date for display (MM/DD/YYYY)
+ */
+export function formatDateForDisplay(date: Date | string): string {
+  const dateObj = typeof date === "string" ? new Date(date) : date;
+  const mm = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const dd = String(dateObj.getDate()).padStart(2, "0");
+  const yyyy = dateObj.getFullYear();
+  return `${mm}/${dd}/${yyyy}`;
+}
+
+/**
+ * List of countries/regions
+ */
+export const GEO_OPTIONS = [
+  "United States",
+  "Canada",
+  "United Kingdom",
+  "Australia",
+  "Germany",
+  "France",
+  "Spain",
+  "Italy",
+  "Netherlands",
+  "Belgium",
+  "Sweden",
+  "Norway",
+  "Denmark",
+  "Finland",
+  "Poland",
+  "Czech Republic",
+  "Austria",
+  "Switzerland",
+  "Ireland",
+  "Portugal",
+  "Greece",
+  "Japan",
+  "South Korea",
+  "Singapore",
+  "New Zealand",
+  "Brazil",
+  "Mexico",
+  "Argentina",
+  "Chile",
+  "India",
+  "Other",
+] as const;

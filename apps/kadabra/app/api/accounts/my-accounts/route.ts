@@ -3,8 +3,13 @@ import { prisma } from "@magimanager/database";
 import { requireAuth } from "@/lib/api-auth";
 
 export async function GET() {
-  const user = await requireAuth();
-  if (user instanceof NextResponse) return user;
+  const auth = await requireAuth();
+  if (!auth.authorized) return auth.error;
+
+  const user = auth.user;
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
     // For media buyers, get accounts assigned to them

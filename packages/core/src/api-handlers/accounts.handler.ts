@@ -152,19 +152,10 @@ export async function accountDeleteHandler(
 
   try {
     const { id } = await params;
-    const url = new URL(request.url);
-    const forceDelete = url.searchParams.get("force") === "true";
 
-    const result = await accountService.delete(id, userId, forceDelete);
+    const result = await accountService.delete(id, userId);
 
     if (!result.success) {
-      // Check for conflict response (blockers)
-      if (result.error?.includes("related data")) {
-        return NextResponse.json(
-          { error: result.error, canForceDelete: true },
-          { status: 409 }
-        );
-      }
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
