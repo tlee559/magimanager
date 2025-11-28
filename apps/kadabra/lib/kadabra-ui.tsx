@@ -750,7 +750,11 @@ export function KadabraApp() {
             </div>
           </div>
           <button
-            onClick={() => signOut({ callbackUrl: "/" })}
+            onClick={() => {
+              // Unified logout: sign out and redirect to abra (auth hub)
+              const abraUrl = process.env.NEXT_PUBLIC_ABRA_URL || "http://localhost:3000";
+              signOut({ callbackUrl: abraUrl });
+            }}
             className="w-full flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded-lg text-sm transition"
           >
             <LogOut className="w-4 h-4" />

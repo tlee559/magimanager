@@ -1,7 +1,7 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { useState, Suspense, useMemo } from 'react';
+import { useState, Suspense, useMemo, useEffect } from 'react';
 import { CheckCircle, XCircle, AlertTriangle, Plus, Link } from 'lucide-react';
 
 function OAuthResultContent() {
@@ -130,6 +130,68 @@ function OAuthResultContent() {
         </div>
       );
     }
+  }
+
+  // PICKER MODE: Send accounts back to parent window (Add Account modal)
+  // This uses postMessage to communicate with the opener window
+  useEffect(() => {
+    if (status === 'picker' && window.opener) {
+      const errorParam = searchParams.get('error');
+
+      if (errorParam) {
+        // Send error to parent
+        window.opener.postMessage({
+          type: 'oauth-picker-result',
+          success: false,
+          error: errorParam,
+        }, window.location.origin);
+      } else {
+        // Send accounts to parent
+        window.opener.postMessage({
+          type: 'oauth-picker-result',
+          success: true,
+          email: email,
+          accounts: accessibleCids,
+        }, window.location.origin);
+      }
+
+      // Close popup after a short delay to ensure message is sent
+      setTimeout(() => window.close(), 100);
+    }
+  }, [status, email, accessibleCids, searchParams]);
+
+  // Picker mode - show a brief "returning" message
+  if (status === 'picker') {
+    const errorParam = searchParams.get('error');
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 max-w-md w-full text-center">
+          {errorParam ? (
+            <>
+              <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <XCircle className="w-8 h-8 text-red-500" />
+              </div>
+              <h1 className="text-xl font-bold text-white mb-2">No Accounts Found</h1>
+              <p className="text-zinc-400 mb-4">{errorParam}</p>
+              <button
+                onClick={() => window.close()}
+                className="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors"
+              >
+                Close
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-8 h-8 text-emerald-500" />
+              </div>
+              <h1 className="text-xl font-bold text-white mb-2">Accounts Found!</h1>
+              <p className="text-zinc-400">Returning to form...</p>
+            </>
+          )}
+        </div>
+      </div>
+    );
   }
 
   // Account picker state - user selects which CID to link

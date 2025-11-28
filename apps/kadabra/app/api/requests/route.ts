@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
+import { broadcastEvent, CHANNELS } from "@magimanager/realtime";
 
 // GET /api/requests - List account requests (filtered by role)
 export async function GET() {
@@ -229,6 +230,18 @@ export async function POST(request: NextRequest) {
           },
         },
       });
+
+      // Broadcast real-time notification to admin
+      await broadcastEvent(
+        CHANNELS.NOTIFICATIONS(admin.id),
+        "notification:new",
+        {
+          title: "New account request",
+          message: `${userName} requested to ${requestTypeLabel}`,
+          entityId: newRequest.id,
+          entityType: "request",
+        }
+      );
     }
 
     return NextResponse.json({

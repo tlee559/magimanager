@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 function SquareMLogoIcon({ size = 80 }: { size?: number }) {
   return (
@@ -35,8 +35,11 @@ function SquareMLogoIcon({ size = 80 }: { size?: number }) {
   );
 }
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get("returnTo");
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -61,8 +64,21 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/admin");
-      router.refresh();
+      // Fetch user role to determine redirect
+      const sessionRes = await fetch("/api/auth/session");
+      const session = await sessionRes.json();
+      const role = session?.user?.role;
+
+      // Role-based redirect logic
+      if (role === "MEDIA_BUYER") {
+        // Media buyers always go to kadabra
+        const kadabraUrl = returnTo || process.env.NEXT_PUBLIC_KADABRA_URL || "http://localhost:3001";
+        window.location.href = kadabraUrl;
+      } else {
+        // Admins/Managers stay on abra
+        router.push("/admin");
+        router.refresh();
+      }
     } catch (err) {
       setError("An error occurred. Please try again.");
       setIsLoading(false);
@@ -156,5 +172,18 @@ export default function LoginPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+// Wrap with Suspense for useSearchParams
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
+        <div className="text-slate-400">Loading...</div>
+      </main>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

@@ -125,7 +125,10 @@ export function Sidebar({ currentView, onViewChange, userRole }: SidebarProps) {
           <div className="text-xs text-slate-500">{session?.user?.email || "No email"}</div>
         </div>
         <button
-          onClick={() => signOut({ callbackUrl: "/" })}
+          onClick={() => {
+            // Unified logout: sign out and redirect to login page
+            signOut({ callbackUrl: "/" });
+          }}
           className="w-full px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition text-sm flex items-center justify-center gap-2"
         >
           <span>🚪</span>

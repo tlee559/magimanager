@@ -141,8 +141,33 @@ export async function listAccessibleCustomers(accessToken: string): Promise<stri
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Failed to list accessible customers: ${error}`);
+    const errorText = await response.text();
+
+    // Parse and provide user-friendly error messages
+    let userMessage: string;
+
+    if (response.status === 401) {
+      userMessage = "Your Google session has expired. Please try connecting again.";
+    } else if (response.status === 403) {
+      // Check for specific permission errors
+      if (errorText.includes("PERMISSION_DENIED") || errorText.includes("ACCESS_DENIED")) {
+        userMessage = "Your Google account doesn't have permission to access Google Ads. Make sure you're signed into the correct account with Google Ads access.";
+      } else if (errorText.includes("DEVELOPER_TOKEN")) {
+        userMessage = "Configuration error - please contact support.";
+      } else {
+        userMessage = "Access denied. Make sure you're signed into a Google account with Google Ads access.";
+      }
+    } else if (response.status === 404) {
+      userMessage = "This Google account has no accessible Google Ads accounts.";
+    } else if (response.status >= 500) {
+      userMessage = "Google Ads is temporarily unavailable. Please try again in a few minutes.";
+    } else {
+      // Log the actual error for debugging but show generic message
+      console.error("Google Ads API error:", response.status, errorText);
+      userMessage = "Unable to connect to Google Ads. Please try again.";
+    }
+
+    throw new Error(userMessage);
   }
 
   const data = await response.json();

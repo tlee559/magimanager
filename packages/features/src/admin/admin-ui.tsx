@@ -2,6 +2,7 @@
 
 import { useState, useEffect, FormEvent, ChangeEvent, useMemo } from "react";
 import { GEO_OPTIONS, formatDateForDisplay, formatDateToInputString } from "@magimanager/shared";
+import { useRealtimeNotifications } from "@magimanager/realtime";
 import { signOut, useSession } from "next-auth/react";
 import { useModal } from "./modal-context";
 import { AdAccountsView } from "./ad-accounts-view";
@@ -291,7 +292,7 @@ export function AdminApp() {
       const res = await fetch("/api/accounts");
       if (res.ok) {
         const data = await res.json();
-        setAccounts(data || []);
+        setAccounts(data.accounts || []);
       }
     } catch (error) {
       console.error("Failed to fetch accounts:", error);
@@ -366,6 +367,13 @@ export function AdminApp() {
     }, 30000); // Poll every 30 seconds
     return () => clearInterval(interval);
   }, []);
+
+  // Subscribe to real-time notifications via Pusher
+  const userId = (session?.user as any)?.id || null;
+  useRealtimeNotifications(userId, () => {
+    // When a real-time notification arrives, refresh the notifications list
+    fetchNotifications();
+  });
 
   // Show password change modal on first login
   useEffect(() => {
@@ -495,7 +503,7 @@ export function AdminApp() {
             <div className="text-xs text-slate-500">{session?.user?.email || "No email"}</div>
           </div>
           <button
-            onClick={() => signOut({ callbackUrl: '/' })}
+            onClick={() => signOut({ callbackUrl: window.location.origin })}
             className="w-full px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition text-sm flex items-center justify-center gap-2"
           >
             <span>🚪</span>
@@ -1888,6 +1896,20 @@ function CreateIdentityView({
           </div>
         </div>
 
+        {/* Phone */}
+        <div className="space-y-1">
+          <label className="block text-sm font-medium text-slate-200">
+            Phone Number (optional)
+          </label>
+          <input
+            name="phone"
+            type="tel"
+            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+            placeholder="+1 555 123 4567"
+          />
+          {errors.phone && <p className="text-xs text-rose-400 mt-1">{errors.phone}</p>}
+        </div>
+
         {/* Address */}
         <div className="space-y-1">
           <label className="block text-sm font-medium text-slate-200">
@@ -2107,39 +2129,6 @@ function CreateIdentityView({
               {errors.emailPassword && <p className="text-xs text-rose-400 mt-1">{errors.emailPassword}</p>}
             </div>
 
-            {/* Phone (2FA) */}
-            <div className="space-y-1">
-              <label className="block text-sm font-medium text-slate-200">
-                2FA Phone Number
-              </label>
-              <input
-                name="phone"
-                type="tel"
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                placeholder="+1 555 123 4567"
-              />
-              <p className="text-xs text-slate-500">
-                Phone number used for 2FA verification
-              </p>
-              {errors.phone && <p className="text-xs text-rose-400 mt-1">{errors.phone}</p>}
-            </div>
-
-            {/* Backup Codes */}
-            <div className="space-y-1">
-              <label className="block text-sm font-medium text-slate-200">
-                Backup Codes
-              </label>
-              <textarea
-                name="backupCodes"
-                rows={3}
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-mono"
-                placeholder="One code per line, e.g:&#10;1234-5678-9012&#10;9876-5432-1098"
-              />
-              <p className="text-xs text-slate-500">
-                2FA backup/recovery codes (one per line)
-              </p>
-              {errors.backupCodes && <p className="text-xs text-rose-400 mt-1">{errors.backupCodes}</p>}
-            </div>
           </>
         )}
 
@@ -2303,17 +2292,27 @@ function EditIdentityView({
   // Document upload state
   const [documents, setDocuments] = useState<IdentityDoc[]>(identity.documents || []);
   const [uploadingDoc, setUploadingDoc] = useState(false);
-  const [selectedDocType, setSelectedDocType] = useState('drivers_license_front');
+  const [isDragging, setIsDragging] = useState(false);
 
-  async function handleDocumentUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Auto-detect document type from filename
+  function detectDocType(filename: string): string {
+    const lower = filename.toLowerCase();
+    if (lower.includes('license') || lower.includes('dl')) {
+      return lower.includes('back') ? 'drivers_license_back' : 'drivers_license_front';
+    }
+    if (lower.includes('passport')) return 'passport';
+    if (lower.includes('bill') || lower.includes('utility')) return 'utility_bill';
+    if (lower.includes('bank') || lower.includes('statement')) return 'bank_statement';
+    if (lower.includes('selfie')) return 'selfie';
+    return 'other';
+  }
 
+  async function uploadFile(file: File) {
     setUploadingDoc(true);
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('type', selectedDocType);
+      formData.append('type', detectDocType(file.name));
 
       const res = await fetch(`/api/identities/${identity.id}/documents`, {
         method: 'POST',
@@ -2324,9 +2323,6 @@ function EditIdentityView({
 
       if (res.ok) {
         setDocuments([result, ...documents]);
-        // Reset file input
-        e.target.value = '';
-        // Refresh parent data so dashboard indicators update
         onSuccess();
       } else {
         await showError('Upload Failed', result.error || 'Failed to upload document');
@@ -2337,6 +2333,30 @@ function EditIdentityView({
     } finally {
       setUploadingDoc(false);
     }
+  }
+
+  async function handleDocumentUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await uploadFile(file);
+    e.target.value = '';
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) uploadFile(file);
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
   }
 
   async function handleDocumentDelete(docId: string, docType: string) {
@@ -2446,19 +2466,34 @@ function EditIdentityView({
           {errors.fullName && <p className="text-xs text-rose-400 mt-1">{errors.fullName}</p>}
         </div>
 
-        {/* Date of Birth */}
-        <div className="space-y-1">
-          <label className="block text-sm font-medium text-slate-200">
-            Date of Birth <span className="text-rose-400">*</span>
-          </label>
-          <input
-            name="dob"
-            type="date"
-            defaultValue={formatDateToInputString(new Date(identity.dob))}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-            required
-          />
-          {errors.dob && <p className="text-xs text-rose-400 mt-1">{errors.dob}</p>}
+        {/* Date of Birth and Phone */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-slate-200">
+              Date of Birth <span className="text-rose-400">*</span>
+            </label>
+            <input
+              name="dob"
+              type="date"
+              defaultValue={formatDateToInputString(new Date(identity.dob))}
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+              required
+            />
+            {errors.dob && <p className="text-xs text-rose-400 mt-1">{errors.dob}</p>}
+          </div>
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-slate-200">
+              Phone Number (optional)
+            </label>
+            <input
+              name="phone"
+              type="tel"
+              defaultValue={identity.phone || ""}
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+              placeholder="+1 555 123 4567"
+            />
+            {errors.phone && <p className="text-xs text-rose-400 mt-1">{errors.phone}</p>}
+          </div>
         </div>
 
         {/* Address */}
@@ -2613,42 +2648,6 @@ function EditIdentityView({
           {errors.emailPassword && <p className="text-xs text-rose-400 mt-1">{errors.emailPassword}</p>}
         </div>
 
-        {/* Phone (2FA) */}
-        <div className="space-y-1">
-          <label className="block text-sm font-medium text-slate-200">
-            2FA Phone Number (optional)
-          </label>
-          <input
-            name="phone"
-            type="tel"
-            defaultValue={identity.phone || ""}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-            placeholder="+1 555 123 4567"
-          />
-          <p className="text-xs text-slate-500">
-            Phone number used for 2FA verification
-          </p>
-          {errors.phone && <p className="text-xs text-rose-400 mt-1">{errors.phone}</p>}
-        </div>
-
-        {/* Backup Codes */}
-        <div className="space-y-1">
-          <label className="block text-sm font-medium text-slate-200">
-            Backup Codes (optional)
-          </label>
-          <textarea
-            name="backupCodes"
-            defaultValue={identity.backupCodes || ""}
-            rows={3}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-mono"
-            placeholder="One code per line, e.g:&#10;1234-5678-9012&#10;9876-5432-1098"
-          />
-          <p className="text-xs text-slate-500">
-            2FA backup/recovery codes (one per line)
-          </p>
-          {errors.backupCodes && <p className="text-xs text-rose-400 mt-1">{errors.backupCodes}</p>}
-        </div>
-
         {/* Divider - Billing Information */}
         <div className="border-t border-slate-700 pt-6 mt-6">
           <h3 className="text-sm font-medium text-slate-200 mb-1">Billing Information</h3>
@@ -2749,56 +2748,51 @@ function EditIdentityView({
         <div className="border-t border-slate-700 pt-6 mt-6">
           <h3 className="text-sm font-medium text-slate-200 mb-1">Identity Documents</h3>
           <p className="text-xs text-slate-500 mb-4">
-            Upload KYC documents (ID, utility bills, etc.) for verification purposes.
+            Upload ID, utility bills, bank statements, etc.
           </p>
         </div>
 
-        {/* Document Upload */}
+        {/* Document Upload - Drag & Drop Zone */}
         <div className="space-y-4">
-          <div className="flex gap-3">
-            <select
-              value={selectedDocType}
-              onChange={(e) => setSelectedDocType(e.target.value)}
-              className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500"
-            >
-              {DOCUMENT_TYPES.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
-            <label className="relative cursor-pointer">
-              <input
-                type="file"
-                accept="image/*,.pdf"
-                onChange={handleDocumentUpload}
-                disabled={uploadingDoc}
-                className="sr-only"
-              />
-              <span className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition ${
-                uploadingDoc
-                  ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                  : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20'
-              }`}>
-                {uploadingDoc ? (
-                  <>
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                    Upload Document
-                  </>
-                )}
-              </span>
-            </label>
-          </div>
+          <label
+            className={`relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition ${
+              isDragging
+                ? 'border-emerald-500 bg-emerald-500/10'
+                : uploadingDoc
+                ? 'border-slate-600 bg-slate-800/50 cursor-not-allowed'
+                : 'border-slate-700 bg-slate-800/30 hover:bg-slate-800/50 hover:border-slate-600'
+            }`}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+          >
+            <input
+              type="file"
+              accept="image/*,.pdf"
+              onChange={handleDocumentUpload}
+              disabled={uploadingDoc}
+              className="sr-only"
+            />
+            {uploadingDoc ? (
+              <div className="flex flex-col items-center gap-2 text-slate-400">
+                <svg className="w-8 h-8 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span className="text-sm">Uploading...</span>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-2 text-slate-400">
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <span className="text-sm">
+                  {isDragging ? 'Drop file here' : 'Drag & drop or click to upload'}
+                </span>
+                <span className="text-xs text-slate-500">Images or PDF, max 10MB</span>
+              </div>
+            )}
+          </label>
 
           {/* Document List */}
           {documents.length > 0 ? (
@@ -3917,7 +3911,7 @@ function IdentityDetailView({
                 )}
                 {identity.phone && (
                   <div>
-                    <div className="text-xs text-slate-400">2FA Phone Number</div>
+                    <div className="text-xs text-slate-400">Phone Number</div>
                     <div className="text-slate-100 flex items-center gap-2">
                       <span>{identity.phone}</span>
                       <button
@@ -3933,123 +3927,33 @@ function IdentityDetailView({
                     </div>
                   </div>
                 )}
-                {identity.backupCodes && (
-                  <div>
-                    <div className="text-xs text-slate-400">Backup Codes</div>
-                    <div className="text-slate-100 flex items-start gap-2">
-                      <pre className="font-mono text-xs whitespace-pre-wrap bg-slate-950/50 rounded px-2 py-1 flex-1">
-                        {identity.backupCodes}
-                      </pre>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(identity.backupCodes || "");
-                        }}
-                        className="text-xs text-slate-500 hover:text-emerald-400 transition mt-1"
-                        title="Copy all codes"
-                      >
-                        📋
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             </>
           )}
 
-          {/* Phone Verification Section */}
+          {/* Phone Verification Section - Coming Soon */}
           <div className="border-t border-slate-700 my-4"></div>
-          <h2 className="text-sm font-semibold text-slate-100 mb-3">
-            Phone Verification (TextVerified)
-          </h2>
-          <div className="space-y-3">
-            {!verificationStatus || verificationStatus.status === "error" || verificationStatus.status === "expired" ? (
-              <div>
-                <p className="text-xs text-slate-400 mb-3">
-                  Get a non-VoIP phone number for Google Ads verification. Numbers work for ~15 minutes.
-                </p>
-                {verificationStatus?.error && (
-                  <div className="text-xs text-rose-400 mb-3 p-2 bg-rose-500/10 rounded-lg">
-                    {verificationStatus.error}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={handleStartVerification}
-                  disabled={verificationLoading}
-                  className="px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-medium hover:bg-blue-400 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {verificationLoading ? "Getting Number..." : "Get Verification Number"}
-                </button>
-              </div>
-            ) : verificationStatus.status === "pending" ? (
-              <div className="space-y-3">
-                <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                  <div className="text-xs text-blue-400 mb-1">Phone Number (use for Google verification)</div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg font-mono text-white">{verificationStatus.phoneFormatted || verificationStatus.phone}</span>
-                    <button
-                      type="button"
-                      onClick={() => navigator.clipboard.writeText(verificationStatus.phone || "")}
-                      className="text-blue-400 hover:text-blue-300 transition"
-                      title="Copy phone number"
-                    >
-                      📋
-                    </button>
-                  </div>
-                  {verificationStatus.expiresAt && (
-                    <div className="text-xs text-slate-500 mt-2">
-                      Expires: {new Date(verificationStatus.expiresAt).toLocaleTimeString()}
-                    </div>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={handleCheckVerification}
-                    disabled={verificationLoading}
-                    className="flex-1 px-4 py-2 rounded-lg bg-emerald-500 text-slate-950 text-sm font-medium hover:bg-emerald-400 transition disabled:opacity-50"
-                  >
-                    {verificationLoading ? "Checking..." : "Check for SMS Code"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCancelVerification}
-                    disabled={verificationLoading}
-                    className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 text-sm hover:bg-slate-600 transition disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : verificationStatus.status === "received" ? (
-              <div className="space-y-3">
-                <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
-                  <div className="text-xs text-emerald-400 mb-1">Verification Code Received!</div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl font-mono font-bold text-white tracking-wider">{verificationStatus.code}</span>
-                    <button
-                      type="button"
-                      onClick={() => navigator.clipboard.writeText(verificationStatus.code || "")}
-                      className="text-emerald-400 hover:text-emerald-300 transition"
-                      title="Copy code"
-                    >
-                      📋
-                    </button>
-                  </div>
-                  <div className="text-xs text-slate-500 mt-2">
-                    Phone: {verificationStatus.phoneFormatted || verificationStatus.phone}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setVerificationStatus(null)}
-                  className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 text-sm hover:bg-slate-600 transition"
-                >
-                  Start New Verification
-                </button>
-              </div>
-            ) : null}
+          <div className="opacity-50 pointer-events-none">
+            <div className="flex items-center gap-2 mb-3">
+              <h2 className="text-sm font-semibold text-slate-100">
+                Phone Verification (TextVerified)
+              </h2>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 bg-amber-500/20 text-amber-400 rounded uppercase tracking-wide">
+                Coming Soon
+              </span>
+            </div>
+            <div className="space-y-3">
+              <p className="text-xs text-slate-400 mb-3">
+                Get a non-VoIP phone number for Google Ads verification. Numbers work for ~15 minutes.
+              </p>
+              <button
+                type="button"
+                disabled
+                className="px-4 py-2 rounded-lg bg-slate-700 text-slate-500 text-sm font-medium cursor-not-allowed"
+              >
+                Get Verification Number
+              </button>
+            </div>
           </div>
 
           {/* Billing Information Section */}
@@ -5944,26 +5848,18 @@ function MyAccountsView() {
   const [accounts, setAccounts] = useState<AdAccount[]>([]);
   const [editingNotes, setEditingNotes] = useState<string | null>(null);
 
-  // Get the current user's mediaBuyerId from session
-  const currentUserMediaBuyerId = (session?.user as any)?.mediaBuyerId || null;
-
   useEffect(() => {
     fetchMyAccounts();
-  }, [currentUserMediaBuyerId]);
+  }, []);
 
   async function fetchMyAccounts() {
     setLoading(true);
     try {
-      const res = await fetch("/api/accounts");
+      // Use dedicated my-accounts endpoint with server-side role-based filtering
+      const res = await fetch("/api/accounts/my-accounts");
       if (res.ok) {
         const data = await res.json();
-        // API returns array directly for /api/accounts
-        const allAccounts = Array.isArray(data) ? data : [];
-        // Filter to only show accounts assigned to the current user
-        const myAccounts = currentUserMediaBuyerId
-          ? allAccounts.filter((a: AdAccount) => a.mediaBuyerId === currentUserMediaBuyerId)
-          : [];
-        setAccounts(myAccounts);
+        setAccounts(Array.isArray(data) ? data : []);
       }
     } catch (error) {
       console.error("Failed to fetch my accounts:", error);

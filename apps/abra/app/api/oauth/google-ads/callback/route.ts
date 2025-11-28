@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Decrypt and validate state
-    let stateData: { cid?: string; accountId?: string; csrf: string; debug?: boolean };
+    let stateData: { cid?: string; accountId?: string; csrf: string; debug?: boolean; mode?: string };
     try {
       stateData = decryptOAuthState(state);
     } catch {
@@ -126,6 +126,24 @@ export async function GET(request: NextRequest) {
 </body>
 </html>`;
       return new NextResponse(debugHtml, { headers: { 'Content-Type': 'text/html' } });
+    }
+
+    // PICKER MODE: Return accounts to parent window for selection (used by Add Account modal)
+    if (stateData.mode === 'picker') {
+      // Don't store connection - just return the accessible accounts for selection
+      if (listCustomersError || accessibleCids.length === 0) {
+        return NextResponse.redirect(
+          `${baseUrl}/oauth-result?status=picker&error=${encodeURIComponent(
+            listCustomersError || 'This Google account has no accessible Google Ads accounts'
+          )}`
+        );
+      }
+
+      // Return accounts as comma-separated list with email
+      const cidsParam = encodeURIComponent(accessibleCids.map(cid => formatCid(cid)).join(','));
+      return NextResponse.redirect(
+        `${baseUrl}/oauth-result?status=picker&email=${encodeURIComponent(userInfo.email)}&cids=${cidsParam}`
+      );
     }
 
     // Store the connection

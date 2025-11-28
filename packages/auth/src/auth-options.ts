@@ -126,21 +126,23 @@ export const authOptions: NextAuthOptions = {
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   secret: process.env.NEXTAUTH_SECRET,
-  // Cross-subdomain cookie configuration for SSO
-  cookies: {
-    sessionToken: {
-      name: process.env.NODE_ENV === "production"
-        ? "__Secure-next-auth.session-token"
-        : "next-auth.session-token",
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: process.env.NODE_ENV === "production",
-        // Production: .magimanager.com (shared across abra/kadabra subdomains)
-        // Development: localhost (shared across localhost:3000, localhost:3001)
-        domain: process.env.NODE_ENV === "production" ? ".magimanager.com" : "localhost",
-      },
-    },
-  },
+  // Cookie configuration
+  // Production: Share cookies across subdomains for SSO (.magimanager.com)
+  // Development: Don't set domain - each app gets its own session on its port
+  ...(process.env.NODE_ENV === "production"
+    ? {
+        cookies: {
+          sessionToken: {
+            name: "__Secure-next-auth.session-token",
+            options: {
+              httpOnly: true,
+              sameSite: "lax" as const,
+              path: "/",
+              secure: true,
+              domain: ".magimanager.com",
+            },
+          },
+        },
+      }
+    : {}),
 };
