@@ -2,6 +2,13 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
+  // Expose Vercel system env vars to the browser
+  env: {
+    NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA: process.env.VERCEL_GIT_COMMIT_SHA,
+    NEXT_PUBLIC_ABRA_URL: process.env.NEXT_PUBLIC_ABRA_URL || "https://abra.magimanager.com",
+    NEXT_PUBLIC_KADABRA_URL: process.env.NEXT_PUBLIC_KADABRA_URL || "https://magimanager.com",
+    NEXT_PUBLIC_APP_VERSION: "0.1.0",
+  },
   // Transpile workspace packages
   transpilePackages: [
     "@magimanager/database",
