@@ -2143,10 +2143,13 @@ export function KadabraApp() {
               // Unified logout: sign out and redirect to abra (auth hub)
               signOut({ callbackUrl: ABRA_URL });
             }}
-            className="w-full px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition text-sm flex items-center justify-center gap-2"
+            className="w-full px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition text-sm flex flex-col items-center gap-0.5"
           >
-            <LogOut className="w-4 h-4" />
-            Logout
+            <span className="flex items-center gap-2">
+              <LogOut className="w-4 h-4" />
+              Logout
+            </span>
+            <span className="text-[10px] text-slate-500">Signs out of both apps</span>
           </button>
           <div className="mt-3 text-xs text-slate-500">
             <div className="font-medium">KADABRA v{APP_VERSION}</div>

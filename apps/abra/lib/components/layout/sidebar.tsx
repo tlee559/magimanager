@@ -126,26 +126,39 @@ export function Sidebar({ currentView, onViewChange, userRole }: SidebarProps) {
         ))}
       </nav>
 
-      {/* User Info & Logout */}
-      <div className="flex-shrink-0 w-full px-6 py-4 border-t border-slate-800">
+      {/* User Info & Cross-App Navigation & Logout */}
+      <div className="flex-shrink-0 w-full px-6 py-4 border-t border-slate-800 space-y-2">
         <button
           onClick={() => setShowProfileModal(true)}
-          className="w-full mb-3 px-4 py-2 bg-slate-800 rounded-lg hover:bg-slate-700 transition text-left"
+          className="w-full px-4 py-2 bg-slate-800 rounded-lg hover:bg-slate-700 transition text-left"
         >
           <div className="text-sm font-medium text-slate-100">{session?.user?.name || "User"}</div>
           <div className="text-xs text-slate-500">{session?.user?.email || "No email"}</div>
         </button>
+        <a
+          href="https://magimanager.com/admin"
+          className="w-full px-4 py-2 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg hover:from-emerald-500/20 hover:to-teal-500/20 transition text-sm flex flex-col items-center gap-0.5"
+        >
+          <span className="font-semibold flex items-center gap-1.5">
+            <span>✨</span>
+            Kadabra
+          </span>
+          <span className="text-[10px] text-emerald-400/70">Ad Manager</span>
+        </a>
         <button
           onClick={() => {
             // Unified logout: sign out and redirect to login page
             signOut({ callbackUrl: "/" });
           }}
-          className="w-full px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition text-sm flex items-center justify-center gap-2"
+          className="w-full px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition text-sm flex flex-col items-center gap-0.5"
         >
-          <span>🚪</span>
-          Logout
+          <span className="flex items-center gap-2">
+            <span>🚪</span>
+            Logout
+          </span>
+          <span className="text-[10px] text-slate-500">Signs out of both apps</span>
         </button>
-        <div className="mt-3 text-xs text-slate-500">
+        <div className="mt-2 text-xs text-slate-500">
           <div className="font-medium">ABRA v{APP_VERSION}</div>
           <div className="text-slate-600">Build: {BUILD_SHA}</div>
         </div>
