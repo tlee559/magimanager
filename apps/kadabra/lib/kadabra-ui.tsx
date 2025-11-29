@@ -46,6 +46,8 @@ import {
   addMessage,
 } from "./chat-window-bar";
 import type { ChatWindow } from "./chat-types";
+import { CampaignPlannerView } from "./campaign-planner-view";
+import { VideoClipperView } from "./video-clipper-view";
 
 // ============================================================================
 // TYPES
@@ -183,7 +185,7 @@ function ScoreBadge({ score }: { score: AdScore }) {
 
       {/* Tooltip */}
       {showTooltip && (
-        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 rounded-lg bg-slate-900 border border-slate-700 shadow-xl text-xs">
+        <div className="absolute z-30 bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 rounded-lg bg-slate-900 border border-slate-700 shadow-xl text-xs pointer-events-none">
           <div className="font-semibold text-slate-100 mb-2 flex items-center gap-2">
             📊 Ad Performance Score
           </div>
@@ -304,7 +306,7 @@ function DashboardView({
   onChatAboutAccount?: (account: AdAccount) => void;
   onLaunchGoLogin?: (account: AdAccount) => void;
 }) {
-  const [showAllAccounts, setShowAllAccounts] = useState(false);
+  const [showAllAccounts, setShowAllAccounts] = useState(true);
 
   const activeAccounts = accounts.filter((a) => a.accountHealth === "active");
   const connectedAccounts = accounts.filter((a) => a.connection?.status === "active");
@@ -401,7 +403,7 @@ function DashboardView({
             <span className="text-xs text-slate-500">
               {displayedAccounts.length}{connectedAccounts.length < accounts.length && !showAllAccounts ? ` of ${accounts.length}` : ""}
             </span>
-            {connectedAccounts.length < accounts.length && (
+            {accounts.length > 0 && connectedAccounts.length > 0 && (
               <button
                 onClick={() => setShowAllAccounts(!showAllAccounts)}
                 className="text-xs text-slate-500 hover:text-slate-300 transition"
@@ -1414,91 +1416,157 @@ function AccountDetailView({ account }: { account: AdAccount }) {
 // TOOLS VIEW
 // ============================================================================
 
-function ToolsView() {
+function ToolsView({ onNavigate }: { onNavigate?: (view: View) => void }) {
   return (
     <div className="space-y-6">
-      {/* Tools Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* GoLogin Integration */}
-        <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700/50 hover:border-violet-500/50 transition">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-violet-500/10 rounded-lg">
-              <ExternalLink className="w-5 h-5 text-violet-400" />
-            </div>
-            <h3 className="text-sm font-medium text-slate-200">GoLogin</h3>
-          </div>
-          <p className="text-xs text-slate-500 mb-4">
-            Manage browser profiles and sessions for secure account access.
-          </p>
-          <a
-            href="https://app.gologin.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition"
-          >
-            Open GoLogin App
-            <ExternalLink className="w-3 h-3" />
-          </a>
+      {/* AI Tools Section */}
+      <div className="bg-gradient-to-r from-violet-500/10 to-purple-500/10 rounded-xl border border-violet-500/30 p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Sparkles className="w-5 h-5 text-violet-400" />
+          <h4 className="text-sm font-semibold text-slate-100">AI Tools</h4>
         </div>
-
-        {/* Google Ads */}
-        <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700/50 hover:border-violet-500/50 transition">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-blue-500/10 rounded-lg">
-              <TrendingUp className="w-5 h-5 text-blue-400" />
-            </div>
-            <h3 className="text-sm font-medium text-slate-200">Google Ads</h3>
-          </div>
-          <p className="text-xs text-slate-500 mb-4">
-            Direct access to Google Ads console for advanced management.
-          </p>
-          <a
-            href="https://ads.google.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition"
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Campaign Planner AI */}
+          <button
+            onClick={() => onNavigate?.("campaign-planner")}
+            className="bg-slate-800/50 rounded-xl p-5 border border-violet-500/30 hover:border-violet-500/50 transition text-left group"
           >
-            Open Google Ads
-            <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
-
-        {/* Account Sync */}
-        <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700/50 hover:border-violet-500/50 transition">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-emerald-500/10 rounded-lg">
-              <RefreshCw className="w-5 h-5 text-emerald-400" />
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg group-hover:scale-110 transition">
+                <Target className="w-5 h-5 text-white" />
+              </div>
+              <h3 className="text-sm font-medium text-slate-200">Campaign Planner AI</h3>
             </div>
-            <h3 className="text-sm font-medium text-slate-200">Sync Data</h3>
-          </div>
-          <p className="text-xs text-slate-500 mb-4">
-            Refresh account data and sync metrics from Google Ads.
-          </p>
-          <button className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition">
-            <RefreshCw className="w-3 h-3" />
-            Sync Now
+            <p className="text-xs text-slate-400 mb-3">
+              AI-powered campaign planning. Enter your product details and get a complete Google Ads strategy with keywords, ad copy, and budget recommendations.
+            </p>
+            <span className="text-xs text-violet-400 group-hover:text-violet-300 transition">
+              Launch Planner →
+            </span>
           </button>
+
+          {/* Video Clipper AI */}
+          <button
+            onClick={() => onNavigate?.("video-clipper")}
+            className="bg-slate-800/50 rounded-xl p-5 border border-pink-500/30 hover:border-pink-500/50 transition text-left group"
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-gradient-to-br from-pink-500 to-violet-600 rounded-lg group-hover:scale-110 transition">
+                <Play className="w-5 h-5 text-white" />
+              </div>
+              <h3 className="text-sm font-medium text-slate-200">Video Clipper AI</h3>
+            </div>
+            <p className="text-xs text-slate-400 mb-3">
+              Transform long videos into high-converting vertical clips for Reels & TikTok with AI-powered marketing moment detection.
+            </p>
+            <span className="text-xs text-pink-400 group-hover:text-pink-300 transition">
+              Create Clips →
+            </span>
+          </button>
+
+          {/* Ad Spy - Coming Soon */}
+          <div className="bg-slate-800/30 rounded-xl p-5 border border-slate-700/30 opacity-60">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-slate-700/50 rounded-lg">
+                <Eye className="w-5 h-5 text-slate-400" />
+              </div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-medium text-slate-400">Ad Spy</h3>
+                <ComingSoonBadge size="sm" />
+              </div>
+            </div>
+            <p className="text-xs text-slate-500">
+              Research competitor ads and discover winning creative strategies.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Tools Grid */}
+      <div>
+        <h4 className="text-sm font-medium text-slate-300 mb-4">Integrations</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* GoLogin Integration */}
+          <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700/50 hover:border-violet-500/50 transition">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-violet-500/10 rounded-lg">
+                <ExternalLink className="w-5 h-5 text-violet-400" />
+              </div>
+              <h3 className="text-sm font-medium text-slate-200">GoLogin</h3>
+            </div>
+            <p className="text-xs text-slate-500 mb-4">
+              Manage browser profiles and sessions for secure account access.
+            </p>
+            <a
+              href="https://app.gologin.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition"
+            >
+              Open GoLogin App
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+
+          {/* Google Ads */}
+          <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700/50 hover:border-violet-500/50 transition">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-blue-500/10 rounded-lg">
+                <TrendingUp className="w-5 h-5 text-blue-400" />
+              </div>
+              <h3 className="text-sm font-medium text-slate-200">Google Ads</h3>
+            </div>
+            <p className="text-xs text-slate-500 mb-4">
+              Direct access to Google Ads console for advanced management.
+            </p>
+            <a
+              href="https://ads.google.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition"
+            >
+              Open Google Ads
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+
+          {/* Account Sync */}
+          <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700/50 hover:border-violet-500/50 transition">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-emerald-500/10 rounded-lg">
+                <RefreshCw className="w-5 h-5 text-emerald-400" />
+              </div>
+              <h3 className="text-sm font-medium text-slate-200">Sync Data</h3>
+            </div>
+            <p className="text-xs text-slate-500 mb-4">
+              Refresh account data and sync metrics from Google Ads.
+            </p>
+            <button className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition">
+              <RefreshCw className="w-3 h-3" />
+              Sync Now
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Coming Soon Tools */}
-      <div className="bg-gradient-to-r from-violet-500/5 to-purple-500/5 rounded-xl border border-violet-500/20 p-6">
+      <div className="bg-slate-800/30 rounded-xl border border-slate-700/30 p-6">
         <div className="flex items-center gap-2 mb-4">
-          <Sparkles className="w-4 h-4 text-violet-400" />
-          <h4 className="text-sm font-medium text-slate-200">Coming Soon</h4>
+          <Clock className="w-4 h-4 text-slate-500" />
+          <h4 className="text-sm font-medium text-slate-400">More Coming Soon</h4>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700/30">
-            <h5 className="text-xs font-medium text-slate-300 mb-1">Bulk Editor</h5>
+            <h5 className="text-xs font-medium text-slate-400 mb-1">Bulk Editor</h5>
             <p className="text-[11px] text-slate-500">Edit multiple campaigns at once</p>
           </div>
           <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700/30">
-            <h5 className="text-xs font-medium text-slate-300 mb-1">Keyword Planner</h5>
-            <p className="text-[11px] text-slate-500">Research and plan keywords</p>
+            <h5 className="text-xs font-medium text-slate-400 mb-1">Report Builder</h5>
+            <p className="text-[11px] text-slate-500">Create custom performance reports</p>
           </div>
           <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700/30">
-            <h5 className="text-xs font-medium text-slate-300 mb-1">Report Builder</h5>
-            <p className="text-[11px] text-slate-500">Create custom performance reports</p>
+            <h5 className="text-xs font-medium text-slate-400 mb-1">Negative Keyword Tool</h5>
+            <p className="text-[11px] text-slate-500">Find and add negative keywords</p>
           </div>
         </div>
       </div>
@@ -1702,7 +1770,7 @@ function RequestModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (j
 // MAIN KADABRA APP
 // ============================================================================
 
-type View = "dashboard" | "accounts" | "account-detail" | "automations" | "tools" | "action-queue" | "requests" | "notifications";
+type View = "dashboard" | "accounts" | "account-detail" | "automations" | "tools" | "campaign-planner" | "video-clipper" | "action-queue" | "requests" | "notifications";
 
 // ============================================================================
 // SKELETON LOADERS
@@ -2100,6 +2168,7 @@ export function KadabraApp() {
                 {view === "account-detail" && selectedAccountId && `MM${String(accounts.find(a => a.id === selectedAccountId)?.internalId || "").padStart(3, "0")}`}
                 {view === "automations" && "Automations"}
                 {view === "tools" && "Tools"}
+                {view === "campaign-planner" && "Campaign Planner AI"}
                 {view === "action-queue" && "Action Queue"}
                 {view === "requests" && "Account Requests"}
                 {view === "notifications" && "Notifications"}
@@ -2123,6 +2192,7 @@ export function KadabraApp() {
               {view === "account-detail" && "View campaigns, ad groups, and ads for this account"}
               {view === "automations" && "Monitor your campaigns with intelligent rules"}
               {view === "tools" && "Utilities and integrations for account management"}
+              {view === "campaign-planner" && "Create AI-powered campaign plans with keywords and ad copy"}
               {view === "action-queue" && "Copy-paste ready fixes to apply in Google Ads"}
               {view === "requests" && "Request new accounts or claim existing ones"}
               {view === "notifications" && "Stay updated with account activities and alerts"}
@@ -2162,7 +2232,20 @@ export function KadabraApp() {
             />
           )}
           {view === "automations" && <AutomationsPlaceholder />}
-          {view === "tools" && <ToolsView />}
+          {view === "tools" && <ToolsView onNavigate={setView} />}
+          {view === "campaign-planner" && (
+            <CampaignPlannerView
+              onBack={() => setView("tools")}
+              onOpenChat={(planName, context) => {
+                // Create a chat window with campaign plan context
+                const newWindow = createChatWindow(null, `Plan: ${planName}`, context);
+                setChatWindows([...chatWindows, newWindow]);
+              }}
+            />
+          )}
+          {view === "video-clipper" && (
+            <VideoClipperView onBack={() => setView("tools")} />
+          )}
           {view === "action-queue" && <ActionQueueView />}
           {view === "requests" && (
             <RequestsView

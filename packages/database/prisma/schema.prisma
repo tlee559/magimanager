@@ -865,6 +865,52 @@ model KadabraAlert {
 }
 
 // ============================================================================
+// KADABRA: CAMPAIGN PLANNER AI
+// ============================================================================
+
+enum CampaignPlanStatus {
+  DRAFT
+  PROCESSING
+  COMPLETED
+  ARCHIVED
+  FAILED
+}
+
+model CampaignPlan {
+  id                  String             @id @default(cuid())
+  userId              String
+  teamId              String?
+  name                String
+  status              CampaignPlanStatus @default(DRAFT)
+
+  // Input data
+  productUrl          String?
+  productDescription  String?            @db.Text
+  targetAudience      String?            @db.Text  // User's description of target audience
+  monthlyBudget       Decimal?           @db.Decimal(10, 2)  // Optional budget constraint
+  goals               String?            @db.Text  // User's campaign goals (leads, sales, traffic, etc.)
+  documents           Json?              // Array of Vercel Blob URLs for uploaded files
+
+  // v2 Enhancement fields
+  competitorUrl       String?            // Competitor landing page to analyze
+  industry            String?            // Selected industry for benchmarks (e.g., "saas", "ecommerce", "legal")
+
+  // AI-generated plan (stored as structured JSON)
+  plan                Json?              // Full structured plan object
+
+  // Processing metadata
+  processingStartedAt DateTime?
+  processingError     String?            @db.Text
+
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ============================================================================
 // KADABRA: ACTION QUEUE (copy-paste ready fixes)
 // ============================================================================
 
@@ -932,4 +978,120 @@ model ActionQueueItem {
   @@index([status])
   @@index([priority])
   @@index([createdAt])
+}
+
+// ============================================================================
+// AI VIDEO CLIPPER
+// ============================================================================
+
+enum VideoJobStatus {
+  PENDING           // Job created, waiting to start
+  DOWNLOADING       // Downloading video from YouTube
+  ANALYZING         // AI analyzing video for key moments
+  CLIPPING          // Creating clips from identified moments
+  CAPTIONING        // Adding auto-captions to clips
+  COMPLETED         // All clips ready
+  FAILED            // Job failed
+}
+
+enum ClipStatus {
+  PENDING           // Clip identified but not processed
+  PROCESSING        // Being generated
+  CAPTIONING        // Adding captions
+  COMPLETED         // Ready for download
+  FAILED            // Failed to generate
+}
+
+model VideoClipJob {
+  id                  String         @id @default(cuid())
+  userId              String
+  name                String?        // User-provided name for the job
+
+  // Source video
+  sourceType          String         // "youtube" | "upload"
+  sourceUrl           String?        // YouTube URL
+  uploadedVideoUrl    String?        // Vercel Blob URL for uploaded video
+  videoDuration       Int?           // Duration in seconds
+  videoTitle          String?        // Extracted video title
+  videoThumbnail      String?        // Thumbnail URL
+
+  // Processing status
+  status              VideoJobStatus @default(PENDING)
+  progress            Int            @default(0)  // 0-100 percentage
+  processingError     String?        @db.Text
+
+  // AI Analysis results (JSON)
+  analysisResults     String?        @db.Text  // JSON: transcript, detected moments, scores
+
+  // Settings
+  targetFormat        String         @default("vertical")  // "vertical" | "square" | "horizontal"
+  targetDuration      Int            @default(60)  // Target clip duration in seconds (15-90)
+  maxClips            Int            @default(5)   // Max clips to generate
+  addCaptions         Boolean        @default(true)
+  captionStyle        String         @default("modern")  // "minimal" | "modern" | "bold" | "branded"
+
+  // Industry/context for AI
+  industry            String?        // "saas" | "ecommerce" | "coaching" | etc.
+  productContext      String?        @db.Text  // What is the product/service
+  targetAudience      String?        @db.Text  // Who is the target audience
+
+  // Timestamps
+  startedAt           DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  // Relations
+  clips               VideoClip[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model VideoClip {
+  id                  String      @id @default(cuid())
+  jobId               String
+
+  // Clip timing
+  startTime           Int         // Start time in seconds
+  endTime             Int         // End time in seconds
+  duration            Int         // Duration in seconds
+
+  // AI Analysis
+  momentType          String      // "hook" | "testimonial" | "benefit" | "cta" | "social_proof" | "urgency"
+  marketingScore      Int         // 1-100 score for marketing effectiveness
+  conversionPotential Int         // 1-100 score for conversion potential
+  hookStrength        Int         // 1-100 how strong the opening hook is
+  emotionalImpact     Int         // 1-100 emotional resonance
+
+  // AI explanation
+  whySelected         String      @db.Text  // AI explanation of why this moment was selected
+  suggestedCaption    String?     // AI suggested caption/headline for the clip
+  keyMoments          String?     @db.Text  // JSON: timestamps of key frames within clip
+  transcript          String?     @db.Text  // Transcript for this clip segment
+
+  // Processing status
+  status              ClipStatus  @default(PENDING)
+  processingProgress  Int         @default(0)
+  processingError     String?     @db.Text
+
+  // Output files (Vercel Blob URLs)
+  clipUrl             String?     // Final processed clip
+  clipWithCaptionsUrl String?     // Clip with burned-in captions
+  thumbnailUrl        String?     // Auto-generated thumbnail
+
+  // Metadata
+  fileSize            Int?        // Size in bytes
+  resolution          String?     // e.g., "1080x1920"
+
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  // Relations
+  job                 VideoClipJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([marketingScore])
+  @@index([status])
 }

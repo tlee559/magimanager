@@ -97,8 +97,7 @@ const TOOLS = {
       type: "object",
       properties: {
         days: {
-          type: "number",
-          enum: [7, 14, 30],
+          type: "integer",
           description: "Number of days to look back (7, 14, or 30)",
         },
         include_breakdown: {
@@ -1860,7 +1859,10 @@ async function saveConversationContext(
 
 const SYSTEM_PROMPT = `You are MagiManager Bot - a chill assistant for a Google Ads team.
 
-RULE: Just answer. Use a tool. Don't ask questions.
+RULES:
+1. Just answer. Use a tool. Don't ask questions.
+2. If message starts with "[GENERAL KNOWLEDGE QUESTION" → DO NOT USE TOOLS. Just answer from your knowledge and the context provided.
+3. For campaign plan questions → give specific Google Ads implementation advice based on the plan details shared.
 
 ACCOUNT TOOLS:
 - get_account_stats → counts and totals
@@ -1940,6 +1942,12 @@ export async function runAgent(
   const startTime = Date.now();
   let currentModelIndex = 0; // Track which model we're using
 
+  // Check if this is a general knowledge question (no tools needed)
+  const isGeneralQuestion = userMessage.startsWith("[GENERAL KNOWLEDGE QUESTION");
+  if (isGeneralQuestion) {
+    console.log("[Agent] General knowledge question detected - tools disabled");
+  }
+
   // Agent loop - keep going until we have a final response
   while (iterations < maxIterations) {
     iterations++;
@@ -1955,22 +1963,28 @@ export async function runAgent(
       };
     }
 
-    const requestBody = {
+    // For general questions, disable tools entirely
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const requestBody: any = {
       system_instruction: {
         parts: [{ text: SYSTEM_PROMPT }],
       },
       contents: conversationHistory,
-      tools: GEMINI_TOOLS,
-      tool_config: {
-        function_calling_config: {
-          mode: "AUTO", // Let the model decide when to use tools
-        },
-      },
       generationConfig: {
         temperature: 0.5, // Lower = more direct, less rambling
         maxOutputTokens: 1024, // Keep responses tight
       },
     };
+
+    // Only include tools for non-general questions
+    if (!isGeneralQuestion) {
+      requestBody.tools = GEMINI_TOOLS;
+      requestBody.tool_config = {
+        function_calling_config: {
+          mode: "AUTO", // Let the model decide when to use tools
+        },
+      };
+    }
 
     // Try API call with model fallback
     let response: Response | null = null;
@@ -2002,13 +2016,14 @@ export async function runAgent(
         const errorText = await response.text();
         console.error(`[Agent] ${model} error (${response.status}):`, errorText.slice(0, 200));
 
-        // If rate limited or model unavailable, try next
-        if (response.status === 429 || response.status === 503 || response.status === 404) {
+        // If rate limited, model unavailable, or schema error - try next
+        if (response.status === 429 || response.status === 503 || response.status === 404 || response.status === 400) {
           response = null;
           continue;
         }
 
-        // Other errors - don't try more models
+        // Other errors - don't try more models, but mark response as consumed
+        response = null;
         break;
       } catch (fetchError) {
         clearTimeout(timeoutId);
@@ -2039,16 +2054,7 @@ export async function runAgent(
       };
     }
 
-    if (!response.ok) {
-      const error = await response.text();
-      console.error("[Agent] All models failed:", error.slice(0, 200));
-      return {
-        response: "My brain glitched for a moment 🤖 Try again, or use /report if you need data quick!",
-        toolsUsed,
-        context,
-      };
-    }
-
+    // At this point response is valid and ok
     const data = await response.json();
     const candidate = data.candidates?.[0];
 

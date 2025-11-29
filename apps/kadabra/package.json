@@ -9,12 +9,13 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@magimanager/shared": "*",
-    "@magimanager/core": "*",
-    "@magimanager/features": "*",
-    "@magimanager/database": "*",
+    "@google/generative-ai": "^0.24.1",
     "@magimanager/auth": "*",
+    "@magimanager/core": "*",
+    "@magimanager/database": "*",
+    "@magimanager/features": "*",
     "@magimanager/realtime": "*",
+    "@magimanager/shared": "*",
     "@tanstack/react-query": "^5.90.10",
     "@tanstack/react-query-devtools": "^5.91.0",
     "@vercel/blob": "^2.0.0",
