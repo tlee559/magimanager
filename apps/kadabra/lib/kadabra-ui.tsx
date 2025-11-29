@@ -2145,6 +2145,10 @@ export function KadabraApp() {
             <LogOut className="w-4 h-4" />
             Logout
           </button>
+          <div className="mt-3 text-xs text-slate-500">
+            <div className="font-medium">KADABRA v{process.env.NEXT_PUBLIC_APP_VERSION || "0.1.0"}</div>
+            <div className="text-slate-600">Build: {process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || "local"}</div>
+          </div>
         </div>
       </aside>
 

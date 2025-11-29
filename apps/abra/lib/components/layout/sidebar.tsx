@@ -144,9 +144,9 @@ export function Sidebar({ currentView, onViewChange, userRole }: SidebarProps) {
           <span>🚪</span>
           Logout
         </button>
-        <div className="mt-3 text-xs text-slate-600 opacity-50 cursor-not-allowed select-none">
-          <div className="font-medium text-slate-500">Dev Environment · Local</div>
-          <div className="text-slate-600">Coming soon</div>
+        <div className="mt-3 text-xs text-slate-500">
+          <div className="font-medium">ABRA v{process.env.NEXT_PUBLIC_APP_VERSION || "0.1.0"}</div>
+          <div className="text-slate-600">Build: {process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || "local"}</div>
         </div>
       </div>
 
