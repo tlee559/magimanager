@@ -2088,8 +2088,8 @@ export function KadabraApp() {
           <div className="flex items-center gap-3">
             <MagimanagerLogo size={40} />
             <div>
-              <h1 className="text-lg font-bold text-emerald-400">Kadabra</h1>
-              <p className="text-xs text-slate-400">Ad Manager</p>
+              <h1 className="text-lg font-bold text-emerald-400">MagiManager</h1>
+              <p className="text-xs text-slate-400">Ads Console</p>
             </div>
           </div>
         </div>
@@ -2134,9 +2134,9 @@ export function KadabraApp() {
           >
             <span className="font-semibold flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5" />
-              Abra
+              MagiManager
             </span>
-            <span className="text-[10px] text-indigo-400/70">Account Manager</span>
+            <span className="text-[10px] text-indigo-400/70">Accounts Console</span>
           </a>
           <button
             onClick={() => {
@@ -2152,7 +2152,7 @@ export function KadabraApp() {
             <span className="text-[10px] text-slate-500">Signs out of both apps</span>
           </button>
           <div className="mt-3 text-xs text-slate-500">
-            <div className="font-medium">KADABRA v{APP_VERSION}</div>
+            <div className="font-medium">ADS v{APP_VERSION}</div>
             <div className="text-slate-600">Build: {BUILD_SHA}</div>
           </div>
         </div>

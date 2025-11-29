@@ -93,8 +93,8 @@ export function Sidebar({ currentView, onViewChange, userRole }: SidebarProps) {
       <div className="h-16 flex-shrink-0 px-6 flex items-center gap-3 border-b border-slate-800">
         <SquareMLogoIcon size={40} />
         <div className="flex flex-col">
-          <span className="text-sm font-semibold text-purple-400">Abra</span>
-          <span className="text-xs text-slate-400">Account Manager</span>
+          <span className="text-sm font-semibold text-purple-400">MagiManager</span>
+          <span className="text-xs text-slate-400">Accounts Console</span>
         </div>
       </div>
 
@@ -141,9 +141,9 @@ export function Sidebar({ currentView, onViewChange, userRole }: SidebarProps) {
         >
           <span className="font-semibold flex items-center gap-1.5">
             <span>✨</span>
-            Kadabra
+            MagiManager
           </span>
-          <span className="text-[10px] text-emerald-400/70">Ad Manager</span>
+          <span className="text-[10px] text-emerald-400/70">Ads Console</span>
         </a>
         <button
           onClick={() => {
@@ -159,7 +159,7 @@ export function Sidebar({ currentView, onViewChange, userRole }: SidebarProps) {
           <span className="text-[10px] text-slate-500">Signs out of both apps</span>
         </button>
         <div className="mt-2 text-xs text-slate-500">
-          <div className="font-medium">ABRA v{APP_VERSION}</div>
+          <div className="font-medium">ACCOUNTS v{APP_VERSION}</div>
           <div className="text-slate-600">Build: {BUILD_SHA}</div>
         </div>
       </div>
