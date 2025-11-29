@@ -9,7 +9,7 @@ export async function middleware(request: NextRequest) {
   if (!token && !isHomePage) {
     // Not logged in and trying to access protected route
     // Redirect to abra login with returnTo URL
-    const abraUrl = process.env.NEXT_PUBLIC_ABRA_URL || "http://localhost:3000";
+    const abraUrl = process.env.NEXT_PUBLIC_ABRA_URL || "https://abra.magimanager.com";
     const returnUrl = encodeURIComponent(request.url);
     return NextResponse.redirect(`${abraUrl}?returnTo=${returnUrl}`);
   }

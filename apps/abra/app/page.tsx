@@ -72,7 +72,7 @@ function LoginForm() {
       // Role-based redirect logic
       if (role === "MEDIA_BUYER") {
         // Media buyers always go to kadabra
-        const kadabraUrl = returnTo || process.env.NEXT_PUBLIC_KADABRA_URL || "http://localhost:3001";
+        const kadabraUrl = returnTo || process.env.NEXT_PUBLIC_KADABRA_URL || "https://magimanager.com";
         window.location.href = kadabraUrl;
       } else {
         // Admins/Managers stay on abra

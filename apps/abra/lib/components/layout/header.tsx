@@ -128,7 +128,7 @@ export function Header({
         </div>
 
         <a
-          href={process.env.NEXT_PUBLIC_KADABRA_URL || "http://localhost:3001"}
+          href={process.env.NEXT_PUBLIC_KADABRA_URL || "https://magimanager.com"}
           target="_blank"
           rel="noopener noreferrer"
           className="px-3 py-1.5 text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition"

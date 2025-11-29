@@ -2128,7 +2128,7 @@ export function KadabraApp() {
             <div className="text-xs text-slate-500">{user?.email || "No email"}</div>
           </button>
           <a
-            href={process.env.NEXT_PUBLIC_ABRA_URL || "http://localhost:3000"}
+            href={process.env.NEXT_PUBLIC_ABRA_URL || "https://abra.magimanager.com"}
             className="w-full px-4 py-2 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 text-amber-400 rounded-lg hover:from-amber-500/20 hover:to-orange-500/20 transition text-sm flex items-center justify-center gap-2"
           >
             <Sparkles className="w-4 h-4" />
@@ -2137,7 +2137,7 @@ export function KadabraApp() {
           <button
             onClick={() => {
               // Unified logout: sign out and redirect to abra (auth hub)
-              const abraUrl = process.env.NEXT_PUBLIC_ABRA_URL || "http://localhost:3000";
+              const abraUrl = process.env.NEXT_PUBLIC_ABRA_URL || "https://abra.magimanager.com";
               signOut({ callbackUrl: abraUrl });
             }}
             className="w-full px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition text-sm flex items-center justify-center gap-2"
