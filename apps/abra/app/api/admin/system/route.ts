@@ -97,16 +97,16 @@ export async function GET() {
     }));
 
     // Format user counts
-    const usersByRole = userCount.reduce<Record<string, number>>((acc, u) => {
-      acc[u.role] = u._count.id;
-      return acc;
-    }, {});
+    const usersByRole: Record<string, number> = {};
+    for (const u of userCount) {
+      usersByRole[u.role] = u._count.id;
+    }
 
     // Format GoLogin stats
-    const goLoginByStatus = goLoginStats.reduce<Record<string, number>>((acc, g) => {
-      acc[g.status] = g._count.id;
-      return acc;
-    }, {});
+    const goLoginByStatus: Record<string, number> = {};
+    for (const g of goLoginStats) {
+      goLoginByStatus[g.status] = g._count.id;
+    }
 
     // Format activity
     const formattedActivity = recentActivity.map((a: typeof recentActivity[number]) => ({
