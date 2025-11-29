@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
+import type { GoogleAdsConnection } from "@prisma/client";
 
 interface FormattedConnection {
   id: string;
@@ -13,6 +14,10 @@ interface FormattedConnection {
   createdAt: Date;
   tokenExpiresAt: Date;
 }
+
+type OAuthConnectionWithCount = GoogleAdsConnection & {
+  _count: { adAccounts: number };
+};
 
 /**
  * GET /api/admin/system
@@ -96,7 +101,7 @@ export async function GET() {
     ]);
 
     // Format OAuth connections
-    const formattedConnections: FormattedConnection[] = oauthConnections.map((conn) => ({
+    const formattedConnections: FormattedConnection[] = (oauthConnections as OAuthConnectionWithCount[]).map((conn) => ({
       id: conn.id,
       googleEmail: conn.googleEmail,
       status: conn.status,
