@@ -1,3 +1,4 @@
+// Build: v0.1.0
 import type { NextConfig } from "next";
 import path from "path";
 
