@@ -64,20 +64,12 @@ function LoginForm() {
         return;
       }
 
-      // Fetch user role to determine redirect
-      const sessionRes = await fetch("/api/auth/session");
-      const session = await sessionRes.json();
-      const role = session?.user?.role;
-
-      // Redirect logic - honor returnTo for ALL users
+      // Simple redirect logic:
+      // - If returnTo exists (came from another app), go there
+      // - Otherwise, stay on Abra and go to /admin
       if (returnTo) {
-        // If there's a returnTo URL, honor it for any user
         window.location.href = returnTo;
-      } else if (role === "MEDIA_BUYER") {
-        // Media buyers default to kadabra if no returnTo
-        window.location.href = process.env.NEXT_PUBLIC_KADABRA_URL || "https://magimanager.com";
       } else {
-        // Admins/Managers/Super Admins default to abra admin if no returnTo
         router.push("/admin");
         router.refresh();
       }

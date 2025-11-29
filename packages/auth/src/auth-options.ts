@@ -126,23 +126,19 @@ export const authOptions: NextAuthOptions = {
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   secret: process.env.NEXTAUTH_SECRET,
-  // Cookie configuration
-  // Production: Share cookies across subdomains for SSO (.magimanager.com)
-  // Development: Don't set domain - each app gets its own session on its port
-  ...(process.env.NODE_ENV === "production"
-    ? {
-        cookies: {
-          sessionToken: {
-            name: "__Secure-next-auth.session-token",
-            options: {
-              httpOnly: true,
-              sameSite: "lax" as const,
-              path: "/",
-              secure: true,
-              domain: ".magimanager.com",
-            },
-          },
-        },
-      }
-    : {}),
+  // Cookie configuration for SSO across subdomains
+  // Always set domain to .magimanager.com so session works on both apps
+  cookies: {
+    sessionToken: {
+      name: process.env.NODE_ENV === "production" ? "__Secure-next-auth.session-token" : "next-auth.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax" as const,
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+        // In production, share across subdomains; in dev, don't set domain
+        ...(process.env.NODE_ENV === "production" ? { domain: ".magimanager.com" } : {}),
+      },
+    },
+  },
 };
