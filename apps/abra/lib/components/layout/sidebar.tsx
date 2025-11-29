@@ -93,8 +93,8 @@ export function Sidebar({ currentView, onViewChange, userRole }: SidebarProps) {
       <div className="h-16 flex-shrink-0 px-6 flex items-center gap-3 border-b border-slate-800">
         <SquareMLogoIcon size={40} />
         <div className="flex flex-col">
-          <span className="text-sm font-semibold text-emerald-400">Magimanager</span>
-          <span className="text-xs text-slate-400">Account Factory Console</span>
+          <span className="text-sm font-semibold text-purple-400">Abra</span>
+          <span className="text-xs text-slate-400">Account Manager</span>
         </div>
       </div>
 

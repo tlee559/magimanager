@@ -2088,8 +2088,8 @@ export function KadabraApp() {
           <div className="flex items-center gap-3">
             <MagimanagerLogo size={40} />
             <div>
-              <h1 className="text-lg font-bold text-slate-100">Magimanager</h1>
-              <p className="text-xs text-emerald-400">Optimization Hub</p>
+              <h1 className="text-lg font-bold text-emerald-400">Kadabra</h1>
+              <p className="text-xs text-slate-400">Ad Manager</p>
             </div>
           </div>
         </div>
@@ -2129,11 +2129,14 @@ export function KadabraApp() {
             <div className="text-xs text-slate-500">{user?.email || "No email"}</div>
           </button>
           <a
-            href={ABRA_URL}
-            className="w-full px-4 py-2 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 text-amber-400 rounded-lg hover:from-amber-500/20 hover:to-orange-500/20 transition text-sm flex items-center justify-center gap-2"
+            href={`${ABRA_URL}/admin`}
+            className="w-full px-4 py-2 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 text-indigo-400 rounded-lg hover:from-indigo-500/20 hover:to-purple-500/20 transition text-sm flex flex-col items-center gap-0.5"
           >
-            <Sparkles className="w-4 h-4" />
-            Open Abra
+            <span className="font-semibold flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5" />
+              Abra
+            </span>
+            <span className="text-[10px] text-indigo-400/70">Account Manager</span>
           </a>
           <button
             onClick={() => {
