@@ -5,8 +5,8 @@ import {
   parseCommand,
   isAuthorizedChat,
   isBotMentioned,
-  TelegramUpdate,
-} from "@/lib/telegram-bot";
+  type TelegramUpdate,
+} from "@magimanager/core";
 import {
   runAgent,
   generateQuickReport,

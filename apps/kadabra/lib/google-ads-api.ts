@@ -3,7 +3,27 @@
  * Handles OAuth token exchange, refresh, and metrics fetching
  */
 
-import { sendMessage as sendTelegramMessage } from './telegram-bot';
+import { sendMessage as sendTelegramMessage } from '@magimanager/core';
+import { formatCid, normalizeCid } from '@magimanager/shared';
+
+// Re-export for backwards compatibility
+export { formatCid, normalizeCid } from '@magimanager/shared';
+import type {
+  Campaign,
+  CampaignStatus,
+  CampaignType,
+  BiddingStrategy,
+  AdGroup,
+  AdGroupStatus,
+  AdGroupType,
+  Ad,
+  AdStatus,
+  AdType,
+  Keyword,
+  KeywordStatus,
+  KeywordMatchType,
+  PerformanceMetrics,
+} from '@magimanager/shared';
 
 const GOOGLE_OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 // Google Ads API version - check https://developers.google.com/google-ads/api/docs/sunset-dates
@@ -299,26 +319,6 @@ async function googleAdsQuery(
 }
 
 /**
- * Normalize a CID (customer ID) to format without dashes
- * Input: "123-456-7890" or "1234567890"
- * Output: "1234567890"
- */
-export function normalizeCid(cid: string): string {
-  return cid.replace(/-/g, '');
-}
-
-/**
- * Format a CID with dashes for display
- * Input: "1234567890"
- * Output: "123-456-7890"
- */
-export function formatCid(cid: string): string {
-  const clean = normalizeCid(cid);
-  if (clean.length !== 10) return cid;
-  return `${clean.slice(0, 3)}-${clean.slice(3, 6)}-${clean.slice(6)}`;
-}
-
-/**
  * Map Google Ads customer status to our account health status
  */
 export function mapGoogleStatus(googleStatus: string): string {
@@ -367,18 +367,15 @@ export async function syncSingleAccount(
     const newHealth = mapGoogleStatus(metrics.status);
 
     // Determine new status based on spend vs warmup target
-    // Only auto-update status if not already handed-off
+    // Only auto-update status if not already handed-off or ready
     let newStatus = account.status;
-    if (account.handoffStatus !== 'handed-off') {
-      if (spendCents > 0 && account.status === 'provisioned') {
-        // Started spending → warming up
-        newStatus = 'warming-up';
-      } else if (
-        account.status === 'warming-up' &&
-        spendCents >= account.warmupTargetSpend
-      ) {
-        // Hit warmup target → ready for handoff
+    if (account.handoffStatus !== 'handed-off' && account.status !== 'ready') {
+      if (spendCents >= account.warmupTargetSpend) {
+        // Hit warmup target → ready for handoff (regardless of current status)
         newStatus = 'ready';
+      } else if (spendCents > 0 && account.status === 'provisioned') {
+        // Started spending but not at target yet → warming up
+        newStatus = 'warming-up';
       }
     }
 
@@ -538,3 +535,1243 @@ export function buildOAuthUrl(redirectUri: string, state: string): string {
 
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
+
+// ============================================================================
+// KADABRA: CAMPAIGN MANAGEMENT API EXTENSIONS
+// ============================================================================
+
+export interface FetchCampaignsOptions {
+  dateRangeStart?: string;  // YYYY-MM-DD
+  dateRangeEnd?: string;    // YYYY-MM-DD
+  status?: CampaignStatus[];
+  includeMetrics?: boolean;
+}
+
+export interface FetchAdGroupsOptions {
+  campaignId?: string;
+  status?: AdGroupStatus[];
+  includeMetrics?: boolean;
+}
+
+export interface FetchAdsOptions {
+  campaignId?: string;
+  adGroupId?: string;
+  status?: AdStatus[];
+  includeMetrics?: boolean;
+}
+
+export interface FetchKeywordsOptions {
+  campaignId?: string;
+  adGroupId?: string;
+  status?: KeywordStatus[];
+  includeMetrics?: boolean;
+  dateRange?: string;
+}
+
+/**
+ * Fetch all campaigns for an account with optional metrics
+ */
+export async function fetchCampaigns(
+  accessToken: string,
+  customerId: string,
+  options: FetchCampaignsOptions = {}
+): Promise<Campaign[]> {
+  const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  if (!developerToken) {
+    throw new Error('GOOGLE_ADS_DEVELOPER_TOKEN not configured');
+  }
+
+  const cleanCustomerId = normalizeCid(customerId);
+  const { dateRangeStart, dateRangeEnd, status, includeMetrics = true } = options;
+
+  // Build the GAQL query
+  let query = `
+    SELECT
+      campaign.id,
+      campaign.resource_name,
+      campaign.name,
+      campaign.status,
+      campaign.advertising_channel_type,
+      campaign.bidding_strategy_type,
+      campaign_budget.id,
+      campaign_budget.amount_micros,
+      campaign_budget.name,
+      campaign.start_date,
+      campaign.end_date,
+      campaign.target_cpa.target_cpa_micros,
+      campaign.target_roas.target_roas
+  `;
+
+  if (includeMetrics) {
+    query += `,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions,
+      metrics.conversions_value,
+      metrics.ctr,
+      metrics.average_cpc
+    `;
+  }
+
+  query += `
+    FROM campaign
+  `;
+
+  // Build WHERE clauses
+  const whereClauses: string[] = [];
+
+  if (status && status.length > 0) {
+    whereClauses.push(`campaign.status IN (${status.map(s => `'${s}'`).join(', ')})`);
+  }
+
+  if (dateRangeStart && dateRangeEnd) {
+    whereClauses.push(`segments.date BETWEEN '${dateRangeStart}' AND '${dateRangeEnd}'`);
+  }
+
+  if (whereClauses.length > 0) {
+    query += ` WHERE ${whereClauses.join(' AND ')}`;
+  }
+
+  query += ` ORDER BY campaign.name`;
+
+  const results = await googleAdsQuery(accessToken, cleanCustomerId, query, developerToken);
+
+  // Also fetch ad group and ad counts per campaign
+  const countsQuery = `
+    SELECT
+      campaign.id,
+      ad_group.id
+    FROM ad_group
+    WHERE ad_group.status != 'REMOVED'
+  `;
+  const adGroupResults = await googleAdsQuery(accessToken, cleanCustomerId, countsQuery, developerToken);
+
+  const adCountsQuery = `
+    SELECT
+      campaign.id,
+      ad_group_ad.ad.id
+    FROM ad_group_ad
+    WHERE ad_group_ad.status != 'REMOVED'
+  `;
+  const adResults = await googleAdsQuery(accessToken, cleanCustomerId, adCountsQuery, developerToken);
+
+  const keywordCountsQuery = `
+    SELECT
+      campaign.id,
+      ad_group_criterion.criterion_id
+    FROM ad_group_criterion
+    WHERE ad_group_criterion.type = 'KEYWORD'
+      AND ad_group_criterion.status != 'REMOVED'
+  `;
+  const keywordResults = await googleAdsQuery(accessToken, cleanCustomerId, keywordCountsQuery, developerToken);
+
+  // Build counts maps
+  const adGroupCounts = new Map<string, number>();
+  const adCounts = new Map<string, number>();
+  const keywordCounts = new Map<string, number>();
+
+  for (const row of adGroupResults) {
+    const campaignId = row.campaign?.id;
+    if (campaignId) {
+      adGroupCounts.set(campaignId, (adGroupCounts.get(campaignId) || 0) + 1);
+    }
+  }
+
+  for (const row of adResults) {
+    const campaignId = row.campaign?.id;
+    if (campaignId) {
+      adCounts.set(campaignId, (adCounts.get(campaignId) || 0) + 1);
+    }
+  }
+
+  for (const row of keywordResults) {
+    const campaignId = row.campaign?.id;
+    if (campaignId) {
+      keywordCounts.set(campaignId, (keywordCounts.get(campaignId) || 0) + 1);
+    }
+  }
+
+  // Map results to Campaign type
+  return results.map((row): Campaign => {
+    const campaign = row.campaign || {};
+    const budget = row.campaignBudget || {};
+    const metrics = row.metrics || {};
+    const campaignId = campaign.id?.toString() || '';
+
+    return {
+      id: campaignId,
+      resourceName: campaign.resourceName || '',
+      name: campaign.name || 'Unnamed Campaign',
+      status: mapCampaignStatus(campaign.status),
+      type: mapCampaignType(campaign.advertisingChannelType),
+      biddingStrategy: mapBiddingStrategy(campaign.biddingStrategyType),
+      budgetId: budget.id?.toString() || '',
+      budgetAmount: parseInt(budget.amountMicros || '0', 10),
+      budgetName: budget.name || '',
+      impressions: parseInt(metrics.impressions || '0', 10),
+      clicks: parseInt(metrics.clicks || '0', 10),
+      cost: parseInt(metrics.costMicros || '0', 10),
+      conversions: parseFloat(metrics.conversions || '0'),
+      conversionValue: parseFloat(metrics.conversionsValue || '0'),
+      ctr: parseFloat(metrics.ctr || '0'),
+      averageCpc: parseInt(metrics.averageCpc || '0', 10),
+      targetCpa: campaign.targetCpa?.targetCpaMicros
+        ? parseInt(campaign.targetCpa.targetCpaMicros, 10)
+        : undefined,
+      targetRoas: campaign.targetRoas?.targetRoas
+        ? parseFloat(campaign.targetRoas.targetRoas)
+        : undefined,
+      startDate: campaign.startDate,
+      endDate: campaign.endDate,
+      adGroupCount: adGroupCounts.get(campaignId) || 0,
+      activeAdsCount: adCounts.get(campaignId) || 0,
+      keywordCount: keywordCounts.get(campaignId) || 0,
+      lastSyncAt: new Date(),
+    };
+  });
+}
+
+/**
+ * Fetch ad groups for an account or specific campaign
+ */
+export async function fetchAdGroups(
+  accessToken: string,
+  customerId: string,
+  options: FetchAdGroupsOptions = {}
+): Promise<AdGroup[]> {
+  const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  if (!developerToken) {
+    throw new Error('GOOGLE_ADS_DEVELOPER_TOKEN not configured');
+  }
+
+  const cleanCustomerId = normalizeCid(customerId);
+  const { campaignId, status, includeMetrics = true } = options;
+
+  let query = `
+    SELECT
+      ad_group.id,
+      ad_group.resource_name,
+      ad_group.campaign,
+      ad_group.name,
+      ad_group.status,
+      ad_group.type,
+      ad_group.cpc_bid_micros,
+      ad_group.cpm_bid_micros
+  `;
+
+  if (includeMetrics) {
+    query += `,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions,
+      metrics.ctr,
+      metrics.average_cpc
+    `;
+  }
+
+  query += `
+    FROM ad_group
+  `;
+
+  const whereClauses: string[] = [];
+
+  if (campaignId) {
+    whereClauses.push(`ad_group.campaign = 'customers/${cleanCustomerId}/campaigns/${campaignId}'`);
+  }
+
+  if (status && status.length > 0) {
+    whereClauses.push(`ad_group.status IN (${status.map(s => `'${s}'`).join(', ')})`);
+  }
+
+  if (whereClauses.length > 0) {
+    query += ` WHERE ${whereClauses.join(' AND ')}`;
+  }
+
+  query += ` ORDER BY ad_group.name`;
+
+  const results = await googleAdsQuery(accessToken, cleanCustomerId, query, developerToken);
+
+  return results.map((row): AdGroup => {
+    const adGroup = row.adGroup || {};
+    const metrics = row.metrics || {};
+
+    // Extract campaign ID from resource name
+    const campaignMatch = adGroup.campaign?.match(/campaigns\/(\d+)/);
+    const extractedCampaignId = campaignMatch ? campaignMatch[1] : '';
+
+    return {
+      id: adGroup.id?.toString() || '',
+      resourceName: adGroup.resourceName || '',
+      campaignId: extractedCampaignId,
+      name: adGroup.name || 'Unnamed Ad Group',
+      status: mapAdGroupStatus(adGroup.status),
+      type: mapAdGroupType(adGroup.type),
+      cpcBidMicros: adGroup.cpcBidMicros ? parseInt(adGroup.cpcBidMicros, 10) : undefined,
+      cpmBidMicros: adGroup.cpmBidMicros ? parseInt(adGroup.cpmBidMicros, 10) : undefined,
+      impressions: parseInt(metrics.impressions || '0', 10),
+      clicks: parseInt(metrics.clicks || '0', 10),
+      cost: parseInt(metrics.costMicros || '0', 10),
+      conversions: parseFloat(metrics.conversions || '0'),
+      conversionValue: parseFloat(metrics.conversionsValue || '0'),
+      ctr: parseFloat(metrics.ctr || '0'),
+      averageCpc: parseInt(metrics.averageCpc || '0', 10),
+      adsCount: 0, // Will be populated separately if needed
+      keywordsCount: 0,
+      lastSyncAt: new Date(),
+    };
+  });
+}
+
+/**
+ * Fetch ads for an account, campaign, or ad group
+ */
+export async function fetchAds(
+  accessToken: string,
+  customerId: string,
+  options: FetchAdsOptions = {}
+): Promise<Ad[]> {
+  const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  if (!developerToken) {
+    throw new Error('GOOGLE_ADS_DEVELOPER_TOKEN not configured');
+  }
+
+  const cleanCustomerId = normalizeCid(customerId);
+  const { campaignId, adGroupId, status, includeMetrics = true } = options;
+
+  let query = `
+    SELECT
+      ad_group_ad.ad.id,
+      ad_group_ad.ad.resource_name,
+      ad_group_ad.ad_group,
+      ad_group_ad.ad.name,
+      ad_group_ad.status,
+      ad_group_ad.ad.type,
+      ad_group_ad.ad.final_urls,
+      ad_group_ad.ad.display_url,
+      ad_group_ad.ad.responsive_search_ad.headlines,
+      ad_group_ad.ad.responsive_search_ad.descriptions,
+      ad_group_ad.ad.responsive_search_ad.path1,
+      ad_group_ad.ad.responsive_search_ad.path2
+  `;
+
+  if (includeMetrics) {
+    query += `,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions,
+      metrics.ctr,
+      metrics.average_cpc
+    `;
+  }
+
+  query += `
+    FROM ad_group_ad
+  `;
+
+  const whereClauses: string[] = [];
+
+  if (campaignId) {
+    whereClauses.push(`ad_group.campaign = 'customers/${cleanCustomerId}/campaigns/${campaignId}'`);
+  }
+
+  if (adGroupId) {
+    whereClauses.push(`ad_group_ad.ad_group = 'customers/${cleanCustomerId}/adGroups/${adGroupId}'`);
+  }
+
+  if (status && status.length > 0) {
+    whereClauses.push(`ad_group_ad.status IN (${status.map(s => `'${s}'`).join(', ')})`);
+  }
+
+  if (whereClauses.length > 0) {
+    query += ` WHERE ${whereClauses.join(' AND ')}`;
+  }
+
+  const results = await googleAdsQuery(accessToken, cleanCustomerId, query, developerToken);
+
+  return results.map((row): Ad => {
+    const adGroupAd = row.adGroupAd || {};
+    const ad = adGroupAd.ad || {};
+    const metrics = row.metrics || {};
+    const responsiveSearchAd = ad.responsiveSearchAd || {};
+
+    // Extract ad group and campaign IDs
+    const adGroupMatch = adGroupAd.adGroup?.match(/adGroups\/(\d+)/);
+    const extractedAdGroupId = adGroupMatch ? adGroupMatch[1] : '';
+
+    // Extract headlines and descriptions from responsive search ads
+    const headlines = (responsiveSearchAd.headlines || []).map((h: any) => h.text || '');
+    const descriptions = (responsiveSearchAd.descriptions || []).map((d: any) => d.text || '');
+
+    return {
+      id: ad.id?.toString() || '',
+      resourceName: ad.resourceName || '',
+      adGroupId: extractedAdGroupId,
+      campaignId: campaignId || '',
+      name: ad.name || 'Unnamed Ad',
+      status: mapAdStatus(adGroupAd.status),
+      type: mapAdType(ad.type),
+      headlines,
+      descriptions,
+      finalUrls: ad.finalUrls || [],
+      displayUrl: ad.displayUrl,
+      path1: responsiveSearchAd.path1,
+      path2: responsiveSearchAd.path2,
+      impressions: parseInt(metrics.impressions || '0', 10),
+      clicks: parseInt(metrics.clicks || '0', 10),
+      cost: parseInt(metrics.costMicros || '0', 10),
+      conversions: parseFloat(metrics.conversions || '0'),
+      ctr: parseFloat(metrics.ctr || '0'),
+      averageCpc: parseInt(metrics.averageCpc || '0', 10),
+      lastSyncAt: new Date(),
+    };
+  });
+}
+
+/**
+ * Fetch keywords for an account, campaign, or ad group
+ * Uses keyword_view resource which supports metrics (unlike ad_group_criterion alone)
+ */
+export async function fetchKeywords(
+  accessToken: string,
+  customerId: string,
+  options: FetchKeywordsOptions = {}
+): Promise<Keyword[]> {
+  const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  if (!developerToken) {
+    throw new Error('GOOGLE_ADS_DEVELOPER_TOKEN not configured');
+  }
+
+  const cleanCustomerId = normalizeCid(customerId);
+  const { campaignId, adGroupId, status, includeMetrics = true, dateRange = 'LAST_30_DAYS' } = options;
+
+  // Build WHERE clause filters
+  const buildWhereClause = (includesDateRange: boolean): string => {
+    const whereClauses: string[] = [];
+
+    if (includesDateRange) {
+      whereClauses.push(`segments.date DURING ${dateRange}`);
+    }
+
+    if (campaignId) {
+      whereClauses.push(`campaign.id = ${campaignId}`);
+    }
+
+    if (adGroupId) {
+      whereClauses.push(`ad_group.id = ${adGroupId}`);
+    }
+
+    if (status && status.length > 0) {
+      whereClauses.push(`ad_group_criterion.status IN (${status.map(s => `'${s}'`).join(', ')})`);
+    }
+
+    // Only include keyword type criteria
+    whereClauses.push(`ad_group_criterion.type = 'KEYWORD'`);
+
+    return whereClauses.length > 0 ? ` WHERE ${whereClauses.join(' AND ')}` : '';
+  };
+
+  // IMPORTANT: Google Ads API requires separate queries for:
+  // 1. Metrics (clicks, impressions, cost, etc.) - requires keyword_view + date range
+  // 2. Quality Info (quality_score, predicted_ctr, etc.) - cannot be combined with metrics
+  // We run both queries and merge results by criterion ID
+
+  // Query 1: Fetch metrics from keyword_view (requires date range)
+  const metricsQuery = `
+    SELECT
+      ad_group_criterion.criterion_id,
+      ad_group_criterion.resource_name,
+      ad_group_criterion.ad_group,
+      ad_group_criterion.keyword.text,
+      ad_group_criterion.keyword.match_type,
+      ad_group_criterion.status,
+      ad_group_criterion.cpc_bid_micros,
+      campaign.id,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions,
+      metrics.ctr,
+      metrics.average_cpc
+    FROM keyword_view
+    ${buildWhereClause(true)}
+  `;
+
+  // Query 2: Fetch quality info from ad_group_criterion (no date range needed)
+  const qualityQuery = `
+    SELECT
+      ad_group_criterion.criterion_id,
+      ad_group_criterion.quality_info.quality_score,
+      ad_group_criterion.quality_info.search_predicted_ctr,
+      ad_group_criterion.quality_info.creative_quality_score,
+      ad_group_criterion.quality_info.post_click_quality_score
+    FROM ad_group_criterion
+    ${buildWhereClause(false)}
+  `;
+
+  // Run both queries in parallel
+  const [metricsResults, qualityResults] = await Promise.all([
+    includeMetrics
+      ? googleAdsQuery(accessToken, cleanCustomerId, metricsQuery, developerToken)
+      : Promise.resolve([]),
+    googleAdsQuery(accessToken, cleanCustomerId, qualityQuery, developerToken)
+  ]);
+
+  // Build a map of criterion ID -> quality info
+  const qualityMap = new Map<string, any>();
+  for (const row of qualityResults) {
+    const criterionId = row.adGroupCriterion?.criterionId?.toString();
+    if (criterionId) {
+      qualityMap.set(criterionId, row.adGroupCriterion?.qualityInfo || {});
+    }
+  }
+
+  // If we don't have metrics, use qualityResults as the base
+  const baseResults = includeMetrics ? metricsResults : qualityResults;
+
+  return baseResults.map((row): Keyword => {
+    const criterion = row.adGroupCriterion || {};
+    const keyword = criterion.keyword || {};
+    const metrics = row.metrics || {};
+    const campaign = row.campaign || {};
+
+    // Get quality info from the quality map
+    const criterionId = criterion.criterionId?.toString() || '';
+    const qualityInfo = qualityMap.get(criterionId) || {};
+
+    // Extract ad group ID from resource name
+    const adGroupMatch = criterion.adGroup?.match(/adGroups\/(\d+)/);
+    const extractedAdGroupId = adGroupMatch ? adGroupMatch[1] : '';
+
+    return {
+      id: criterion.criterionId?.toString() || '',
+      resourceName: criterion.resourceName || '',
+      adGroupId: extractedAdGroupId,
+      campaignId: campaign.id?.toString() || campaignId || '',
+      text: keyword.text || '',
+      matchType: mapKeywordMatchType(keyword.matchType),
+      status: mapKeywordStatus(criterion.status),
+      cpcBidMicros: criterion.cpcBidMicros ? parseInt(criterion.cpcBidMicros, 10) : undefined,
+      impressions: parseInt(metrics.impressions || '0', 10),
+      clicks: parseInt(metrics.clicks || '0', 10),
+      cost: parseInt(metrics.costMicros || '0', 10),
+      conversions: parseFloat(metrics.conversions || '0'),
+      ctr: parseFloat(metrics.ctr || '0'),
+      averageCpc: parseInt(metrics.averageCpc || '0', 10),
+      qualityScore: qualityInfo.qualityScore,
+      expectedCtr: mapQualityRating(qualityInfo.searchPredictedCtr),
+      landingPageExperience: mapQualityRating(qualityInfo.postClickQualityScore),
+      adRelevance: mapQualityRating(qualityInfo.creativeQualityScore),
+      lastSyncAt: new Date(),
+    };
+  });
+}
+
+/**
+ * Fetch account performance summary for a date range
+ */
+export async function fetchAccountPerformance(
+  accessToken: string,
+  customerId: string,
+  startDate: string,
+  endDate: string
+): Promise<PerformanceMetrics & { dailyBreakdown: Array<PerformanceMetrics & { date: string }> }> {
+  const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  if (!developerToken) {
+    throw new Error('GOOGLE_ADS_DEVELOPER_TOKEN not configured');
+  }
+
+  const cleanCustomerId = normalizeCid(customerId);
+
+  // Fetch daily metrics
+  const query = `
+    SELECT
+      segments.date,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions,
+      metrics.conversions_value,
+      metrics.ctr,
+      metrics.average_cpc
+    FROM customer
+    WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+    ORDER BY segments.date
+  `;
+
+  const results = await googleAdsQuery(accessToken, cleanCustomerId, query, developerToken);
+
+  // Aggregate totals and build daily breakdown
+  let totalImpressions = 0;
+  let totalClicks = 0;
+  let totalCost = 0;
+  let totalConversions = 0;
+  let totalConversionValue = 0;
+
+  const dailyBreakdown = results.map((row) => {
+    const metrics = row.metrics || {};
+    const segments = row.segments || {};
+
+    const impressions = parseInt(metrics.impressions || '0', 10);
+    const clicks = parseInt(metrics.clicks || '0', 10);
+    const cost = parseInt(metrics.costMicros || '0', 10);
+    const conversions = parseFloat(metrics.conversions || '0');
+    const conversionValue = parseFloat(metrics.conversionsValue || '0');
+
+    totalImpressions += impressions;
+    totalClicks += clicks;
+    totalCost += cost;
+    totalConversions += conversions;
+    totalConversionValue += conversionValue;
+
+    return {
+      date: segments.date,
+      impressions,
+      clicks,
+      cost,
+      conversions,
+      conversionValue,
+      ctr: parseFloat(metrics.ctr || '0'),
+      averageCpc: parseInt(metrics.averageCpc || '0', 10),
+    };
+  });
+
+  // Calculate aggregate metrics
+  const avgCtr = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
+  const avgCpc = totalClicks > 0 ? totalCost / totalClicks : 0;
+  const costPerConversion = totalConversions > 0 ? totalCost / totalConversions : undefined;
+  const roas = totalCost > 0 ? (totalConversionValue * 1000000) / totalCost : undefined;
+
+  return {
+    impressions: totalImpressions,
+    clicks: totalClicks,
+    cost: totalCost,
+    conversions: totalConversions,
+    conversionValue: totalConversionValue,
+    ctr: avgCtr,
+    averageCpc: avgCpc,
+    costPerConversion,
+    roas,
+    dailyBreakdown,
+  };
+}
+
+// ============================================================================
+// SEARCH TERMS & RECOMMENDATIONS (KADABRA INTELLIGENCE)
+// ============================================================================
+
+export interface SearchTerm {
+  searchTerm: string;
+  campaignId: string;
+  campaignName: string;
+  adGroupId: string;
+  adGroupName: string;
+  keywordText?: string;
+  keywordMatchType?: KeywordMatchType;
+  impressions: number;
+  clicks: number;
+  cost: number;
+  conversions: number;
+  ctr: number;
+  averageCpc: number;
+  conversionRate: number;
+  costPerConversion?: number;
+}
+
+export interface FetchSearchTermsOptions {
+  campaignId?: string;
+  adGroupId?: string;
+  startDate?: string; // YYYY-MM-DD
+  endDate?: string;   // YYYY-MM-DD
+  minImpressions?: number;
+  minCost?: number;
+  sortBy?: 'cost' | 'impressions' | 'clicks' | 'conversions';
+  sortOrder?: 'asc' | 'desc';
+  limit?: number;
+}
+
+/**
+ * Fetch search terms report - shows actual queries that triggered ads
+ * This is incredibly valuable for finding wasted spend and new opportunities
+ */
+export async function fetchSearchTerms(
+  accessToken: string,
+  customerId: string,
+  options: FetchSearchTermsOptions = {}
+): Promise<SearchTerm[]> {
+  const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  if (!developerToken) {
+    throw new Error('GOOGLE_ADS_DEVELOPER_TOKEN not configured');
+  }
+
+  const cleanCustomerId = normalizeCid(customerId);
+  const {
+    campaignId,
+    adGroupId,
+    startDate,
+    endDate,
+    minImpressions = 0,
+    minCost = 0,
+    sortBy = 'cost',
+    sortOrder = 'desc',
+    limit = 500,
+  } = options;
+
+  // Default to last 30 days if no date range provided
+  const today = new Date();
+  const thirtyDaysAgo = new Date(today);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const effectiveStartDate = startDate || thirtyDaysAgo.toISOString().split('T')[0];
+  const effectiveEndDate = endDate || today.toISOString().split('T')[0];
+
+  let query = `
+    SELECT
+      search_term_view.search_term,
+      search_term_view.resource_name,
+      campaign.id,
+      campaign.name,
+      ad_group.id,
+      ad_group.name,
+      segments.keyword.info.text,
+      segments.keyword.info.match_type,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions,
+      metrics.ctr,
+      metrics.average_cpc
+    FROM search_term_view
+    WHERE segments.date BETWEEN '${effectiveStartDate}' AND '${effectiveEndDate}'
+  `;
+
+  if (campaignId) {
+    query += ` AND campaign.id = ${campaignId}`;
+  }
+
+  if (adGroupId) {
+    query += ` AND ad_group.id = ${adGroupId}`;
+  }
+
+  // Map sort fields to GAQL column names
+  const sortFieldMap: Record<string, string> = {
+    cost: 'metrics.cost_micros',
+    impressions: 'metrics.impressions',
+    clicks: 'metrics.clicks',
+    conversions: 'metrics.conversions',
+  };
+
+  const sortField = sortFieldMap[sortBy] || 'metrics.cost_micros';
+  query += ` ORDER BY ${sortField} ${sortOrder.toUpperCase()}`;
+  query += ` LIMIT ${limit}`;
+
+  const results = await googleAdsQuery(accessToken, cleanCustomerId, query, developerToken);
+
+  return results
+    .map((row): SearchTerm => {
+      const searchTermView = row.searchTermView || {};
+      const campaign = row.campaign || {};
+      const adGroup = row.adGroup || {};
+      const segments = row.segments || {};
+      const keyword = segments.keyword?.info || {};
+      const metrics = row.metrics || {};
+
+      const impressions = parseInt(metrics.impressions || '0', 10);
+      const clicks = parseInt(metrics.clicks || '0', 10);
+      const cost = parseInt(metrics.costMicros || '0', 10);
+      const conversions = parseFloat(metrics.conversions || '0');
+
+      return {
+        searchTerm: searchTermView.searchTerm || '',
+        campaignId: campaign.id?.toString() || '',
+        campaignName: campaign.name || '',
+        adGroupId: adGroup.id?.toString() || '',
+        adGroupName: adGroup.name || '',
+        keywordText: keyword.text,
+        keywordMatchType: keyword.matchType ? mapKeywordMatchType(keyword.matchType) : undefined,
+        impressions,
+        clicks,
+        cost,
+        conversions,
+        ctr: parseFloat(metrics.ctr || '0'),
+        averageCpc: parseInt(metrics.averageCpc || '0', 10),
+        conversionRate: clicks > 0 ? conversions / clicks : 0,
+        costPerConversion: conversions > 0 ? cost / conversions : undefined,
+      };
+    })
+    .filter((term) => {
+      // Apply post-query filters for min thresholds
+      if (minImpressions > 0 && term.impressions < minImpressions) return false;
+      if (minCost > 0 && term.cost < minCost * 1000000) return false; // minCost is in dollars, cost is micros
+      return true;
+    });
+}
+
+/**
+ * Analyze search terms to find wasted spend (high cost, zero conversions)
+ */
+export async function analyzeWastedSpend(
+  accessToken: string,
+  customerId: string,
+  options: { startDate?: string; endDate?: string; minCost?: number } = {}
+): Promise<{
+  totalWastedSpend: number;
+  wastedTerms: SearchTerm[];
+  topWasters: SearchTerm[];
+}> {
+  const searchTerms = await fetchSearchTerms(accessToken, customerId, {
+    ...options,
+    sortBy: 'cost',
+    sortOrder: 'desc',
+    limit: 1000,
+  });
+
+  // Filter to search terms with spend but no conversions
+  const wastedTerms = searchTerms.filter(
+    (term) => term.cost > 0 && term.conversions === 0
+  );
+
+  const totalWastedSpend = wastedTerms.reduce((sum, term) => sum + term.cost, 0);
+
+  // Top 10 wasters
+  const topWasters = wastedTerms.slice(0, 10);
+
+  return {
+    totalWastedSpend,
+    wastedTerms,
+    topWasters,
+  };
+}
+
+// ============================================================================
+// GOOGLE ADS RECOMMENDATIONS
+// ============================================================================
+
+export type RecommendationType =
+  | 'CAMPAIGN_BUDGET'
+  | 'KEYWORD'
+  | 'TEXT_AD'
+  | 'TARGET_CPA_OPT_IN'
+  | 'MAXIMIZE_CONVERSIONS_OPT_IN'
+  | 'MAXIMIZE_CLICKS_OPT_IN'
+  | 'ENHANCED_CPC_OPT_IN'
+  | 'SEARCH_PARTNERS_OPT_IN'
+  | 'SITELINK_EXTENSION'
+  | 'CALL_EXTENSION'
+  | 'CALLOUT_EXTENSION'
+  | 'KEYWORD_MATCH_TYPE'
+  | 'MOVE_UNUSED_BUDGET'
+  | 'FORECASTING_CAMPAIGN_BUDGET'
+  | 'RESPONSIVE_SEARCH_AD'
+  | 'MARGINAL_ROI_CAMPAIGN_BUDGET'
+  | 'UPGRADE_SMART_SHOPPING_CAMPAIGN_TO_PERFORMANCE_MAX'
+  | 'RESPONSIVE_SEARCH_AD_ASSET'
+  | 'UPGRADE_LOCAL_CAMPAIGN_TO_PERFORMANCE_MAX'
+  | 'UNKNOWN';
+
+export interface Recommendation {
+  id: string;
+  resourceName: string;
+  type: RecommendationType;
+  typeDisplay: string;
+  campaignId?: string;
+  campaignName?: string;
+  adGroupId?: string;
+  impact?: {
+    baseMetrics?: {
+      impressions: number;
+      clicks: number;
+      cost: number;
+      conversions: number;
+    };
+    potentialMetrics?: {
+      impressions: number;
+      clicks: number;
+      cost: number;
+      conversions: number;
+    };
+  };
+  dismissed: boolean;
+  // Specific recommendation details
+  budgetRecommendation?: {
+    currentBudgetMicros: number;
+    recommendedBudgetMicros: number;
+  };
+  keywordRecommendation?: {
+    keyword: string;
+    matchType: KeywordMatchType;
+    recommendedCpcBidMicros?: number;
+  };
+  textAdRecommendation?: {
+    headlines: string[];
+    descriptions: string[];
+  };
+}
+
+export interface FetchRecommendationsOptions {
+  campaignId?: string;
+  types?: RecommendationType[];
+  includeDismissed?: boolean;
+}
+
+/**
+ * Fetch Google's native recommendations for the account
+ * These are AI-generated suggestions from Google to improve performance
+ */
+export async function fetchRecommendations(
+  accessToken: string,
+  customerId: string,
+  options: FetchRecommendationsOptions = {}
+): Promise<Recommendation[]> {
+  const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  if (!developerToken) {
+    throw new Error('GOOGLE_ADS_DEVELOPER_TOKEN not configured');
+  }
+
+  const cleanCustomerId = normalizeCid(customerId);
+  const { campaignId, types, includeDismissed = false } = options;
+
+  let query = `
+    SELECT
+      recommendation.resource_name,
+      recommendation.type,
+      recommendation.campaign,
+      recommendation.ad_group,
+      recommendation.dismissed,
+      recommendation.impact,
+      recommendation.campaign_budget_recommendation,
+      recommendation.keyword_recommendation,
+      recommendation.text_ad_recommendation
+    FROM recommendation
+  `;
+
+  const whereClauses: string[] = [];
+
+  if (!includeDismissed) {
+    whereClauses.push('recommendation.dismissed = FALSE');
+  }
+
+  if (campaignId) {
+    whereClauses.push(`recommendation.campaign = 'customers/${cleanCustomerId}/campaigns/${campaignId}'`);
+  }
+
+  if (types && types.length > 0) {
+    whereClauses.push(`recommendation.type IN (${types.map(t => `'${t}'`).join(', ')})`);
+  }
+
+  if (whereClauses.length > 0) {
+    query += ` WHERE ${whereClauses.join(' AND ')}`;
+  }
+
+  const results = await googleAdsQuery(accessToken, cleanCustomerId, query, developerToken);
+
+  return results.map((row): Recommendation => {
+    const rec = row.recommendation || {};
+
+    // Extract campaign ID from resource name
+    const campaignMatch = rec.campaign?.match(/campaigns\/(\d+)/);
+    const extractedCampaignId = campaignMatch ? campaignMatch[1] : undefined;
+
+    // Extract ad group ID from resource name
+    const adGroupMatch = rec.adGroup?.match(/adGroups\/(\d+)/);
+    const extractedAdGroupId = adGroupMatch ? adGroupMatch[1] : undefined;
+
+    // Parse impact metrics
+    let impact: Recommendation['impact'];
+    if (rec.impact) {
+      const baseMetrics = rec.impact.baseMetrics || {};
+      const potentialMetrics = rec.impact.potentialMetrics || {};
+      impact = {
+        baseMetrics: {
+          impressions: parseInt(baseMetrics.impressions || '0', 10),
+          clicks: parseInt(baseMetrics.clicks || '0', 10),
+          cost: parseInt(baseMetrics.costMicros || '0', 10),
+          conversions: parseFloat(baseMetrics.conversions || '0'),
+        },
+        potentialMetrics: {
+          impressions: parseInt(potentialMetrics.impressions || '0', 10),
+          clicks: parseInt(potentialMetrics.clicks || '0', 10),
+          cost: parseInt(potentialMetrics.costMicros || '0', 10),
+          conversions: parseFloat(potentialMetrics.conversions || '0'),
+        },
+      };
+    }
+
+    // Parse specific recommendation types
+    let budgetRecommendation: Recommendation['budgetRecommendation'];
+    if (rec.campaignBudgetRecommendation) {
+      const br = rec.campaignBudgetRecommendation;
+      budgetRecommendation = {
+        currentBudgetMicros: parseInt(br.currentBudgetAmountMicros || '0', 10),
+        recommendedBudgetMicros: parseInt(br.recommendedBudgetAmountMicros || '0', 10),
+      };
+    }
+
+    let keywordRecommendation: Recommendation['keywordRecommendation'];
+    if (rec.keywordRecommendation) {
+      const kr = rec.keywordRecommendation;
+      keywordRecommendation = {
+        keyword: kr.keyword?.text || '',
+        matchType: mapKeywordMatchType(kr.keyword?.matchType || 'BROAD'),
+        recommendedCpcBidMicros: kr.recommendedCpcBidMicros
+          ? parseInt(kr.recommendedCpcBidMicros, 10)
+          : undefined,
+      };
+    }
+
+    let textAdRecommendation: Recommendation['textAdRecommendation'];
+    if (rec.textAdRecommendation) {
+      const tar = rec.textAdRecommendation;
+      textAdRecommendation = {
+        headlines: (tar.ad?.responsiveSearchAd?.headlines || []).map((h: any) => h.text || ''),
+        descriptions: (tar.ad?.responsiveSearchAd?.descriptions || []).map((d: any) => d.text || ''),
+      };
+    }
+
+    // Extract ID from resource name
+    const idMatch = rec.resourceName?.match(/recommendations\/(\d+)/);
+    const id = idMatch ? idMatch[1] : '';
+
+    return {
+      id,
+      resourceName: rec.resourceName || '',
+      type: mapRecommendationType(rec.type),
+      typeDisplay: getRecommendationTypeDisplay(rec.type),
+      campaignId: extractedCampaignId,
+      adGroupId: extractedAdGroupId,
+      impact,
+      dismissed: rec.dismissed || false,
+      budgetRecommendation,
+      keywordRecommendation,
+      textAdRecommendation,
+    };
+  });
+}
+
+/**
+ * Get recommendation summary for dashboard display
+ */
+export async function getRecommendationSummary(
+  accessToken: string,
+  customerId: string
+): Promise<{
+  totalRecommendations: number;
+  byType: Record<string, number>;
+  potentialImpact: {
+    additionalConversions: number;
+    additionalClicks: number;
+    costChange: number;
+  };
+  highPriority: Recommendation[];
+}> {
+  const recommendations = await fetchRecommendations(accessToken, customerId, {
+    includeDismissed: false,
+  });
+
+  // Count by type
+  const byType: Record<string, number> = {};
+  for (const rec of recommendations) {
+    byType[rec.typeDisplay] = (byType[rec.typeDisplay] || 0) + 1;
+  }
+
+  // Calculate potential impact
+  let additionalConversions = 0;
+  let additionalClicks = 0;
+  let costChange = 0;
+
+  for (const rec of recommendations) {
+    if (rec.impact?.baseMetrics && rec.impact?.potentialMetrics) {
+      additionalConversions += rec.impact.potentialMetrics.conversions - rec.impact.baseMetrics.conversions;
+      additionalClicks += rec.impact.potentialMetrics.clicks - rec.impact.baseMetrics.clicks;
+      costChange += rec.impact.potentialMetrics.cost - rec.impact.baseMetrics.cost;
+    }
+  }
+
+  // Get high priority recommendations (budget and conversion-related)
+  const highPriorityTypes: RecommendationType[] = [
+    'CAMPAIGN_BUDGET',
+    'FORECASTING_CAMPAIGN_BUDGET',
+    'MARGINAL_ROI_CAMPAIGN_BUDGET',
+    'MAXIMIZE_CONVERSIONS_OPT_IN',
+    'TARGET_CPA_OPT_IN',
+  ];
+
+  const highPriority = recommendations
+    .filter((rec) => highPriorityTypes.includes(rec.type))
+    .slice(0, 5);
+
+  return {
+    totalRecommendations: recommendations.length,
+    byType,
+    potentialImpact: {
+      additionalConversions,
+      additionalClicks,
+      costChange,
+    },
+    highPriority,
+  };
+}
+
+function mapRecommendationType(type: string): RecommendationType {
+  const typeMap: Record<string, RecommendationType> = {
+    'CAMPAIGN_BUDGET': 'CAMPAIGN_BUDGET',
+    'KEYWORD': 'KEYWORD',
+    'TEXT_AD': 'TEXT_AD',
+    'TARGET_CPA_OPT_IN': 'TARGET_CPA_OPT_IN',
+    'MAXIMIZE_CONVERSIONS_OPT_IN': 'MAXIMIZE_CONVERSIONS_OPT_IN',
+    'MAXIMIZE_CLICKS_OPT_IN': 'MAXIMIZE_CLICKS_OPT_IN',
+    'ENHANCED_CPC_OPT_IN': 'ENHANCED_CPC_OPT_IN',
+    'SEARCH_PARTNERS_OPT_IN': 'SEARCH_PARTNERS_OPT_IN',
+    'SITELINK_EXTENSION': 'SITELINK_EXTENSION',
+    'CALL_EXTENSION': 'CALL_EXTENSION',
+    'CALLOUT_EXTENSION': 'CALLOUT_EXTENSION',
+    'KEYWORD_MATCH_TYPE': 'KEYWORD_MATCH_TYPE',
+    'MOVE_UNUSED_BUDGET': 'MOVE_UNUSED_BUDGET',
+    'FORECASTING_CAMPAIGN_BUDGET': 'FORECASTING_CAMPAIGN_BUDGET',
+    'RESPONSIVE_SEARCH_AD': 'RESPONSIVE_SEARCH_AD',
+    'MARGINAL_ROI_CAMPAIGN_BUDGET': 'MARGINAL_ROI_CAMPAIGN_BUDGET',
+    'UPGRADE_SMART_SHOPPING_CAMPAIGN_TO_PERFORMANCE_MAX': 'UPGRADE_SMART_SHOPPING_CAMPAIGN_TO_PERFORMANCE_MAX',
+    'RESPONSIVE_SEARCH_AD_ASSET': 'RESPONSIVE_SEARCH_AD_ASSET',
+    'UPGRADE_LOCAL_CAMPAIGN_TO_PERFORMANCE_MAX': 'UPGRADE_LOCAL_CAMPAIGN_TO_PERFORMANCE_MAX',
+  };
+  return typeMap[type] || 'UNKNOWN';
+}
+
+function getRecommendationTypeDisplay(type: string): string {
+  const displayMap: Record<string, string> = {
+    'CAMPAIGN_BUDGET': 'Increase Budget',
+    'KEYWORD': 'Add Keywords',
+    'TEXT_AD': 'Improve Ads',
+    'TARGET_CPA_OPT_IN': 'Use Target CPA',
+    'MAXIMIZE_CONVERSIONS_OPT_IN': 'Maximize Conversions',
+    'MAXIMIZE_CLICKS_OPT_IN': 'Maximize Clicks',
+    'ENHANCED_CPC_OPT_IN': 'Enhanced CPC',
+    'SEARCH_PARTNERS_OPT_IN': 'Search Partners',
+    'SITELINK_EXTENSION': 'Add Sitelinks',
+    'CALL_EXTENSION': 'Add Call Extension',
+    'CALLOUT_EXTENSION': 'Add Callouts',
+    'KEYWORD_MATCH_TYPE': 'Keyword Match Type',
+    'MOVE_UNUSED_BUDGET': 'Move Unused Budget',
+    'FORECASTING_CAMPAIGN_BUDGET': 'Budget Forecast',
+    'RESPONSIVE_SEARCH_AD': 'Add Responsive Ads',
+    'MARGINAL_ROI_CAMPAIGN_BUDGET': 'ROI Budget',
+    'UPGRADE_SMART_SHOPPING_CAMPAIGN_TO_PERFORMANCE_MAX': 'Upgrade to PMax',
+    'RESPONSIVE_SEARCH_AD_ASSET': 'Add Ad Assets',
+    'UPGRADE_LOCAL_CAMPAIGN_TO_PERFORMANCE_MAX': 'Upgrade Local to PMax',
+  };
+  return displayMap[type] || type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+
+// ============================================================================
+// MAPPING HELPERS
+// ============================================================================
+
+function mapCampaignStatus(status: string): CampaignStatus {
+  switch (status) {
+    case 'ENABLED': return 'ENABLED';
+    case 'PAUSED': return 'PAUSED';
+    case 'REMOVED': return 'REMOVED';
+    default: return 'PAUSED';
+  }
+}
+
+function mapCampaignType(type: string): CampaignType {
+  switch (type) {
+    case 'SEARCH': return 'SEARCH';
+    case 'DISPLAY': return 'DISPLAY';
+    case 'VIDEO': return 'VIDEO';
+    case 'SHOPPING': return 'SHOPPING';
+    case 'PERFORMANCE_MAX': return 'PERFORMANCE_MAX';
+    case 'APP': return 'APP';
+    case 'SMART': return 'SMART';
+    case 'LOCAL': return 'LOCAL';
+    default: return 'UNKNOWN';
+  }
+}
+
+function mapBiddingStrategy(strategy: string): BiddingStrategy {
+  switch (strategy) {
+    case 'MANUAL_CPC': return 'MANUAL_CPC';
+    case 'MAXIMIZE_CLICKS': return 'MAXIMIZE_CLICKS';
+    case 'MAXIMIZE_CONVERSIONS': return 'MAXIMIZE_CONVERSIONS';
+    case 'MAXIMIZE_CONVERSION_VALUE': return 'MAXIMIZE_CONVERSION_VALUE';
+    case 'TARGET_CPA': return 'TARGET_CPA';
+    case 'TARGET_ROAS': return 'TARGET_ROAS';
+    case 'TARGET_IMPRESSION_SHARE': return 'TARGET_IMPRESSION_SHARE';
+    case 'ENHANCED_CPC': return 'ENHANCED_CPC';
+    default: return 'UNKNOWN';
+  }
+}
+
+function mapAdGroupStatus(status: string): AdGroupStatus {
+  switch (status) {
+    case 'ENABLED': return 'ENABLED';
+    case 'PAUSED': return 'PAUSED';
+    case 'REMOVED': return 'REMOVED';
+    default: return 'PAUSED';
+  }
+}
+
+function mapAdGroupType(type: string): AdGroupType {
+  switch (type) {
+    case 'SEARCH_STANDARD': return 'SEARCH_STANDARD';
+    case 'SEARCH_DYNAMIC_ADS': return 'SEARCH_DYNAMIC_ADS';
+    case 'DISPLAY_STANDARD': return 'DISPLAY_STANDARD';
+    case 'SHOPPING_PRODUCT_ADS': return 'SHOPPING_PRODUCT_ADS';
+    case 'VIDEO_TRUE_VIEW_IN_STREAM': return 'VIDEO_TRUE_VIEW_IN_STREAM';
+    default: return 'UNKNOWN';
+  }
+}
+
+function mapAdStatus(status: string): AdStatus {
+  switch (status) {
+    case 'ENABLED': return 'ENABLED';
+    case 'PAUSED': return 'PAUSED';
+    case 'REMOVED': return 'REMOVED';
+    default: return 'PAUSED';
+  }
+}
+
+function mapAdType(type: string): AdType {
+  switch (type) {
+    case 'RESPONSIVE_SEARCH_AD': return 'RESPONSIVE_SEARCH_AD';
+    case 'RESPONSIVE_DISPLAY_AD': return 'RESPONSIVE_DISPLAY_AD';
+    case 'EXPANDED_TEXT_AD': return 'EXPANDED_TEXT_AD';
+    case 'CALL_AD': return 'CALL_AD';
+    case 'IMAGE_AD': return 'IMAGE_AD';
+    case 'VIDEO_AD': return 'VIDEO_AD';
+    default: return 'UNKNOWN';
+  }
+}
+
+function mapKeywordStatus(status: string): KeywordStatus {
+  switch (status) {
+    case 'ENABLED': return 'ENABLED';
+    case 'PAUSED': return 'PAUSED';
+    case 'REMOVED': return 'REMOVED';
+    default: return 'PAUSED';
+  }
+}
+
+function mapKeywordMatchType(matchType: string): KeywordMatchType {
+  switch (matchType) {
+    case 'EXACT': return 'EXACT';
+    case 'PHRASE': return 'PHRASE';
+    case 'BROAD': return 'BROAD';
+    default: return 'BROAD';
+  }
+}
+
+function mapQualityRating(rating: string): 'BELOW_AVERAGE' | 'AVERAGE' | 'ABOVE_AVERAGE' | undefined {
+  switch (rating) {
+    case 'BELOW_AVERAGE': return 'BELOW_AVERAGE';
+    case 'AVERAGE': return 'AVERAGE';
+    case 'ABOVE_AVERAGE': return 'ABOVE_AVERAGE';
+    default: return undefined;
+  }
+}
+
+// Export the internal query function for advanced use cases
+export { googleAdsQuery };

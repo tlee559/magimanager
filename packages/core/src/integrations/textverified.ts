@@ -6,6 +6,8 @@
  * These have ~95% success rate with Google Ads verification compared to ~30% for VoIP.
  */
 
+import { prisma } from '@magimanager/database';
+
 const TEXTVERIFIED_API_URL = 'https://www.textverified.com/api';
 
 // Google service ID for TextVerified
@@ -209,9 +211,6 @@ export function createTextVerifiedClient(apiKey: string): TextVerifiedClient {
  * Get TextVerified client using API key from database settings
  */
 export async function getTextVerifiedClientFromSettings(): Promise<TextVerifiedClient> {
-  // Import prisma here to avoid circular dependencies
-  const { prisma } = await import('@/lib/db');
-
   const settings = await prisma.appSettings.findFirst();
 
   if (!settings?.textverifiedApiKey) {

@@ -97,3 +97,36 @@ export {
   useRealtimeAlerts,
   useRealtimeSync,
 } from "./hooks";
+
+// Re-export RealtimeProvider and connection hooks
+export {
+  RealtimeProvider,
+  useRealtime,
+  useConnectionStatus,
+  useIsConnected,
+  type RealtimeProviderProps,
+  type RealtimeContextValue,
+  type ConnectionStatus,
+} from "./provider";
+
+// Re-export ConnectionIndicator components
+export {
+  ConnectionIndicator,
+  InlineConnectionIndicator,
+  type ConnectionIndicatorProps,
+  type InlineConnectionIndicatorProps,
+} from "./connection-indicator";
+
+// Re-export notification service
+export {
+  notifyPipelineBlocked,
+  notifyPipelineEnabled,
+  notifyPipelineProgress,
+  notifyReadyForHandoff,
+  notifyWarmupMilestone,
+  type PipelineStage,
+  type PipelineBlocker,
+  type PipelineEnabler,
+  type NotificationPriority,
+  type PipelineNotification,
+} from "./notifications";

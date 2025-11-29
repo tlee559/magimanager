@@ -31,6 +31,21 @@ export async function GET() {
             id: true,
             fullName: true,
             geo: true,
+            gologinProfile: {
+              select: {
+                id: true,
+                profileId: true,
+                profileName: true,
+                status: true,
+              },
+            },
+          },
+        },
+        connection: {
+          select: {
+            id: true,
+            googleEmail: true,
+            status: true,
           },
         },
       },

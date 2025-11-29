@@ -3,6 +3,18 @@
 // Optimized for Vercel Pro (60s timeout)
 
 import { prisma } from "./db";
+import {
+  fetchSearchTerms,
+  analyzeWastedSpend,
+  fetchRecommendations,
+  getRecommendationSummary,
+  refreshAccessToken,
+  normalizeCid,
+  fetchAds,
+  fetchCampaigns,
+  fetchAdGroups,
+} from "./google-ads-api";
+import { scoreAdsInGroup, getWinners, sortByScore, type ScoredAd } from "./campaign-manager/utils/ad-scoring";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
@@ -277,6 +289,153 @@ const TOOLS = {
       type: "object",
       properties: {},
       required: [],
+    },
+  },
+
+  // Google Ads Intelligence (Kadabra)
+  get_search_terms: {
+    name: "get_search_terms",
+    description: "Get search terms report showing actual queries that triggered ads. Use this to find wasted spend, negative keyword opportunities, and new keyword ideas. Requires an OAuth-connected Google Ads account.",
+    parameters: {
+      type: "object",
+      properties: {
+        account_identifier: {
+          type: "string",
+          description: "Account name, MM ID, or Google CID to analyze",
+        },
+        sort_by: {
+          type: "string",
+          enum: ["cost", "impressions", "clicks", "conversions"],
+          description: "How to sort results (default: cost)",
+        },
+        min_cost: {
+          type: "number",
+          description: "Minimum cost in dollars to include (filters low-spend terms)",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum number of terms to return (default 20)",
+        },
+      },
+      required: ["account_identifier"],
+    },
+  },
+  get_wasted_spend: {
+    name: "get_wasted_spend",
+    description: "Analyze wasted ad spend - search terms with spend but zero conversions. Shows potential negative keywords and money-saving opportunities. Requires an OAuth-connected Google Ads account.",
+    parameters: {
+      type: "object",
+      properties: {
+        account_identifier: {
+          type: "string",
+          description: "Account name, MM ID, or Google CID to analyze",
+        },
+        min_cost: {
+          type: "number",
+          description: "Minimum wasted spend in dollars to include (default: 1)",
+        },
+      },
+      required: ["account_identifier"],
+    },
+  },
+  get_google_recommendations: {
+    name: "get_google_recommendations",
+    description: "Get Google's native AI-generated recommendations to improve account performance. Shows budget suggestions, keyword ideas, ad improvements. Requires an OAuth-connected Google Ads account.",
+    parameters: {
+      type: "object",
+      properties: {
+        account_identifier: {
+          type: "string",
+          description: "Account name, MM ID, or Google CID to analyze",
+        },
+        include_dismissed: {
+          type: "boolean",
+          description: "Include previously dismissed recommendations (default: false)",
+        },
+      },
+      required: ["account_identifier"],
+    },
+  },
+  get_recommendation_summary: {
+    name: "get_recommendation_summary",
+    description: "Get a summary of Google's recommendations with potential impact metrics (additional conversions, clicks, cost changes). Requires an OAuth-connected Google Ads account.",
+    parameters: {
+      type: "object",
+      properties: {
+        account_identifier: {
+          type: "string",
+          description: "Account name, MM ID, or Google CID to analyze",
+        },
+      },
+      required: ["account_identifier"],
+    },
+  },
+
+  // Ad Performance Analysis Tools
+  analyze_ad_performance: {
+    name: "analyze_ad_performance",
+    description: "Analyze ad performance in an ad group, score ads based on CTR, conversions, cost efficiency, and impressions. Identifies winners and losers. Requires an OAuth-connected Google Ads account.",
+    parameters: {
+      type: "object",
+      properties: {
+        account_identifier: {
+          type: "string",
+          description: "Account name, MM ID, or Google CID to analyze",
+        },
+        campaign_id: {
+          type: "string",
+          description: "Optional campaign ID to filter by (e.g., '23283242573')",
+        },
+        ad_group_id: {
+          type: "string",
+          description: "Optional ad group ID to filter by",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum number of ads to return (default 20)",
+        },
+      },
+      required: ["account_identifier"],
+    },
+  },
+  compare_ads: {
+    name: "compare_ads",
+    description: "Compare and rank ads within an ad group to find the best performers. Shows head-to-head comparison and identifies which ad variations are winning. Requires an OAuth-connected Google Ads account.",
+    parameters: {
+      type: "object",
+      properties: {
+        account_identifier: {
+          type: "string",
+          description: "Account name, MM ID, or Google CID to analyze",
+        },
+        ad_group_id: {
+          type: "string",
+          description: "Ad group ID to compare ads within",
+        },
+      },
+      required: ["account_identifier", "ad_group_id"],
+    },
+  },
+  suggest_ad_improvements: {
+    name: "suggest_ad_improvements",
+    description: "Get AI-powered suggestions to improve underperforming ads. Analyzes ad copy, headlines, and performance metrics to provide actionable recommendations. Requires an OAuth-connected Google Ads account.",
+    parameters: {
+      type: "object",
+      properties: {
+        account_identifier: {
+          type: "string",
+          description: "Account name, MM ID, or Google CID to analyze",
+        },
+        campaign_id: {
+          type: "string",
+          description: "Optional campaign ID to focus on",
+        },
+        focus_on_underperformers: {
+          type: "boolean",
+          description: "Whether to focus only on underperforming ads (default: true)",
+        },
+      },
+      required: ["account_identifier"],
     },
   },
 
@@ -979,9 +1138,616 @@ async function executeToolCallInner(
       });
     }
 
+    // ========================================================================
+    // GOOGLE ADS INTELLIGENCE TOOLS (Kadabra)
+    // ========================================================================
+
+    case "get_search_terms": {
+      const identifier = args.account_identifier;
+      const sortBy = args.sort_by || "cost";
+      const minCost = args.min_cost || 0;
+      const limit = args.limit || 20;
+
+      // Find the account and get OAuth credentials
+      const accountResult = await findAccountWithOAuth(identifier);
+      if (!accountResult.found) {
+        return JSON.stringify(accountResult);
+      }
+
+      const { account, accessToken } = accountResult;
+
+      try {
+        const searchTerms = await fetchSearchTerms(accessToken!, account.googleCid!, {
+          sortBy: sortBy as 'cost' | 'impressions' | 'clicks' | 'conversions',
+          minCost,
+          limit,
+        });
+
+        return JSON.stringify({
+          account: account.identityProfile?.fullName || account.googleCid,
+          accountId: `MM${String(account.internalId).padStart(3, "0")}`,
+          termsCount: searchTerms.length,
+          sortedBy: sortBy,
+          terms: searchTerms.map((t) => ({
+            searchTerm: t.searchTerm,
+            campaign: t.campaignName,
+            adGroup: t.adGroupName,
+            clicks: t.clicks,
+            impressions: t.impressions,
+            cost: `$${(t.cost / 1000000).toFixed(2)}`,
+            conversions: t.conversions,
+            ctr: `${(t.ctr * 100).toFixed(2)}%`,
+            conversionRate: `${(t.conversionRate * 100).toFixed(2)}%`,
+          })),
+        });
+      } catch (error) {
+        return JSON.stringify({
+          error: true,
+          message: error instanceof Error ? error.message : "Failed to fetch search terms",
+          account: account.identityProfile?.fullName || account.googleCid,
+        });
+      }
+    }
+
+    case "get_wasted_spend": {
+      const identifier = args.account_identifier;
+      const minCost = args.min_cost || 1;
+
+      // Find the account and get OAuth credentials
+      const accountResult = await findAccountWithOAuth(identifier);
+      if (!accountResult.found) {
+        return JSON.stringify(accountResult);
+      }
+
+      const { account, accessToken } = accountResult;
+
+      try {
+        const wastedAnalysis = await analyzeWastedSpend(accessToken!, account.googleCid!, {
+          minCost,
+        });
+
+        return JSON.stringify({
+          account: account.identityProfile?.fullName || account.googleCid,
+          accountId: `MM${String(account.internalId).padStart(3, "0")}`,
+          totalWastedSpend: `$${(wastedAnalysis.totalWastedSpend / 1000000).toFixed(2)}`,
+          wastedTermsCount: wastedAnalysis.wastedTerms.length,
+          topWasters: wastedAnalysis.topWasters.map((t) => ({
+            searchTerm: t.searchTerm,
+            campaign: t.campaignName,
+            cost: `$${(t.cost / 1000000).toFixed(2)}`,
+            clicks: t.clicks,
+            impressions: t.impressions,
+            recommendation: "Consider adding as negative keyword",
+          })),
+          insight: wastedAnalysis.totalWastedSpend > 0
+            ? `Found $${(wastedAnalysis.totalWastedSpend / 1000000).toFixed(2)} in potential wasted spend from ${wastedAnalysis.wastedTerms.length} search terms with zero conversions.`
+            : "No significant wasted spend detected - great job!",
+        });
+      } catch (error) {
+        return JSON.stringify({
+          error: true,
+          message: error instanceof Error ? error.message : "Failed to analyze wasted spend",
+          account: account.identityProfile?.fullName || account.googleCid,
+        });
+      }
+    }
+
+    case "get_google_recommendations": {
+      const identifier = args.account_identifier;
+      const includeDismissed = args.include_dismissed || false;
+
+      // Find the account and get OAuth credentials
+      const accountResult = await findAccountWithOAuth(identifier);
+      if (!accountResult.found) {
+        return JSON.stringify(accountResult);
+      }
+
+      const { account, accessToken } = accountResult;
+
+      try {
+        const recommendations = await fetchRecommendations(accessToken!, account.googleCid!, {
+          includeDismissed,
+        });
+
+        return JSON.stringify({
+          account: account.identityProfile?.fullName || account.googleCid,
+          accountId: `MM${String(account.internalId).padStart(3, "0")}`,
+          recommendationsCount: recommendations.length,
+          recommendations: recommendations.slice(0, 15).map((r) => ({
+            type: r.typeDisplay,
+            campaignId: r.campaignId,
+            dismissed: r.dismissed,
+            ...(r.budgetRecommendation && {
+              currentBudget: `$${(r.budgetRecommendation.currentBudgetMicros / 1000000).toFixed(2)}/day`,
+              recommendedBudget: `$${(r.budgetRecommendation.recommendedBudgetMicros / 1000000).toFixed(2)}/day`,
+            }),
+            ...(r.keywordRecommendation && {
+              keyword: r.keywordRecommendation.keyword,
+              matchType: r.keywordRecommendation.matchType,
+            }),
+            ...(r.impact?.potentialMetrics && {
+              potentialConversions: r.impact.potentialMetrics.conversions,
+              potentialClicks: r.impact.potentialMetrics.clicks,
+            }),
+          })),
+        });
+      } catch (error) {
+        return JSON.stringify({
+          error: true,
+          message: error instanceof Error ? error.message : "Failed to fetch recommendations",
+          account: account.identityProfile?.fullName || account.googleCid,
+        });
+      }
+    }
+
+    case "get_recommendation_summary": {
+      const identifier = args.account_identifier;
+
+      // Find the account and get OAuth credentials
+      const accountResult = await findAccountWithOAuth(identifier);
+      if (!accountResult.found) {
+        return JSON.stringify(accountResult);
+      }
+
+      const { account, accessToken } = accountResult;
+
+      try {
+        const summary = await getRecommendationSummary(accessToken!, account.googleCid!);
+
+        return JSON.stringify({
+          account: account.identityProfile?.fullName || account.googleCid,
+          accountId: `MM${String(account.internalId).padStart(3, "0")}`,
+          totalRecommendations: summary.totalRecommendations,
+          byType: summary.byType,
+          potentialImpact: {
+            additionalConversions: summary.potentialImpact.additionalConversions.toFixed(1),
+            additionalClicks: summary.potentialImpact.additionalClicks,
+            costChange: summary.potentialImpact.costChange > 0
+              ? `+$${(summary.potentialImpact.costChange / 1000000).toFixed(2)}`
+              : `-$${(Math.abs(summary.potentialImpact.costChange) / 1000000).toFixed(2)}`,
+          },
+          highPriority: summary.highPriority.map((r) => ({
+            type: r.typeDisplay,
+            campaignId: r.campaignId,
+          })),
+          insight: summary.totalRecommendations > 0
+            ? `Google suggests ${summary.totalRecommendations} optimizations that could add ~${summary.potentialImpact.additionalConversions.toFixed(1)} conversions.`
+            : "Account is well-optimized - no pending recommendations.",
+        });
+      } catch (error) {
+        return JSON.stringify({
+          error: true,
+          message: error instanceof Error ? error.message : "Failed to get recommendation summary",
+          account: account.identityProfile?.fullName || account.googleCid,
+        });
+      }
+    }
+
+    // ========================================================================
+    // AD PERFORMANCE ANALYSIS TOOLS
+    // ========================================================================
+
+    case "analyze_ad_performance": {
+      const identifier = args.account_identifier;
+      const campaignId = args.campaign_id;
+      const adGroupId = args.ad_group_id;
+      const limit = args.limit || 20;
+
+      // Find the account and get OAuth credentials
+      const accountResult = await findAccountWithOAuth(identifier);
+      if (!accountResult.found) {
+        return JSON.stringify(accountResult);
+      }
+
+      const { account, accessToken } = accountResult;
+
+      try {
+        const ads = await fetchAds(accessToken!, account.googleCid!, {
+          campaignId,
+          adGroupId,
+          includeMetrics: true,
+        });
+
+        if (ads.length === 0) {
+          return JSON.stringify({
+            account: account.identityProfile?.fullName || account.googleCid,
+            accountId: `MM${String(account.internalId).padStart(3, "0")}`,
+            message: "No ads found for the specified filters",
+          });
+        }
+
+        // Group ads by ad group for proper scoring
+        const adsByGroup = new Map<string, typeof ads>();
+        ads.forEach((ad) => {
+          const existing = adsByGroup.get(ad.adGroupId) || [];
+          existing.push(ad);
+          adsByGroup.set(ad.adGroupId, existing);
+        });
+
+        // Score all ads
+        const allScoredAds: ScoredAd[] = [];
+        adsByGroup.forEach((groupAds) => {
+          const scored = scoreAdsInGroup(groupAds);
+          allScoredAds.push(...scored);
+        });
+
+        // Sort by score and limit
+        const topAds = sortByScore(allScoredAds).slice(0, limit);
+        const winners = getWinners(allScoredAds);
+
+        return JSON.stringify({
+          account: account.identityProfile?.fullName || account.googleCid,
+          accountId: `MM${String(account.internalId).padStart(3, "0")}`,
+          totalAds: ads.length,
+          adGroupsAnalyzed: adsByGroup.size,
+          winnersCount: winners.length,
+          summary: {
+            avgScore: Math.round(allScoredAds.reduce((sum, a) => sum + a.score.overall, 0) / allScoredAds.length),
+            topTier: allScoredAds.filter((a) => a.score.tier === "gold").length,
+            underperformers: allScoredAds.filter((a) => a.score.tier === "neutral").length,
+          },
+          topAds: topAds.map((ad) => ({
+            adId: ad.id,
+            type: ad.type,
+            headline: ad.headlines?.[0] || "N/A",
+            score: ad.score.overall,
+            tier: ad.score.tier,
+            isWinner: ad.score.isWinner,
+            metrics: {
+              clicks: ad.clicks,
+              impressions: ad.impressions,
+              cost: `$${(ad.cost / 1000000).toFixed(2)}`,
+              conversions: ad.conversions,
+              ctr: `${(ad.ctr * 100).toFixed(2)}%`,
+            },
+            scoreBreakdown: {
+              ctr: ad.score.ctrScore,
+              conversions: ad.score.conversionScore,
+              costEfficiency: ad.score.costScore,
+              reach: ad.score.impressionScore,
+            },
+          })),
+          insight: winners.length > 0
+            ? `Found ${winners.length} winning ad${winners.length > 1 ? "s" : ""} with strong performance. Consider pausing underperformers and creating variations of winners.`
+            : "No clear winners yet. Consider running tests longer or trying new ad variations.",
+        });
+      } catch (error) {
+        return JSON.stringify({
+          error: true,
+          message: error instanceof Error ? error.message : "Failed to analyze ad performance",
+          account: account.identityProfile?.fullName || account.googleCid,
+        });
+      }
+    }
+
+    case "compare_ads": {
+      const identifier = args.account_identifier;
+      const adGroupId = args.ad_group_id;
+
+      if (!adGroupId) {
+        return JSON.stringify({
+          error: true,
+          message: "ad_group_id is required to compare ads within a group",
+        });
+      }
+
+      // Find the account and get OAuth credentials
+      const accountResult = await findAccountWithOAuth(identifier);
+      if (!accountResult.found) {
+        return JSON.stringify(accountResult);
+      }
+
+      const { account, accessToken } = accountResult;
+
+      try {
+        const ads = await fetchAds(accessToken!, account.googleCid!, {
+          adGroupId,
+          includeMetrics: true,
+        });
+
+        if (ads.length === 0) {
+          return JSON.stringify({
+            account: account.identityProfile?.fullName || account.googleCid,
+            message: "No ads found in this ad group",
+          });
+        }
+
+        if (ads.length === 1) {
+          return JSON.stringify({
+            account: account.identityProfile?.fullName || account.googleCid,
+            message: "Only 1 ad in this ad group - nothing to compare. Add more ad variations!",
+          });
+        }
+
+        // Score and rank ads
+        const scoredAds = sortByScore(scoreAdsInGroup(ads));
+        const winner = scoredAds[0];
+        const loser = scoredAds[scoredAds.length - 1];
+
+        // Calculate performance deltas
+        const winnerVsLoser = {
+          ctrDiff: winner.ctr - loser.ctr,
+          conversionsDiff: winner.conversions - loser.conversions,
+          costDiff: winner.cost - loser.cost,
+        };
+
+        return JSON.stringify({
+          account: account.identityProfile?.fullName || account.googleCid,
+          accountId: `MM${String(account.internalId).padStart(3, "0")}`,
+          adGroupId,
+          totalAds: ads.length,
+          rankings: scoredAds.map((ad, rank) => ({
+            rank: rank + 1,
+            adId: ad.id,
+            headline: ad.headlines?.[0] || "N/A",
+            score: ad.score.overall,
+            tier: ad.score.tier,
+            isWinner: ad.score.isWinner,
+            metrics: {
+              ctr: `${(ad.ctr * 100).toFixed(2)}%`,
+              conversions: ad.conversions,
+              cost: `$${(ad.cost / 1000000).toFixed(2)}`,
+            },
+          })),
+          headToHead: {
+            winner: {
+              adId: winner.id,
+              headline: winner.headlines?.[0] || "N/A",
+              score: winner.score.overall,
+            },
+            loser: {
+              adId: loser.id,
+              headline: loser.headlines?.[0] || "N/A",
+              score: loser.score.overall,
+            },
+            difference: {
+              ctr: `${winnerVsLoser.ctrDiff > 0 ? "+" : ""}${(winnerVsLoser.ctrDiff * 100).toFixed(2)}%`,
+              conversions: `${winnerVsLoser.conversionsDiff > 0 ? "+" : ""}${winnerVsLoser.conversionsDiff.toFixed(1)}`,
+              cost: `${winnerVsLoser.costDiff > 0 ? "+" : ""}$${(winnerVsLoser.costDiff / 1000000).toFixed(2)}`,
+            },
+          },
+          recommendation: winner.score.isWinner
+            ? `"${winner.headlines?.[0] || "Top ad"}" is a clear winner. Consider pausing "${loser.headlines?.[0] || "bottom ad"}" and creating variations of the winner.`
+            : "No clear winner yet. Continue testing or try new creative approaches.",
+        });
+      } catch (error) {
+        return JSON.stringify({
+          error: true,
+          message: error instanceof Error ? error.message : "Failed to compare ads",
+          account: account.identityProfile?.fullName || account.googleCid,
+        });
+      }
+    }
+
+    case "suggest_ad_improvements": {
+      const identifier = args.account_identifier;
+      const campaignId = args.campaign_id;
+      const focusOnUnderperformers = args.focus_on_underperformers !== false;
+
+      // Find the account and get OAuth credentials
+      const accountResult = await findAccountWithOAuth(identifier);
+      if (!accountResult.found) {
+        return JSON.stringify(accountResult);
+      }
+
+      const { account, accessToken } = accountResult;
+
+      try {
+        const ads = await fetchAds(accessToken!, account.googleCid!, {
+          campaignId,
+          includeMetrics: true,
+        });
+
+        if (ads.length === 0) {
+          return JSON.stringify({
+            account: account.identityProfile?.fullName || account.googleCid,
+            message: "No ads found to analyze",
+          });
+        }
+
+        // Group and score ads
+        const adsByGroup = new Map<string, typeof ads>();
+        ads.forEach((ad) => {
+          const existing = adsByGroup.get(ad.adGroupId) || [];
+          existing.push(ad);
+          adsByGroup.set(ad.adGroupId, existing);
+        });
+
+        const allScoredAds: ScoredAd[] = [];
+        adsByGroup.forEach((groupAds) => {
+          const scored = scoreAdsInGroup(groupAds);
+          allScoredAds.push(...scored);
+        });
+
+        // Get underperformers (bronze or neutral tier)
+        const underperformers = allScoredAds.filter(
+          (ad) => ad.score.tier === "bronze" || ad.score.tier === "neutral"
+        );
+
+        // Get winners for comparison
+        const winners = getWinners(allScoredAds);
+
+        // Generate improvement suggestions
+        const suggestions: Array<{
+          adId: string;
+          headline: string;
+          currentScore: number;
+          issues: string[];
+          suggestions: string[];
+        }> = [];
+
+        const targetAds = focusOnUnderperformers ? underperformers : allScoredAds;
+
+        targetAds.slice(0, 10).forEach((ad) => {
+          const issues: string[] = [];
+          const adSuggestions: string[] = [];
+
+          // Analyze issues based on score breakdown
+          if (ad.score.ctrScore < 10) {
+            issues.push("Low CTR");
+            adSuggestions.push("Try more compelling headlines with urgency or value propositions");
+            adSuggestions.push("Test questions or numbers in headlines");
+          }
+          if (ad.score.conversionScore < 15) {
+            issues.push("Low conversions");
+            adSuggestions.push("Improve landing page relevance and speed");
+            adSuggestions.push("Add stronger call-to-action in descriptions");
+          }
+          if (ad.score.costScore < 10) {
+            issues.push("Poor cost efficiency");
+            adSuggestions.push("Review keyword targeting for intent match");
+            adSuggestions.push("Consider narrowing audience targeting");
+          }
+          if (ad.score.impressionScore < 5) {
+            issues.push("Low reach");
+            adSuggestions.push("Check ad approval status");
+            adSuggestions.push("Review keyword match types and bids");
+          }
+
+          if (issues.length > 0) {
+            suggestions.push({
+              adId: ad.id,
+              headline: ad.headlines?.[0] || "N/A",
+              currentScore: ad.score.overall,
+              issues,
+              suggestions: adSuggestions.slice(0, 3),
+            });
+          }
+        });
+
+        // Add general insights
+        const generalInsights: string[] = [];
+        if (winners.length === 0 && ads.length >= 3) {
+          generalInsights.push("No clear winners yet - consider running tests longer");
+        }
+        if (underperformers.length > ads.length * 0.5) {
+          generalInsights.push("Over half of ads underperforming - review overall messaging strategy");
+        }
+        if (adsByGroup.size === 1 && ads.length > 5) {
+          generalInsights.push("Many ads in single ad group - consider splitting by theme");
+        }
+
+        return JSON.stringify({
+          account: account.identityProfile?.fullName || account.googleCid,
+          accountId: `MM${String(account.internalId).padStart(3, "0")}`,
+          totalAdsAnalyzed: ads.length,
+          underperformersCount: underperformers.length,
+          winnersCount: winners.length,
+          suggestions,
+          generalInsights,
+          topPerformerExample: winners[0] ? {
+            headline: winners[0].headlines?.[0] || "N/A",
+            score: winners[0].score.overall,
+            whatWorked: [
+              winners[0].score.ctrScore > 15 ? "Strong CTR" : null,
+              winners[0].score.conversionScore > 20 ? "Good conversions" : null,
+              winners[0].score.costScore > 15 ? "Cost efficient" : null,
+            ].filter(Boolean),
+          } : null,
+        });
+      } catch (error) {
+        return JSON.stringify({
+          error: true,
+          message: error instanceof Error ? error.message : "Failed to generate suggestions",
+          account: account.identityProfile?.fullName || account.googleCid,
+        });
+      }
+    }
+
     default:
       return JSON.stringify({ error: `Unknown tool: ${toolName}` });
   }
+}
+
+// Helper function to find an account and get valid OAuth access token
+async function findAccountWithOAuth(identifier: string): Promise<{
+  found: boolean;
+  message?: string;
+  account?: any;
+  accessToken?: string;
+}> {
+  const lowerIdentifier = identifier.toLowerCase();
+
+  // Try to find the account
+  let account = await prisma.adAccount.findFirst({
+    where: {
+      OR: [
+        { googleCid: { contains: lowerIdentifier, mode: "insensitive" } },
+        { identityProfile: { fullName: { contains: lowerIdentifier, mode: "insensitive" } } },
+      ],
+    },
+    include: {
+      identityProfile: { select: { fullName: true } },
+      connection: true,
+    },
+  });
+
+  // Also try matching by internal ID
+  if (!account) {
+    const idMatch = lowerIdentifier.match(/mm?(\d+)/i);
+    if (idMatch) {
+      const internalId = parseInt(idMatch[1]);
+      account = await prisma.adAccount.findFirst({
+        where: { internalId },
+        include: {
+          identityProfile: { select: { fullName: true } },
+          connection: true,
+        },
+      });
+    }
+  }
+
+  if (!account) {
+    return {
+      found: false,
+      message: `No account found matching "${identifier}"`,
+    };
+  }
+
+  if (!account.googleCid) {
+    return {
+      found: false,
+      message: `Account "${account.identityProfile?.fullName || identifier}" doesn't have a Google CID configured`,
+    };
+  }
+
+  if (!account.connection) {
+    return {
+      found: false,
+      message: `Account "${account.identityProfile?.fullName || identifier}" is not OAuth-connected. Connect via Settings → OAuth to enable this feature.`,
+    };
+  }
+
+  // Check if token needs refresh
+  let accessToken = account.connection.accessToken;
+  const expiresAt = new Date(account.connection.tokenExpiresAt);
+
+  if (expiresAt <= new Date()) {
+    try {
+      const refreshed = await refreshAccessToken(account.connection.refreshToken);
+      accessToken = refreshed.accessToken;
+
+      // Update the stored token
+      await prisma.googleAdsConnection.update({
+        where: { id: account.connection.id },
+        data: {
+          accessToken: refreshed.accessToken,
+          tokenExpiresAt: refreshed.expiresAt,
+        },
+      });
+    } catch (error) {
+      return {
+        found: false,
+        message: `OAuth token expired and refresh failed for "${account.identityProfile?.fullName || identifier}". Please reconnect via Settings.`,
+      };
+    }
+  }
+
+  return {
+    found: true,
+    account,
+    accessToken,
+  };
 }
 
 // ============================================================================
@@ -1096,18 +1862,36 @@ const SYSTEM_PROMPT = `You are MagiManager Bot - a chill assistant for a Google 
 
 RULE: Just answer. Use a tool. Don't ask questions.
 
-TOOLS:
+ACCOUNT TOOLS:
 - get_account_stats → counts and totals
-- get_accounts_by_status("active"|"suspended"|"all") → list accounts with details
+- get_accounts_by_status("active"|"suspended"|"all") → list accounts
 - get_accounts_needing_attention → problems
 - get_top_performers → top spenders
+- get_todays_spend → today's spend breakdown
+- get_spend_by_period(days) → 7/14/30 day spend
+
+GOOGLE ADS INTELLIGENCE (requires OAuth-connected account):
+- get_search_terms(account_identifier) → actual search queries that triggered ads
+- get_wasted_spend(account_identifier) → search terms with spend but zero conversions
+- get_google_recommendations(account_identifier) → Google's AI suggestions
+- get_recommendation_summary(account_identifier) → summary with impact metrics
+
+AD PERFORMANCE ANALYSIS (requires OAuth-connected account):
+- analyze_ad_performance(account_identifier, campaign_id?, ad_group_id?) → score and analyze ads
+- compare_ads(account_identifier, ad_group_id) → compare ads in an ad group, find winners
+- suggest_ad_improvements(account_identifier, campaign_id?) → get improvement suggestions for underperforming ads
 
 WHAT TO DO:
 - "tell me about my accounts" → get_account_stats
-- "list accounts" or "show accounts" → get_accounts_by_status("all")
-- "who owns active accounts" → get_accounts_by_status("active")
 - "suspended accounts" → get_accounts_by_status("suspended")
 - "any issues?" → get_accounts_needing_attention
+- "show search terms for MM001" → get_search_terms("MM001")
+- "wasted spend for John Smith" → get_wasted_spend("John Smith")
+- "recommendations for 123-456-7890" → get_google_recommendations("123-456-7890")
+- "analyze ads for MM001" → analyze_ad_performance("MM001")
+- "which ads are winning?" → analyze_ad_performance with focus on winners
+- "compare ads in ad group 12345" → compare_ads with ad_group_id
+- "how can I improve my ads?" → suggest_ad_improvements
 
 FORMAT: Short answers. *bold* for emphasis. Bullets for lists. Plain $ for money.
 

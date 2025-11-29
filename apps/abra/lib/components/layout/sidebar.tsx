@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import type { AdminView, UserRole } from "@magimanager/shared";
+import { ProfileModal } from "@magimanager/features";
 
 // ============================================================================
 // LOGO COMPONENT
@@ -39,8 +41,7 @@ export function buildNavItems(userRole: UserRole): { id: AdminView; label: strin
       { id: "ad-accounts", label: "Account Profiles", icon: "💳" },
       { id: "identities", label: "ID Profiles", icon: "👥" },
       { id: "admin-requests", label: "Account Requests", icon: "📥" },
-      { id: "team", label: "Team", icon: "👨‍👩‍👧‍👦" },
-      { id: "settings", label: "Settings", icon: "⚙️" }
+      { id: "team", label: "Team", icon: "👨‍👩‍👧‍👦" }
     );
   }
 
@@ -62,6 +63,11 @@ export function buildNavItems(userRole: UserRole): { id: AdminView; label: strin
   // All users can see "My Requests"
   items.push({ id: "requests", label: "My Requests", icon: "📝" });
 
+  // Settings always last for admins/managers
+  if (userRole === "SUPER_ADMIN" || userRole === "ADMIN" || userRole === "MANAGER") {
+    items.push({ id: "settings", label: "Settings", icon: "⚙️" });
+  }
+
   return items;
 }
 
@@ -76,8 +82,9 @@ interface SidebarProps {
 }
 
 export function Sidebar({ currentView, onViewChange, userRole }: SidebarProps) {
-  const { data: session } = useSession();
+  const { data: session, update: updateSession } = useSession();
   const navItems = buildNavItems(userRole);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   return (
     <aside className="w-72 h-screen flex-shrink-0 border-r border-slate-800 bg-slate-950/90 flex flex-col overflow-hidden">
@@ -120,10 +127,13 @@ export function Sidebar({ currentView, onViewChange, userRole }: SidebarProps) {
 
       {/* User Info & Logout */}
       <div className="flex-shrink-0 w-full px-6 py-4 border-t border-slate-800">
-        <div className="mb-3 px-4 py-2 bg-slate-800 rounded-lg">
+        <button
+          onClick={() => setShowProfileModal(true)}
+          className="w-full mb-3 px-4 py-2 bg-slate-800 rounded-lg hover:bg-slate-700 transition text-left"
+        >
           <div className="text-sm font-medium text-slate-100">{session?.user?.name || "User"}</div>
           <div className="text-xs text-slate-500">{session?.user?.email || "No email"}</div>
-        </div>
+        </button>
         <button
           onClick={() => {
             // Unified logout: sign out and redirect to login page
@@ -139,6 +149,21 @@ export function Sidebar({ currentView, onViewChange, userRole }: SidebarProps) {
           <div className="text-slate-600">Coming soon</div>
         </div>
       </div>
+
+      {/* Profile Modal */}
+      {showProfileModal && session?.user && (
+        <ProfileModal
+          onClose={() => setShowProfileModal(false)}
+          user={{
+            name: session.user.name || "",
+            email: session.user.email || "",
+          }}
+          onUpdate={() => {
+            // Refresh the session to show updated user info
+            updateSession();
+          }}
+        />
+      )}
     </aside>
   );
 }

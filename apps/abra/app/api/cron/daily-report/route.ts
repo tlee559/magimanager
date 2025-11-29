@@ -4,9 +4,9 @@ import {
   sendMessage,
   formatDailyReport,
   formatAlertsReport,
-  AccountData,
-  AlertData,
-} from "@/lib/telegram-bot";
+  type AccountData,
+  type AlertData,
+} from "@magimanager/core";
 
 // Verify the request is from Vercel Cron
 function isValidCronRequest(request: NextRequest): boolean {

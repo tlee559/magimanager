@@ -239,6 +239,11 @@ class AccountRepository {
         adsCount: 0,
         campaignsCount: 0,
         notes: data.notes || null,
+        // OAuth connection fields - set if provided
+        connectionId: data.connectionId || null,
+        connectionType: data.connectionType || "manual",
+        syncStatus: data.connectionId ? "synced" : "not_connected",
+        googleCidVerified: !!data.connectionId,
       },
       include: {
         identityProfile: {
@@ -252,12 +257,13 @@ class AccountRepository {
     });
 
     // Log activity
-    await this.logActivity(account.id, "CREATED",
-      data.origin === "takeover"
-        ? "Takeover account added to system"
-        : "New MCC account created",
-      userId
-    );
+    let activityDetails = data.origin === "takeover"
+      ? "Takeover account added to system"
+      : "New MCC account created";
+    if (data.connectionId) {
+      activityDetails += " (OAuth connected)";
+    }
+    await this.logActivity(account.id, "CREATED", activityDetails, userId);
 
     return account as unknown as AccountWithRelations;
   }

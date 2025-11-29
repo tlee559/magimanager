@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireManager } from '@/lib/api-auth';
-import { launchBrowserForOAuth } from '@/lib/gologin';
+import { launchBrowserForOAuth } from '@magimanager/core';
 
 /**
  * POST /api/accounts/[id]/launch-oauth

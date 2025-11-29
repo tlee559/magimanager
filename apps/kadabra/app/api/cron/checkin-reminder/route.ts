@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { sendMessage } from "@/lib/telegram-bot";
+import { sendMessage } from "@magimanager/core";
 
 // Verify the request is from Vercel Cron
 function isValidCronRequest(request: NextRequest): boolean {

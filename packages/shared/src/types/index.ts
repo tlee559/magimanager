@@ -249,6 +249,9 @@ export interface AdAccountCreateInput {
   warmupTargetSpend?: number;
   notes?: string | null;
   newIdentity?: IdentityCreateInput;
+  // OAuth connection fields
+  connectionId?: string;
+  connectionType?: ConnectionType;
 }
 
 export interface AdAccountUpdateInput {
@@ -445,6 +448,13 @@ export type AdminView =
   | "admin-requests"
   | "system"
   | "sms-dashboard";
+
+// ============================================================================
+// CAMPAIGN & AUTOMATION TYPES
+// ============================================================================
+
+export * from './campaigns';
+export * from './automations';
 
 // ============================================================================
 // THEME TYPES

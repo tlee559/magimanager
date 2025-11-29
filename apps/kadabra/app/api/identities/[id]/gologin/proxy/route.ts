@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
-import { getGoLoginClientFromSettings } from "@/lib/gologin";
+import { getGoLoginClientFromSettings } from "@magimanager/core";
 
 // PATCH - Update proxy for a GoLogin profile
 export async function PATCH(

@@ -3,7 +3,11 @@
  * Handles OAuth token exchange, refresh, and metrics fetching
  */
 
-import { sendMessage as sendTelegramMessage } from './telegram-bot';
+import { sendMessage as sendTelegramMessage } from '@magimanager/core';
+import { formatCid, normalizeCid } from '@magimanager/shared';
+
+// Re-export for backwards compatibility
+export { formatCid, normalizeCid } from '@magimanager/shared';
 
 const GOOGLE_OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 // Google Ads API version - check https://developers.google.com/google-ads/api/docs/sunset-dates
@@ -324,26 +328,6 @@ async function googleAdsQuery(
 }
 
 /**
- * Normalize a CID (customer ID) to format without dashes
- * Input: "123-456-7890" or "1234567890"
- * Output: "1234567890"
- */
-export function normalizeCid(cid: string): string {
-  return cid.replace(/-/g, '');
-}
-
-/**
- * Format a CID with dashes for display
- * Input: "1234567890"
- * Output: "123-456-7890"
- */
-export function formatCid(cid: string): string {
-  const clean = normalizeCid(cid);
-  if (clean.length !== 10) return cid;
-  return `${clean.slice(0, 3)}-${clean.slice(3, 6)}-${clean.slice(6)}`;
-}
-
-/**
  * Map Google Ads customer status to our account health status
  */
 export function mapGoogleStatus(googleStatus: string): string {
@@ -392,18 +376,15 @@ export async function syncSingleAccount(
     const newHealth = mapGoogleStatus(metrics.status);
 
     // Determine new status based on spend vs warmup target
-    // Only auto-update status if not already handed-off
+    // Only auto-update status if not already handed-off or ready
     let newStatus = account.status;
-    if (account.handoffStatus !== 'handed-off') {
-      if (spendCents > 0 && account.status === 'provisioned') {
-        // Started spending → warming up
-        newStatus = 'warming-up';
-      } else if (
-        account.status === 'warming-up' &&
-        spendCents >= account.warmupTargetSpend
-      ) {
-        // Hit warmup target → ready for handoff
+    if (account.handoffStatus !== 'handed-off' && account.status !== 'ready') {
+      if (spendCents >= account.warmupTargetSpend) {
+        // Hit warmup target → ready for handoff (regardless of current status)
         newStatus = 'ready';
+      } else if (spendCents > 0 && account.status === 'provisioned') {
+        // Started spending but not at target yet → warming up
+        newStatus = 'warming-up';
       }
     }
 

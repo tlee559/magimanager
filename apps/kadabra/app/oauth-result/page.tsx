@@ -3,6 +3,7 @@
 import { useSearchParams } from 'next/navigation';
 import { useState, Suspense, useMemo } from 'react';
 import { CheckCircle, XCircle, AlertTriangle, Plus, Link } from 'lucide-react';
+import { formatCid } from '@magimanager/shared';
 
 function OAuthResultContent() {
   const searchParams = useSearchParams();
@@ -75,15 +76,6 @@ function OAuthResultContent() {
     } finally {
       setIsLinking(false);
     }
-  };
-
-  // Format CID with dashes for display
-  const formatCid = (cid: string) => {
-    const clean = cid.replace(/\D/g, '');
-    if (clean.length === 10) {
-      return `${clean.slice(0, 3)}-${clean.slice(3, 6)}-${clean.slice(6)}`;
-    }
-    return cid;
   };
 
   // Account picker state - show after successful link

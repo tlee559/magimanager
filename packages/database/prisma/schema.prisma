@@ -505,3 +505,431 @@ model GoogleAdsConnection {
   // Accounts using this connection
   adAccounts        AdAccount[]
 }
+
+// ============================================================================
+// KADABRA: AUTOMATION RULES
+// ============================================================================
+
+enum AutomationStatus {
+  ACTIVE
+  PAUSED
+  DISABLED
+  ERROR
+}
+
+enum TriggerType {
+  SCHEDULE
+  METRIC_THRESHOLD
+  EVENT
+  MANUAL
+}
+
+enum EntityScope {
+  ACCOUNT
+  CAMPAIGN
+  AD_GROUP
+  AD
+  KEYWORD
+}
+
+enum ExecutionResult {
+  SUCCESS
+  FAILED
+  SKIPPED
+  PENDING
+  WRITE_DISABLED
+}
+
+model AutomationRule {
+  id                  String           @id @default(cuid())
+  name                String
+  description         String?          @db.Text
+  status              AutomationStatus @default(PAUSED)
+  priority            Int              @default(50)  // 1-100, lower = higher priority
+
+  // Scope
+  scope               EntityScope
+  accountIds          String[]         // Apply to specific accounts (empty = all)
+  campaignIds         String[]         // Apply to specific campaigns
+  adGroupIds          String[]         // Apply to specific ad groups
+
+  // Trigger configuration (JSON)
+  trigger             String           @db.Text  // JSON: TriggerType config
+
+  // Conditions (all must be true) - JSON array
+  conditions          String           @db.Text  // JSON: AutomationCondition[]
+
+  // Actions (executed in order) - JSON array
+  actions             String           @db.Text  // JSON: AutomationAction[]
+
+  // Limits
+  maxExecutionsPerDay Int?
+  cooldownMinutes     Int?             // Min time between executions
+
+  // Feature flag - does this rule need write access to Google Ads?
+  requiresWriteAccess Boolean          @default(false)
+
+  // Execution tracking
+  lastExecutedAt      DateTime?
+  executionCount      Int              @default(0)
+
+  // Metadata
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  createdBy           String           // User ID
+
+  // Relations
+  executions          AutomationExecution[]
+
+  @@index([status])
+  @@index([scope])
+}
+
+model AutomationExecution {
+  id              String          @id @default(cuid())
+  ruleId          String
+  ruleName        String          // Denormalized for easier querying
+
+  // Account context
+  accountId       String
+
+  // Execution timing
+  triggeredAt     DateTime        @default(now())
+  completedAt     DateTime?
+
+  // Result
+  result          ExecutionResult
+  errorMessage    String?         @db.Text
+
+  // Entity affected
+  entityType      EntityScope
+  entityId        String
+  entityName      String
+
+  // Actions taken (JSON array of ActionResult)
+  actionsTaken    String          @db.Text  // JSON: ActionResult[]
+
+  // State snapshots (before/after for audit)
+  beforeState     String?         @db.Text  // JSON
+  afterState      String?         @db.Text  // JSON
+
+  // Relations
+  rule            AutomationRule  @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId])
+  @@index([accountId])
+  @@index([triggeredAt])
+  @@index([result])
+}
+
+// ============================================================================
+// KADABRA: AI INSIGHTS
+// ============================================================================
+
+enum InsightType {
+  PERFORMANCE_ANOMALY
+  OPTIMIZATION_OPPORTUNITY
+  BUDGET_RECOMMENDATION
+  KEYWORD_SUGGESTION
+  AD_COPY_SUGGESTION
+  BIDDING_RECOMMENDATION
+  TREND_ANALYSIS
+  COMPETITOR_INSIGHT
+}
+
+enum InsightPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum InsightStatus {
+  NEW
+  REVIEWED
+  APPLIED
+  DISMISSED
+}
+
+model AIInsight {
+  id              String          @id @default(cuid())
+
+  // Scope
+  accountId       String
+  campaignId      String?
+  adGroupId       String?
+
+  // Insight details
+  type            InsightType
+  priority        InsightPriority
+  title           String
+  summary         String          @db.Text
+  details         String          @db.Text
+
+  // AI recommendation (JSON)
+  recommendation  String?         @db.Text  // JSON: {action, confidence, estimatedImpact, parameters}
+
+  // Status tracking
+  status          InsightStatus   @default(NEW)
+  reviewedAt      DateTime?
+  reviewedBy      String?         // User ID
+  appliedAt       DateTime?
+
+  // Outcome tracking (after applied)
+  outcomeTracked  Boolean         @default(false)
+  actualImpact    String?         @db.Text  // What actually happened
+
+  // Timestamps
+  createdAt       DateTime        @default(now())
+  expiresAt       DateTime?       // Some insights are time-sensitive
+
+  @@index([accountId])
+  @@index([type])
+  @@index([status])
+  @@index([priority])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// KADABRA: CAMPAIGN SNAPSHOTS (for historical tracking)
+// ============================================================================
+
+model CampaignSnapshot {
+  id              String   @id @default(cuid())
+  accountId       String
+  campaignId      String   // Google Ads campaign ID
+  snapshotDate    DateTime @db.Date
+
+  // State at snapshot time
+  status          String   // ENABLED, PAUSED, REMOVED
+  budgetAmount    Decimal  @db.Decimal(10, 2)  // Daily budget
+  biddingStrategy String
+
+  // Targeting settings
+  targetCpa       Decimal? @db.Decimal(10, 2)
+  targetRoas      Decimal? @db.Decimal(5, 2)
+
+  // Metrics at snapshot time
+  impressions     Int      @default(0)
+  clicks          Int      @default(0)
+  cost            Decimal  @default(0) @db.Decimal(10, 2)
+  conversions     Int      @default(0)
+  conversionValue Decimal  @default(0) @db.Decimal(10, 2)
+
+  // Counts
+  activeAdGroups  Int      @default(0)
+  activeAds       Int      @default(0)
+  activeKeywords  Int      @default(0)
+
+  createdAt       DateTime @default(now())
+
+  @@unique([accountId, campaignId, snapshotDate])
+  @@index([accountId])
+  @@index([campaignId])
+  @@index([snapshotDate])
+}
+
+// ============================================================================
+// KADABRA: ACTION LOG (for audit trail)
+// ============================================================================
+
+enum ActionSource {
+  USER
+  AUTOMATION
+  AI
+  SYSTEM
+}
+
+model ActionLog {
+  id              String       @id @default(cuid())
+  accountId       String
+
+  // What was changed
+  entityType      EntityScope
+  entityId        String
+  entityName      String
+  actionType      String       // CREATE, UPDATE, PAUSE, ENABLE, DELETE, etc.
+
+  // Change details
+  oldValue        String?      @db.Text  // JSON of old state
+  newValue        String?      @db.Text  // JSON of new state
+  changeDescription String     @db.Text  // Human-readable description
+
+  // Who/what made the change
+  source          ActionSource
+  userId          String?      // If USER
+  automationRuleId String?     // If AUTOMATION
+  aiInsightId     String?      // If AI
+
+  // Outcome
+  success         Boolean      @default(true)
+  errorMessage    String?      @db.Text
+
+  createdAt       DateTime     @default(now())
+
+  @@index([accountId])
+  @@index([entityType, entityId])
+  @@index([source])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// KADABRA: AI CHAT SESSIONS
+// ============================================================================
+
+model AIChatSession {
+  id              String   @id @default(cuid())
+  userId          String
+
+  // Context
+  accountId       String?  // If chat is about specific account
+  campaignId      String?  // If focused on specific campaign
+
+  // Conversation history (JSON array)
+  messages        String   @db.Text  // JSON: [{role, content, timestamp, toolCalls?}]
+
+  // Session metadata
+  title           String?  // Auto-generated or user-set title
+  lastActivityAt  DateTime @default(now())
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@index([accountId])
+  @@index([lastActivityAt])
+}
+
+// ============================================================================
+// KADABRA: IN-APP ALERTS (generated by monitoring rules)
+// ============================================================================
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  ERROR
+  CRITICAL
+}
+
+enum AlertCategory {
+  PERFORMANCE      // Spend, CPA, CTR thresholds
+  BUDGET           // Budget pacing, depletion
+  STATUS           // Campaign paused, enabled, etc.
+  QUALITY          // Quality score, ad relevance
+  RECOMMENDATION   // Google's recommendations
+  AUTOMATION       // Rule triggered, action queued
+}
+
+model KadabraAlert {
+  id              String         @id @default(cuid())
+  userId          String         // Owner of the alert
+
+  // Alert details
+  severity        AlertSeverity
+  category        AlertCategory
+  title           String
+  message         String         @db.Text
+  details         String?        @db.Text  // JSON: additional context
+
+  // Entity context
+  accountId       String
+  campaignId      String?
+  adGroupId       String?
+  entityType      String?        // "campaign" | "ad_group" | "ad" | "keyword"
+  entityId        String?
+  entityName      String?
+
+  // Source
+  sourceType      String         @default("system")  // "system" | "automation" | "ai"
+  automationRuleId String?       // If generated by automation rule
+  insightId       String?        // If generated from AI insight
+
+  // Suggested action
+  suggestedAction String?        @db.Text  // JSON: {actionType, parameters, estimatedImpact}
+  actionQueueItemId String?      // Link to action queue if action was created
+
+  // Status
+  isRead          Boolean        @default(false)
+  isDismissed     Boolean        @default(false)
+  dismissedAt     DateTime?
+  expiresAt       DateTime?      // Optional: auto-dismiss after date
+
+  createdAt       DateTime       @default(now())
+
+  @@index([userId])
+  @@index([accountId])
+  @@index([isRead])
+  @@index([severity])
+  @@index([category])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// KADABRA: ACTION QUEUE (copy-paste ready fixes)
+// ============================================================================
+
+enum ActionStatus {
+  PENDING          // Ready to execute
+  IN_PROGRESS      // User started manual execution
+  COMPLETED        // User confirmed completion
+  CANCELLED        // User cancelled
+  EXPIRED          // Action no longer relevant
+}
+
+enum ActionPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model ActionQueueItem {
+  id              String         @id @default(cuid())
+  userId          String         // Owner of the action
+
+  // Action details
+  title           String
+  description     String         @db.Text
+  actionType      String         // "pause_campaign" | "adjust_budget" | "add_negative" | etc.
+  priority        ActionPriority @default(MEDIUM)
+
+  // Entity context
+  accountId       String
+  campaignId      String?
+  adGroupId       String?
+  entityType      String?        // "campaign" | "ad_group" | "ad" | "keyword"
+  entityId        String?
+  entityName      String?
+
+  // Instructions (copy-paste ready)
+  instructions    String         @db.Text  // Step-by-step instructions
+  copyableValues  String?        @db.Text  // JSON: values user can copy-paste
+  googleAdsDeepLink String?      // Direct link to Google Ads entity
+
+  // Source
+  sourceType      String         @default("manual")  // "manual" | "automation" | "ai" | "alert"
+  alertId         String?        // Link to alert that created this
+  automationRuleId String?
+  insightId       String?
+
+  // Impact estimation
+  estimatedImpact String?        @db.Text  // JSON: {metric, currentValue, expectedValue}
+
+  // Status tracking
+  status          ActionStatus   @default(PENDING)
+  statusUpdatedAt DateTime       @default(now())
+  completedAt     DateTime?
+  completedNotes  String?        @db.Text  // User notes on completion
+
+  // Expiration
+  expiresAt       DateTime?
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([userId])
+  @@index([accountId])
+  @@index([status])
+  @@index([priority])
+  @@index([createdAt])
+}

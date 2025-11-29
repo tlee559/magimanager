@@ -1,7 +1,7 @@
 // Gemini AI Agent for MagiManager Telegram Bot
 // Handles natural language processing and intent detection
 
-import {
+import type {
   AccountData,
   AlertData,
   ActivityData,
@@ -10,7 +10,7 @@ import {
   RequestData,
   IdentityData,
   DatabaseStats,
-} from "./telegram-bot";
+} from "@magimanager/core";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/api-auth";
-import { getTextVerifiedClientFromSettings } from "@/lib/textverified";
+import { getTextVerifiedClientFromSettings, extractCodeFromSms } from "@magimanager/core";
 
 // GET /api/verifications - Get all identities with verification data
 export async function GET(request: NextRequest) {
@@ -220,9 +220,3 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Helper to extract code from SMS
-function extractCodeFromSms(sms: string): string | null {
-  // Look for 6-digit code (most common for Google)
-  const match = sms.match(/\b(\d{6})\b/);
-  return match ? match[1] : null;
-}

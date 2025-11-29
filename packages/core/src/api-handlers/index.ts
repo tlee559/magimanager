@@ -35,4 +35,6 @@ export {
   teamMemberDeleteHandler,
   resetPasswordHandler,
   changePasswordHandler,
+  profileGetHandler,
+  profilePatchHandler,
 } from "./team.handler";

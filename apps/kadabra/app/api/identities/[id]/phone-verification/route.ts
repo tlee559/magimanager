@@ -5,7 +5,7 @@ import {
   GOOGLE_SERVICE_ID,
   formatPhoneNumber,
   extractCodeFromSms,
-} from '@/lib/textverified';
+} from '@magimanager/core';
 
 /**
  * POST /api/identities/[id]/phone-verification

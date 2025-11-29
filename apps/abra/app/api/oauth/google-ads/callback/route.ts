@@ -130,7 +130,6 @@ export async function GET(request: NextRequest) {
 
     // PICKER MODE: Return accounts to parent window for selection (used by Add Account modal)
     if (stateData.mode === 'picker') {
-      // Don't store connection - just return the accessible accounts for selection
       if (listCustomersError || accessibleCids.length === 0) {
         return NextResponse.redirect(
           `${baseUrl}/oauth-result?status=picker&error=${encodeURIComponent(
@@ -139,10 +138,22 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // Return accounts as comma-separated list with email
+      // Store the connection so we can link it to the account later
+      const pickerConnection = await prisma.googleAdsConnection.create({
+        data: {
+          accessToken: encrypt(tokens.accessToken),
+          refreshToken: encrypt(tokens.refreshToken),
+          tokenExpiresAt: tokens.expiresAt,
+          googleUserId: userInfo.id,
+          googleEmail: userInfo.email,
+          status: 'active',
+        },
+      });
+
+      // Return accounts as comma-separated list with email and connectionId
       const cidsParam = encodeURIComponent(accessibleCids.map(cid => formatCid(cid)).join(','));
       return NextResponse.redirect(
-        `${baseUrl}/oauth-result?status=picker&email=${encodeURIComponent(userInfo.email)}&cids=${cidsParam}`
+        `${baseUrl}/oauth-result?status=picker&email=${encodeURIComponent(userInfo.email)}&cids=${cidsParam}&connectionId=${pickerConnection.id}`
       );
     }
 

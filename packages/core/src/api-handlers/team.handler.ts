@@ -180,3 +180,64 @@ export async function changePasswordHandler(request: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+/**
+ * Handler for GET /api/profile - Get current user's profile
+ */
+export async function profileGetHandler() {
+  const auth = await requireAuth();
+  if (!auth.authorized) return auth.error;
+
+  const userId = auth.user?.id;
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const result = await userService.getById(userId);
+
+    if (!result.success) {
+      return NextResponse.json({ error: result.error }, { status: 404 });
+    }
+
+    // Return user data without password
+    const { password: _, ...userData } = result.data as unknown as Record<string, unknown>;
+    return NextResponse.json(userData);
+  } catch (error) {
+    console.error("GET /api/profile error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+/**
+ * Handler for PATCH /api/profile - Update current user's profile
+ */
+export async function profilePatchHandler(request: NextRequest) {
+  const auth = await requireAuth();
+  if (!auth.authorized) return auth.error;
+
+  const userId = auth.user?.id;
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const { name, email } = await request.json();
+
+    // Only allow updating name and email
+    const updateData: UserUpdateInput = {};
+    if (name !== undefined) updateData.name = name;
+    if (email !== undefined) updateData.email = email;
+
+    const result = await userService.update(userId, updateData);
+
+    if (!result.success) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+
+    return NextResponse.json(result.data);
+  } catch (error) {
+    console.error("PATCH /api/profile error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}

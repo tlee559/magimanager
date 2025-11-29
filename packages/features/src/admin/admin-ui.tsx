@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect, FormEvent, ChangeEvent, useMemo } from "react";
-import { GEO_OPTIONS, formatDateForDisplay, formatDateToInputString } from "@magimanager/shared";
+import { GEO_OPTIONS, formatDateForDisplay, formatDateToInputString, formatCid } from "@magimanager/shared";
 import { useRealtimeNotifications } from "@magimanager/realtime";
 import { signOut, useSession } from "next-auth/react";
 import { useModal } from "./modal-context";
 import { AdAccountsView } from "./ad-accounts-view";
+import { AddAccountModal } from "./add-account-modal";
+import { ProfileModal } from "./profile-modal";
 // SMSDashboard import removed - feature coming soon
 // import { SMSDashboard } from "@/lib/sms-dashboard";
 import {
@@ -22,22 +24,6 @@ import {
   LoadingSpinner,
 } from "./skeleton-loaders";
 
-// ============================================================================
-// HELPERS
-// ============================================================================
-
-/**
- * Format a CID for display with dashes (XXX-XXX-XXXX)
- * Accepts CIDs with or without dashes/spaces
- */
-function formatCid(cid: string | null): string {
-  if (!cid) return "";
-  const clean = cid.replace(/[-\s]/g, "");
-  if (clean.length === 10 && /^\d+$/.test(clean)) {
-    return `${clean.slice(0, 3)}-${clean.slice(3, 6)}-${clean.slice(6)}`;
-  }
-  return cid;
-}
 
 // ============================================================================
 // TYPES
@@ -253,6 +239,7 @@ export function AdminApp() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [alertsCount, setAlertsCount] = useState(0);
   const [criticalAlertsCount, setCriticalAlertsCount] = useState(0);
   // Get user role from session
@@ -420,8 +407,7 @@ export function AdminApp() {
         { id: "ad-accounts" as View, label: "Account Profiles", icon: "💳" },
         { id: "identities" as View, label: "ID Profiles", icon: "👥" },
         { id: "admin-requests" as View, label: "Account Requests", icon: "📥" },
-        { id: "team" as View, label: "Team", icon: "👨‍👩‍👧‍👦" },
-        { id: "settings" as View, label: "Settings", icon: "⚙️" }
+        { id: "team" as View, label: "Team", icon: "👨‍👩‍👧‍👦" }
       );
     }
 
@@ -450,6 +436,13 @@ export function AdminApp() {
     items.push(
       { id: "requests" as View, label: "My Requests", icon: "📝" }
     );
+
+    // Settings always last for admins/managers
+    if (userRole === "SUPER_ADMIN" || userRole === "ADMIN" || userRole === "MANAGER") {
+      items.push(
+        { id: "settings" as View, label: "Settings", icon: "⚙️" }
+      );
+    }
 
     return items;
   })();
@@ -498,10 +491,13 @@ export function AdminApp() {
         </nav>
 
         <div className="flex-shrink-0 w-full px-6 py-4 border-t border-slate-800">
-          <div className="mb-3 px-4 py-2 bg-slate-800 rounded-lg">
+          <button
+            onClick={() => setShowProfileModal(true)}
+            className="w-full mb-3 px-4 py-2 bg-slate-800 rounded-lg hover:bg-slate-700 transition text-left"
+          >
             <div className="text-sm font-medium text-slate-100">{session?.user?.name || "User"}</div>
             <div className="text-xs text-slate-500">{session?.user?.email || "No email"}</div>
-          </div>
+          </button>
           <button
             onClick={() => signOut({ callbackUrl: window.location.origin })}
             className="w-full px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition text-sm flex items-center justify-center gap-2"
@@ -656,9 +652,14 @@ export function AdminApp() {
               )}
             </div>
 
-            <div className="text-xs text-slate-600 opacity-50 cursor-not-allowed select-none">
-              Dev Environment · <span className="text-slate-500">Local</span>
-            </div>
+            <a
+              href="http://localhost:3001"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1.5 text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition"
+            >
+              Kadabra!
+            </a>
           </div>
         </header>
 
@@ -768,6 +769,21 @@ export function AdminApp() {
           onSuccess={() => {
             setShowPasswordChangeModal(false);
             setFirstLogin(false);
+          }}
+        />
+      )}
+
+      {/* Profile Modal */}
+      {showProfileModal && session?.user && (
+        <ProfileModal
+          onClose={() => setShowProfileModal(false)}
+          user={{
+            name: session.user.name || "",
+            email: session.user.email || "",
+          }}
+          onUpdate={() => {
+            // Trigger session refresh
+            window.location.reload();
           }}
         />
       )}
@@ -2879,302 +2895,6 @@ function EditIdentityView({
 }
 
 // ============================================================================
-// ADD ACCOUNT FOR IDENTITY MODAL (2-step: Origin → Details)
-// ============================================================================
-
-type AccountOrigin = "mcc-created" | "takeover";
-
-function AddAccountForIdentityModal({
-  identity,
-  onClose,
-  onSubmit,
-}: {
-  identity: Identity;
-  onClose: () => void;
-  onSubmit: () => void;
-}) {
-  const [step, setStep] = useState<1 | 2>(1);
-  const [origin, setOrigin] = useState<AccountOrigin>("mcc-created");
-  const [googleCid, setGoogleCid] = useState("");
-  const [warmupTargetSpend, setWarmupTargetSpend] = useState(50);
-  const [notes, setNotes] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-
-  async function handleSubmit() {
-    setError("");
-    setSubmitting(true);
-
-    try {
-      const body: Record<string, unknown> = {
-        identityProfileId: identity.id,
-        origin,
-        warmupTargetSpend,
-        notes: notes || null,
-      };
-
-      if (origin === "takeover" || googleCid) {
-        body.googleCid = googleCid;
-      }
-
-      const res = await fetch("/api/accounts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to create account");
-      }
-
-      onSubmit();
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create account");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  const canProceedStep1 = origin !== null;
-  const canSubmit = origin === "takeover" ? googleCid : true;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-slate-900 rounded-xl shadow-xl w-full max-w-lg border border-slate-700 max-h-[90vh] overflow-y-auto">
-        <div className="px-6 py-4 border-b border-slate-700">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-white">Add Ad Account</h3>
-            <button
-              onClick={onClose}
-              className="p-1 text-slate-400 hover:text-white transition rounded hover:bg-slate-700"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <p className="text-sm text-slate-400 mt-1">For {identity.fullName}</p>
-          <div className="flex items-center gap-2 mt-3">
-            {[1, 2].map((s) => (
-              <div
-                key={s}
-                className={`flex items-center ${s < 2 ? "flex-1" : ""}`}
-              >
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                    step >= s ? "bg-emerald-600 text-white" : "bg-slate-700 text-slate-400"
-                  }`}
-                >
-                  {s}
-                </div>
-                {s < 2 && (
-                  <div className={`flex-1 h-0.5 mx-2 ${step > s ? "bg-emerald-600" : "bg-slate-700"}`} />
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="flex justify-between text-xs text-slate-400 mt-1 px-1">
-            <span>Origin</span>
-            <span>Details</span>
-          </div>
-        </div>
-
-        <div className="p-6">
-          {/* Step 1: Origin Selection */}
-          {step === 1 && (
-            <div className="space-y-4">
-              <p className="text-sm text-slate-400">What type of account is this?</p>
-
-              <label className={`block p-4 rounded-lg border cursor-pointer transition ${
-                origin === "mcc-created"
-                  ? "border-emerald-500 bg-emerald-500/10"
-                  : "border-slate-700 hover:border-slate-600"
-              }`}>
-                <input
-                  type="radio"
-                  name="origin"
-                  value="mcc-created"
-                  checked={origin === "mcc-created"}
-                  onChange={() => setOrigin("mcc-created")}
-                  className="sr-only"
-                />
-                <div className="flex items-start gap-3">
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                    origin === "mcc-created" ? "border-emerald-500" : "border-slate-500"
-                  }`}>
-                    {origin === "mcc-created" && <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />}
-                  </div>
-                  <div>
-                    <div className="font-medium text-white">MCC Created</div>
-                    <div className="text-sm text-slate-400 mt-0.5">
-                      Account we create through our MCC (Manager Account)
-                    </div>
-                  </div>
-                </div>
-              </label>
-
-              <label className={`block p-4 rounded-lg border cursor-pointer transition ${
-                origin === "takeover"
-                  ? "border-emerald-500 bg-emerald-500/10"
-                  : "border-slate-700 hover:border-slate-600"
-              }`}>
-                <input
-                  type="radio"
-                  name="origin"
-                  value="takeover"
-                  checked={origin === "takeover"}
-                  onChange={() => setOrigin("takeover")}
-                  className="sr-only"
-                />
-                <div className="flex items-start gap-3">
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                    origin === "takeover" ? "border-emerald-500" : "border-slate-500"
-                  }`}>
-                    {origin === "takeover" && <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />}
-                  </div>
-                  <div>
-                    <div className="font-medium text-white">Takeover</div>
-                    <div className="text-sm text-slate-400 mt-0.5">
-                      Inherited or given existing account from someone else
-                    </div>
-                  </div>
-                </div>
-              </label>
-
-              <div className="flex justify-between pt-4">
-                <button
-                  onClick={onClose}
-                  className="px-4 py-2 text-slate-300 hover:text-white transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => setStep(2)}
-                  disabled={!canProceedStep1}
-                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 disabled:opacity-50 transition"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 2: Account Details */}
-          {step === 2 && (
-            <div className="space-y-4">
-              <p className="text-sm text-slate-400">Enter the account details</p>
-
-              {origin === "takeover" ? (
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">
-                    Email Address <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    value={googleCid}
-                    onChange={(e) => setGoogleCid(e.target.value)}
-                    placeholder="account@gmail.com (required)"
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-500"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">Email address associated with the takeover account</p>
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Google CID</label>
-                  <input
-                    type="text"
-                    value={googleCid}
-                    onChange={(e) => setGoogleCid(e.target.value)}
-                    placeholder="XXX-XXX-XXXX (auto-generated if empty)"
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-500"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">Leave empty to auto-generate</p>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Warmup Target Spend ($)</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={warmupTargetSpend}
-                  onChange={(e) => setWarmupTargetSpend(parseInt(e.target.value) || 50)}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Notes (optional)</label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Any initial notes..."
-                  rows={2}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-500"
-                />
-              </div>
-
-              {/* Summary */}
-              <div className="bg-slate-800 rounded-lg p-3 text-sm">
-                <div className="text-slate-400 mb-2">Summary:</div>
-                <div className="space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Origin:</span>
-                    <span className={`font-medium ${origin === "mcc-created" ? "text-emerald-400" : "text-amber-400"}`}>
-                      {origin === "mcc-created" ? "MCC Created" : "Takeover"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Identity:</span>
-                    <span className="text-white">{identity.fullName}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Geo:</span>
-                    <span className="text-white">{identity.geo}</span>
-                  </div>
-                </div>
-              </div>
-
-              {error && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">
-                  {error}
-                </div>
-              )}
-
-              <div className="flex justify-between pt-4">
-                <button
-                  onClick={() => setStep(1)}
-                  className="px-4 py-2 text-slate-300 hover:text-white transition"
-                >
-                  Back
-                </button>
-                <div className="flex gap-2">
-                  <button
-                    onClick={onClose}
-                    className="px-4 py-2 text-slate-300 hover:text-white transition"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSubmit}
-                    disabled={!canSubmit || submitting}
-                    className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 disabled:opacity-50 transition"
-                  >
-                    {submitting ? "Creating..." : "Create Account"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
 // ASSIGN EXISTING ACCOUNT MODAL
 // ============================================================================
 
@@ -4163,8 +3883,8 @@ function IdentityDetailView({
 
       {/* Add Account Modal */}
       {showAddAccountModal && (
-        <AddAccountForIdentityModal
-          identity={identity}
+        <AddAccountModal
+          preselectedIdentity={identity}
           onClose={() => setShowAddAccountModal(false)}
           onSubmit={() => {
             setShowAddAccountModal(false);

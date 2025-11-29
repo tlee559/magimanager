@@ -127,9 +127,14 @@ export function Header({
           )}
         </div>
 
-        <div className="text-xs text-slate-600 opacity-50 cursor-not-allowed select-none">
-          Dev Environment · <span className="text-slate-500">Local</span>
-        </div>
+        <a
+          href="http://localhost:3001"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="px-3 py-1.5 text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition"
+        >
+          Kadabra!
+        </a>
       </div>
     </header>
   );

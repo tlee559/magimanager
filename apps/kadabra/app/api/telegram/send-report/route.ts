@@ -5,9 +5,9 @@ import {
   formatDailyReport,
   formatAlertsReport,
   formatSummary,
-  AccountData,
-  AlertData,
-} from "@/lib/telegram-bot";
+  type AccountData,
+  type AlertData,
+} from "@magimanager/core";
 
 // API key for securing internal calls (optional, can use same as bot token or separate)
 const API_SECRET = process.env.TELEGRAM_BOT_TOKEN;

@@ -5,6 +5,9 @@
 // Types
 export * from "./types";
 
+// Config (feature flags, etc.)
+export * from "./config";
+
 // Utilities
 export * from "./utils";
 

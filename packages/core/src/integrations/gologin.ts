@@ -3,6 +3,8 @@
  * Documentation: https://api.gologin.com/docs
  */
 
+import { prisma } from '@magimanager/database';
+
 const GOLOGIN_API_URL = 'https://api.gologin.com';
 
 export interface GoLoginProxyConfig {
@@ -21,15 +23,46 @@ export interface GoLoginProfileOptions {
   extensions?: string[]; // Chrome Web Store extension IDs
 }
 
-// Default Chrome Web Store extensions (by ID)
-export const DEFAULT_EXTENSIONS = [
-  'bhghoamapcdpbohphigoooaddinpkbai', // Authenticator (2FA)
-];
+// ============================================================================
+// CONFIGURABLE DEFAULTS - Apps can override these via setGoLoginConfig()
+// ============================================================================
 
-// Custom extensions hosted on our server (as zip URLs)
-export const CUSTOM_EXTENSION_URLS = [
-  'https://abra.magimanager.com/magimanager-connector.zip', // OAuth connector for Google Ads
-];
+export interface GoLoginConfig {
+  /** Chrome Web Store extension IDs to install by default */
+  defaultExtensions: string[];
+  /** Custom extension URLs (zip files hosted on your server) */
+  customExtensionUrls: string[];
+  /** Base URL for OAuth flows */
+  appBaseUrl: string;
+}
+
+// Default configuration (can be overridden per-app)
+let goLoginConfig: GoLoginConfig = {
+  defaultExtensions: [
+    'bhghoamapcdpbohphigoooaddinpkbai', // Authenticator (2FA)
+  ],
+  customExtensionUrls: [],
+  appBaseUrl: 'https://abra.magimanager.com',
+};
+
+/**
+ * Configure GoLogin defaults for this app
+ * Call this at app startup to customize extensions and URLs
+ */
+export function setGoLoginConfig(config: Partial<GoLoginConfig>): void {
+  goLoginConfig = { ...goLoginConfig, ...config };
+}
+
+/**
+ * Get current GoLogin configuration
+ */
+export function getGoLoginConfig(): GoLoginConfig {
+  return { ...goLoginConfig };
+}
+
+// Legacy exports for backwards compatibility
+export const DEFAULT_EXTENSIONS = goLoginConfig.defaultExtensions;
+export const CUSTOM_EXTENSION_URLS = goLoginConfig.customExtensionUrls;
 
 // Common Windows fonts for realistic fingerprint
 export const DEFAULT_WINDOWS_FONTS = [
@@ -151,10 +184,11 @@ class GoLoginClient {
    */
   async createProfile(options: GoLoginProfileOptions): Promise<GoLoginProfile> {
     const os = options.os || 'win';
+    const config = getGoLoginConfig();
 
     // Combine default extensions with any custom ones
     const extensions = [
-      ...DEFAULT_EXTENSIONS,
+      ...config.defaultExtensions,
       ...(options.extensions || []),
     ];
 
@@ -210,7 +244,7 @@ class GoLoginClient {
       chromeExtensions: extensions,
 
       // Custom extensions (by URL to .zip file)
-      userChromeExtensions: CUSTOM_EXTENSION_URLS,
+      userChromeExtensions: config.customExtensionUrls,
     };
 
     return this.request<GoLoginProfile>('/browser', {
@@ -481,9 +515,6 @@ export function createGoLoginClient(apiKey: string): GoLoginClient {
  * Get GoLogin client using API key from database settings
  */
 export async function getGoLoginClientFromSettings(): Promise<GoLoginClient> {
-  // Import prisma here to avoid circular dependencies
-  const { prisma } = await import('@/lib/db');
-
   const settings = await prisma.appSettings.findFirst();
 
   if (!settings?.gologinApiKey) {
@@ -523,7 +554,6 @@ export async function launchBrowserProfile(
     const { GologinApi } = await import('gologin');
 
     // Get API key from settings
-    const { prisma } = await import('@/lib/db');
     const settings = await prisma.appSettings.findFirst();
 
     if (!settings?.gologinApiKey) {
@@ -585,7 +615,8 @@ export async function launchBrowserForOAuth(
   profileId: string,
   googleCid: string
 ): Promise<BrowserLaunchResult> {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://abra.magimanager.com';
+  const config = getGoLoginConfig();
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || config.appBaseUrl;
   const normalizedCid = googleCid.replace(/-/g, '');
   const oauthUrl = `${baseUrl}/api/oauth/google-ads/authorize?cid=${normalizedCid}`;
 
