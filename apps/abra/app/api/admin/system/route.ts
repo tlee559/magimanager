@@ -85,7 +85,7 @@ export async function GET() {
     ]);
 
     // Format OAuth connections
-    const formattedConnections = oauthConnections.map((conn) => ({
+    const formattedConnections = oauthConnections.map((conn: typeof oauthConnections[number]) => ({
       id: conn.id,
       googleEmail: conn.googleEmail,
       status: conn.status,
