@@ -3,6 +3,17 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 
+interface FormattedConnection {
+  id: string;
+  googleEmail: string;
+  status: string;
+  linkedAccounts: number;
+  lastSyncAt: Date | null;
+  lastSyncError: string | null;
+  createdAt: Date;
+  tokenExpiresAt: Date;
+}
+
 /**
  * GET /api/admin/system
  * Super Admin endpoint - returns system-wide data for the admin dashboard
@@ -85,7 +96,7 @@ export async function GET() {
     ]);
 
     // Format OAuth connections
-    const formattedConnections = oauthConnections.map((conn: typeof oauthConnections[number]) => ({
+    const formattedConnections: FormattedConnection[] = oauthConnections.map((conn) => ({
       id: conn.id,
       googleEmail: conn.googleEmail,
       status: conn.status,
