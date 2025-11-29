@@ -653,7 +653,7 @@ export function AdminApp() {
             </div>
 
             <a
-              href="http://localhost:3001"
+              href="https://magimanager.com"
               target="_blank"
               rel="noopener noreferrer"
               className="px-3 py-1.5 text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition"
