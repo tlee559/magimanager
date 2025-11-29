@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { AdminView, Notification } from "@magimanager/shared";
 import { formatDateForDisplay } from "@/lib/validation";
+import { KADABRA_URL } from "@/lib/constants";
 
 // ============================================================================
 // HEADER COMPONENT
@@ -128,7 +129,7 @@ export function Header({
         </div>
 
         <a
-          href={process.env.NEXT_PUBLIC_KADABRA_URL || "https://magimanager.com"}
+          href={KADABRA_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="px-3 py-1.5 text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition"

@@ -48,6 +48,7 @@ import {
 import type { ChatWindow } from "./chat-types";
 import { CampaignPlannerView } from "./campaign-planner-view";
 import { VideoClipperView } from "./video-clipper-view";
+import { ABRA_URL, APP_VERSION, BUILD_SHA } from "./constants";
 
 // ============================================================================
 // TYPES
@@ -2128,7 +2129,7 @@ export function KadabraApp() {
             <div className="text-xs text-slate-500">{user?.email || "No email"}</div>
           </button>
           <a
-            href={process.env.NEXT_PUBLIC_ABRA_URL || "https://abra.magimanager.com"}
+            href={ABRA_URL}
             className="w-full px-4 py-2 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 text-amber-400 rounded-lg hover:from-amber-500/20 hover:to-orange-500/20 transition text-sm flex items-center justify-center gap-2"
           >
             <Sparkles className="w-4 h-4" />
@@ -2137,8 +2138,7 @@ export function KadabraApp() {
           <button
             onClick={() => {
               // Unified logout: sign out and redirect to abra (auth hub)
-              const abraUrl = process.env.NEXT_PUBLIC_ABRA_URL || "https://abra.magimanager.com";
-              signOut({ callbackUrl: abraUrl });
+              signOut({ callbackUrl: ABRA_URL });
             }}
             className="w-full px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition text-sm flex items-center justify-center gap-2"
           >
@@ -2146,8 +2146,8 @@ export function KadabraApp() {
             Logout
           </button>
           <div className="mt-3 text-xs text-slate-500">
-            <div className="font-medium">KADABRA v{process.env.NEXT_PUBLIC_APP_VERSION || "0.1.0"}</div>
-            <div className="text-slate-600">Build: {process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || "local"}</div>
+            <div className="font-medium">KADABRA v{APP_VERSION}</div>
+            <div className="text-slate-600">Build: {BUILD_SHA}</div>
           </div>
         </div>
       </aside>

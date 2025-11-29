@@ -4,6 +4,7 @@ import { useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import type { AdminView, UserRole } from "@magimanager/shared";
 import { ProfileModal } from "@magimanager/features";
+import { APP_VERSION, BUILD_SHA } from "@/lib/constants";
 
 // ============================================================================
 // LOGO COMPONENT
@@ -145,8 +146,8 @@ export function Sidebar({ currentView, onViewChange, userRole }: SidebarProps) {
           Logout
         </button>
         <div className="mt-3 text-xs text-slate-500">
-          <div className="font-medium">ABRA v{process.env.NEXT_PUBLIC_APP_VERSION || "0.1.0"}</div>
-          <div className="text-slate-600">Build: {process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || "local"}</div>
+          <div className="font-medium">ABRA v{APP_VERSION}</div>
+          <div className="text-slate-600">Build: {BUILD_SHA}</div>
         </div>
       </div>
 
