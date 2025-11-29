@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     const state = encryptOAuthState({ accountId, cid, csrf, debug });
 
     // Build callback URL - always use the same registered callback
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://abra.magimanager.com';
+    const baseUrl = process.env.NEXT_PUBLIC_KADABRA_URL || 'https://magimanager.com';
     const redirectUri = `${baseUrl}/api/oauth/google-ads/callback`;
 
     // Build OAuth URL

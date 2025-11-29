@@ -25,7 +25,7 @@ import {
  *   - error: Error code if user denied access
  */
 export async function GET(request: NextRequest) {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://abra.magimanager.com';
+  const baseUrl = process.env.NEXT_PUBLIC_KADABRA_URL || 'https://magimanager.com';
 
   try {
     const { searchParams } = new URL(request.url);
