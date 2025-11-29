@@ -97,19 +97,19 @@ export async function GET() {
     }));
 
     // Format user counts
-    const usersByRole = userCount.reduce((acc, u) => {
+    const usersByRole = userCount.reduce<Record<string, number>>((acc, u) => {
       acc[u.role] = u._count.id;
       return acc;
-    }, {} as Record<string, number>);
+    }, {});
 
     // Format GoLogin stats
-    const goLoginByStatus = goLoginStats.reduce((acc, g) => {
+    const goLoginByStatus = goLoginStats.reduce<Record<string, number>>((acc, g) => {
       acc[g.status] = g._count.id;
       return acc;
-    }, {} as Record<string, number>);
+    }, {});
 
     // Format activity
-    const formattedActivity = recentActivity.map((a) => ({
+    const formattedActivity = recentActivity.map((a: typeof recentActivity[number]) => ({
       id: a.id,
       action: a.action,
       details: a.details,
