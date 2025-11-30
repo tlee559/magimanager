@@ -1380,11 +1380,18 @@ export function VideoClipperView({
         console.log("[Video Clipper] Upload complete:", uploadedVideoUrl);
       } catch (uploadError) {
         console.error("[Video Clipper] Upload error:", uploadError);
-        throw new Error(
-          uploadError instanceof Error
-            ? uploadError.message
-            : "Failed to upload video. Please try again."
-        );
+        const errorMessage = uploadError instanceof Error ? uploadError.message : String(uploadError);
+
+        // Provide helpful error messages
+        if (errorMessage.includes("token") || errorMessage.includes("BLOB")) {
+          throw new Error("Server configuration error. Please contact support.");
+        } else if (errorMessage.includes("network") || errorMessage.includes("Network")) {
+          throw new Error("Network error during upload. Please check your connection and try again.");
+        } else if (errorMessage.includes("Unauthorized")) {
+          throw new Error("Session expired. Please refresh and try again.");
+        }
+
+        throw new Error(errorMessage || "Failed to upload video. Please try again.");
       }
 
       // Create job

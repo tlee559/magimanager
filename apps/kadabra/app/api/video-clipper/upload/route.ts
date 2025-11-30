@@ -8,7 +8,19 @@ export const runtime = "nodejs";
 
 // POST /api/video-clipper/upload - Handle client-side upload to Vercel Blob
 export async function POST(req: NextRequest) {
+  console.log("[Video Clipper Upload] Received request");
+
+  // Check if BLOB token is configured
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    console.error("[Video Clipper Upload] BLOB_READ_WRITE_TOKEN not configured");
+    return NextResponse.json(
+      { error: "Server configuration error: Blob storage not configured" },
+      { status: 500 }
+    );
+  }
+
   const body = (await req.json()) as HandleUploadBody;
+  console.log("[Video Clipper Upload] Request type:", body.type);
 
   try {
     const jsonResponse = await handleUpload({
