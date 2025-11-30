@@ -159,7 +159,7 @@ export function Sidebar({ currentView, onViewChange, userRole }: SidebarProps) {
           <span className="text-[10px] text-slate-500">Signs out of both apps</span>
         </button>
         <div className="mt-2 text-xs text-slate-500">
-          <div className="font-medium">ACCOUNTS v{APP_VERSION}</div>
+          <div className="font-medium">ABRA v{APP_VERSION}</div>
           <div className="text-slate-600">Build: {BUILD_SHA}</div>
         </div>
       </div>

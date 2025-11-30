@@ -2140,8 +2140,8 @@ export function KadabraApp() {
           </a>
           <button
             onClick={() => {
-              // Unified logout: sign out and redirect to abra (auth hub)
-              signOut({ callbackUrl: ABRA_URL });
+              // Sign out and redirect to Kadabra home (landing page)
+              signOut({ callbackUrl: "/" });
             }}
             className="w-full px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition text-sm flex flex-col items-center gap-0.5"
           >
@@ -2152,7 +2152,7 @@ export function KadabraApp() {
             <span className="text-[10px] text-slate-500">Signs out of both apps</span>
           </button>
           <div className="mt-3 text-xs text-slate-500">
-            <div className="font-medium">ADS v{APP_VERSION}</div>
+            <div className="font-medium">KADABRA v{APP_VERSION}</div>
             <div className="text-slate-600">Build: {BUILD_SHA}</div>
           </div>
         </div>
