@@ -2,26 +2,7 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@magimanager/database";
-
-// Detect if we're running on a production domain (not localhost)
-function isProductionDomain(): boolean {
-  // Check multiple signals to determine if we're in production
-  if (process.env.NODE_ENV === "production") return true;
-  if (process.env.VERCEL === "1") return true;
-
-  // Check NEXTAUTH_URL for production domain
-  const nextAuthUrl = process.env.NEXTAUTH_URL || "";
-  if (nextAuthUrl.includes("magimanager.com")) return true;
-
-  return false;
-}
-
-// Get the session token cookie name based on environment
-function getSessionTokenName(): string {
-  return isProductionDomain()
-    ? "__Secure-next-auth.session-token"
-    : "next-auth.session-token";
-}
+import { SESSION_COOKIE_NAME, getCookieOptions } from "./cookie-config";
 
 async function getUserByEmail(email: string) {
   try {
@@ -147,18 +128,11 @@ export const authOptions: NextAuthOptions = {
   },
   secret: process.env.NEXTAUTH_SECRET,
   // Cookie configuration for SSO across subdomains
-  // Always set domain to .magimanager.com so session works on both apps
+  // Uses shared config from cookie-config.ts - single source of truth
   cookies: {
     sessionToken: {
-      name: getSessionTokenName(),
-      options: {
-        httpOnly: true,
-        sameSite: "lax" as const,
-        path: "/",
-        secure: isProductionDomain(),
-        // Share across all *.magimanager.com subdomains
-        ...(isProductionDomain() ? { domain: ".magimanager.com" } : {}),
-      },
+      name: SESSION_COOKIE_NAME,
+      options: getCookieOptions(),
     },
   },
 };

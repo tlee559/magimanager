@@ -26,3 +26,15 @@ export {
   isValidCronRequest,
   isVercelCronRequest,
 } from './security';
+
+export {
+  AUTH_CONFIG,
+  SESSION_COOKIE_NAME,
+  getCookieOptions,
+  isProduction,
+} from './cookie-config';
+
+export {
+  validateAuthEnvironment,
+  getAuthDebugInfo,
+} from './validate-env';

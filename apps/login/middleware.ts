@@ -1,21 +1,40 @@
 import { getToken } from "next-auth/jwt";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { SESSION_COOKIE_NAME, AUTH_CONFIG } from "@magimanager/auth";
 
-// Cookie name must match auth-options.ts configuration
-const SESSION_COOKIE_NAME = "__Secure-next-auth.session-token";
+// Redirect loop protection
+const REDIRECT_COUNT_COOKIE = "auth_redirect_count";
+const MAX_REDIRECTS = 5;
 
 export async function middleware(request: NextRequest) {
-  // Explicitly specify cookie name for SSO to work across subdomains
+  // Check for redirect loop
+  const redirectCount = parseInt(
+    request.cookies.get(REDIRECT_COUNT_COOKIE)?.value || "0"
+  );
+
+  if (redirectCount >= MAX_REDIRECTS) {
+    // Break the loop - redirect to error page
+    const response = NextResponse.redirect(
+      new URL("/auth-error", request.url)
+    );
+    response.cookies.delete(REDIRECT_COUNT_COOKIE);
+    return response;
+  }
+
+  // Get token using shared cookie name and explicit secret
   const token = await getToken({
     req: request,
     cookieName: SESSION_COOKIE_NAME,
+    secret: process.env.NEXTAUTH_SECRET,
   });
+
   const isHomePage = request.nextUrl.pathname === "/";
   const isLogoutPage = request.nextUrl.pathname === "/logout";
+  const isAuthErrorPage = request.nextUrl.pathname === "/auth-error";
 
-  // Always allow logout page
-  if (isLogoutPage) {
+  // Always allow logout and error pages
+  if (isLogoutPage || isAuthErrorPage) {
     return NextResponse.next();
   }
 
@@ -33,7 +52,10 @@ export async function middleware(request: NextRequest) {
           parsed.hostname === "localhost";
 
         if (isValidDomain) {
-          return NextResponse.redirect(new URL(returnTo));
+          // Clear redirect counter on successful auth
+          const response = NextResponse.redirect(new URL(returnTo));
+          response.cookies.delete(REDIRECT_COUNT_COOKIE);
+          return response;
         }
       } catch {
         // Invalid URL, fall through to default redirect
@@ -42,14 +64,17 @@ export async function middleware(request: NextRequest) {
 
     // Default redirect based on role
     const userRole = (token as { role?: string }).role || "MEDIA_BUYER";
-    const abraUrl = process.env.NEXT_PUBLIC_ABRA_URL || "https://abra.magimanager.com";
-    const kadabraUrl = process.env.NEXT_PUBLIC_KADABRA_URL || "https://magimanager.com";
+    const abraUrl = AUTH_CONFIG.urls.abra;
+    const kadabraUrl = AUTH_CONFIG.urls.kadabra;
 
-    if (userRole === "MEDIA_BUYER") {
-      return NextResponse.redirect(new URL(`${kadabraUrl}/admin`));
-    }
+    const response =
+      userRole === "MEDIA_BUYER"
+        ? NextResponse.redirect(new URL(`${kadabraUrl}/admin`))
+        : NextResponse.redirect(new URL(`${abraUrl}/admin`));
 
-    return NextResponse.redirect(new URL(`${abraUrl}/admin`));
+    // Clear redirect counter on successful auth
+    response.cookies.delete(REDIRECT_COUNT_COOKIE);
+    return response;
   }
 
   return NextResponse.next();
