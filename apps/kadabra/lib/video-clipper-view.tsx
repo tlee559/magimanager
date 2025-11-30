@@ -1328,43 +1328,72 @@ export function VideoClipperView({
   }) => {
     setIsLoading(true);
     try {
+      // Validate file size before upload
+      const maxSize = 500 * 1024 * 1024; // 500MB
+      if (data.uploadedFile.size > maxSize) {
+        throw new Error("File too large. Maximum size is 500MB");
+      }
+
       // Upload the video file
+      console.log("[Video Clipper] Uploading video:", data.uploadedFile.name, "Size:", data.uploadedFile.size);
       const formData = new FormData();
       formData.append("file", data.uploadedFile);
-      const uploadRes = await fetch("/api/video-clipper/upload", {
-        method: "POST",
-        body: formData,
-      });
-      if (!uploadRes.ok) throw new Error("Failed to upload video");
+
+      let uploadRes: Response;
+      try {
+        uploadRes = await fetch("/api/video-clipper/upload", {
+          method: "POST",
+          body: formData,
+        });
+      } catch (fetchError) {
+        console.error("[Video Clipper] Upload fetch error:", fetchError);
+        throw new Error("Network error during upload. Please check your connection and try again.");
+      }
+
+      if (!uploadRes.ok) {
+        const errorData = await uploadRes.json().catch(() => ({}));
+        throw new Error(errorData.error || `Upload failed with status ${uploadRes.status}`);
+      }
       const uploadData = await uploadRes.json();
       const uploadedVideoUrl = uploadData.url;
+      console.log("[Video Clipper] Upload complete:", uploadedVideoUrl);
 
       // Create job
-      const res = await fetch("/api/video-clipper/jobs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sourceType: "upload",
-          uploadedVideoUrl,
-          name: data.name,
-          targetFormat: data.targetFormat,
-          targetDuration: data.targetDuration,
-          maxClips: data.maxClips,
-          addCaptions: data.addCaptions,
-          captionStyle: data.captionStyle,
-          industry: data.industry,
-          productContext: data.productContext,
-          targetAudience: data.targetAudience,
-        }),
-      });
+      let res: Response;
+      try {
+        res = await fetch("/api/video-clipper/jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sourceType: "upload",
+            uploadedVideoUrl,
+            name: data.name,
+            targetFormat: data.targetFormat,
+            targetDuration: data.targetDuration,
+            maxClips: data.maxClips,
+            addCaptions: data.addCaptions,
+            captionStyle: data.captionStyle,
+            industry: data.industry,
+            productContext: data.productContext,
+            targetAudience: data.targetAudience,
+          }),
+        });
+      } catch (fetchError) {
+        console.error("[Video Clipper] Job creation fetch error:", fetchError);
+        throw new Error("Network error while creating job. Please try again.");
+      }
 
-      if (!res.ok) throw new Error("Failed to create job");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to create job with status ${res.status}`);
+      }
       const jobData = await res.json();
+      console.log("[Video Clipper] Job created:", jobData.job.id);
       setCurrentJob(jobData.job);
       setView("processing");
     } catch (error) {
-      console.error("Failed to create job:", error);
-      alert(error instanceof Error ? error.message : "Failed to create job");
+      console.error("[Video Clipper] Submit error:", error);
+      alert(error instanceof Error ? error.message : "Failed to create job. Please try again.");
     } finally {
       setIsLoading(false);
     }

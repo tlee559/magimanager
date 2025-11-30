@@ -3,6 +3,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { put } from "@vercel/blob";
 
+// Configure route to handle large file uploads (up to 500MB)
+export const runtime = "nodejs";
+export const maxDuration = 300; // 5 minutes for large uploads
+
 // POST /api/video-clipper/upload - Upload a video file to Vercel Blob
 export async function POST(req: NextRequest) {
   try {

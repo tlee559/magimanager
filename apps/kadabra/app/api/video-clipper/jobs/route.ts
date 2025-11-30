@@ -4,6 +4,10 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@magimanager/database";
 import { put } from "@vercel/blob";
 
+// Configure route for long-running video processing
+export const runtime = "nodejs";
+export const maxDuration = 300; // 5 minutes for video processing
+
 // GET /api/video-clipper/jobs - List all jobs for the current user
 export async function GET(req: NextRequest) {
   try {

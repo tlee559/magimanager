@@ -69,8 +69,8 @@ function LandingPage() {
           AI-Powered Platform
         </div>
         <h1 className="text-5xl md:text-6xl font-bold text-slate-100 mb-6 leading-tight">
-          Run 100s of Ad Accounts.<br />
-          <span className="text-emerald-400">Zero Headaches.</span>
+          Scale Your Agency.<br />
+          <span className="text-emerald-400">Not Your Stress.</span>
         </h1>
         <p className="text-xl text-slate-400 mb-10 leading-relaxed">
           Built by marketers, for marketers. Manage and scale 100s of accounts while keeping everything optimized. AI-powered tools that make it easy to grow your agency the right way.

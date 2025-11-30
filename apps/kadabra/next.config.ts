@@ -3,6 +3,12 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
+  // Allow large file uploads for video clipper (up to 500MB)
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "500mb",
+    },
+  },
   // Expose Vercel system env vars to the browser
   env: {
     NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA: process.env.VERCEL_GIT_COMMIT_SHA,
