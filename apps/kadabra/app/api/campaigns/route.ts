@@ -118,16 +118,30 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch campaigns from Google Ads API
-    const campaigns = await fetchCampaigns(accessToken, customerId, {
-      includeMetrics: true,
-      dateRangeStart,
-      dateRangeEnd,
-    });
+    // Wrap in try-catch to handle suspended/disabled accounts gracefully
+    let campaigns: Awaited<ReturnType<typeof fetchCampaigns>> = [];
+    let apiError: string | null = null;
 
-    // Check if account is suspended/inactive and has no campaigns returned
-    // but we know it had campaigns before (from cached count)
-    const isSuspended = account.accountHealth === "suspended" || account.status === "suspended";
+    try {
+      campaigns = await fetchCampaigns(accessToken, customerId, {
+        includeMetrics: true,
+        dateRangeStart,
+        dateRangeEnd,
+      });
+    } catch (fetchError) {
+      // If the account is suspended/disabled, Google Ads API will throw an error
+      // We catch it here and return empty campaigns with a flag
+      const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
+      console.log('[API/campaigns] Fetch error (likely suspended account):', errorMessage);
+      apiError = errorMessage;
+    }
+
+    // Check if account is suspended/inactive
     const hasCachedCampaigns = account.campaignsCount > 0;
+    // Account is suspended if: explicitly marked, OR API returned "not enabled" error
+    const isSuspendedByApi = apiError?.includes('not enabled') || apiError?.includes('CUSTOMER_NOT_ENABLED');
+    const isSuspendedByStatus = account.accountHealth === "suspended" || account.status === "suspended";
+    const isSuspended = isSuspendedByStatus || isSuspendedByApi;
 
     console.log('[API/campaigns] Debug:', {
       accountId,
@@ -136,7 +150,9 @@ export async function GET(req: NextRequest) {
       accountStatus: account.status,
       campaignsCount: account.campaignsCount,
       isSuspended,
+      isSuspendedByApi,
       hasCachedCampaigns,
+      apiError,
     });
 
     return NextResponse.json({
@@ -145,6 +161,7 @@ export async function GET(req: NextRequest) {
       // Provide context when suspended account returns no campaigns
       accountSuspended: isSuspended && campaigns.length === 0 && hasCachedCampaigns,
       cachedCampaignCount: hasCachedCampaigns ? account.campaignsCount : undefined,
+      apiError: apiError || undefined,
     });
   } catch (error) {
     console.error("Error fetching campaigns:", error);
