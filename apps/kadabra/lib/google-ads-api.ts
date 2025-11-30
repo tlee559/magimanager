@@ -584,8 +584,8 @@ export async function fetchCampaigns(
   const cleanCustomerId = normalizeCid(customerId);
   const { dateRangeStart, dateRangeEnd, status, includeMetrics = true } = options;
 
-  // Build the GAQL query
-  let query = `
+  // First, fetch ALL campaigns without date filter (so suspended/inactive campaigns still appear)
+  let campaignsQuery = `
     SELECT
       campaign.id,
       campaign.resource_name,
@@ -600,42 +600,81 @@ export async function fetchCampaigns(
       campaign.end_date,
       campaign.target_cpa.target_cpa_micros,
       campaign.target_roas.target_roas
-  `;
-
-  if (includeMetrics) {
-    query += `,
-      metrics.impressions,
-      metrics.clicks,
-      metrics.cost_micros,
-      metrics.conversions,
-      metrics.conversions_value,
-      metrics.ctr,
-      metrics.average_cpc
-    `;
-  }
-
-  query += `
     FROM campaign
   `;
 
-  // Build WHERE clauses
-  const whereClauses: string[] = [];
-
+  // Only filter by status, NOT by date range (date range only affects metrics)
   if (status && status.length > 0) {
-    whereClauses.push(`campaign.status IN (${status.map(s => `'${s}'`).join(', ')})`);
+    campaignsQuery += ` WHERE campaign.status IN (${status.map(s => `'${s}'`).join(', ')})`;
   }
 
-  if (dateRangeStart && dateRangeEnd) {
-    whereClauses.push(`segments.date BETWEEN '${dateRangeStart}' AND '${dateRangeEnd}'`);
+  campaignsQuery += ` ORDER BY campaign.name`;
+
+  const campaignResults = await googleAdsQuery(accessToken, cleanCustomerId, campaignsQuery, developerToken);
+
+  // Then, separately fetch metrics for the date range (if requested)
+  // This allows us to show campaigns even if they have no metrics in the date range
+  const metricsMap = new Map<string, {
+    impressions: number;
+    clicks: number;
+    costMicros: number;
+    conversions: number;
+    conversionsValue: number;
+    ctr: number;
+    averageCpc: number;
+  }>();
+
+  if (includeMetrics && dateRangeStart && dateRangeEnd) {
+    const metricsQuery = `
+      SELECT
+        campaign.id,
+        metrics.impressions,
+        metrics.clicks,
+        metrics.cost_micros,
+        metrics.conversions,
+        metrics.conversions_value,
+        metrics.ctr,
+        metrics.average_cpc
+      FROM campaign
+      WHERE segments.date BETWEEN '${dateRangeStart}' AND '${dateRangeEnd}'
+    `;
+
+    const metricsResults = await googleAdsQuery(accessToken, cleanCustomerId, metricsQuery, developerToken);
+
+    // Aggregate metrics by campaign (date segments return multiple rows per campaign)
+    for (const row of metricsResults) {
+      const campaignId = row.campaign?.id?.toString() || '';
+      const metrics = row.metrics || {};
+      const existing = metricsMap.get(campaignId);
+
+      if (existing) {
+        existing.impressions += parseInt(metrics.impressions || '0', 10);
+        existing.clicks += parseInt(metrics.clicks || '0', 10);
+        existing.costMicros += parseInt(metrics.costMicros || '0', 10);
+        existing.conversions += parseFloat(metrics.conversions || '0');
+        existing.conversionsValue += parseFloat(metrics.conversionsValue || '0');
+      } else {
+        metricsMap.set(campaignId, {
+          impressions: parseInt(metrics.impressions || '0', 10),
+          clicks: parseInt(metrics.clicks || '0', 10),
+          costMicros: parseInt(metrics.costMicros || '0', 10),
+          conversions: parseFloat(metrics.conversions || '0'),
+          conversionsValue: parseFloat(metrics.conversionsValue || '0'),
+          ctr: parseFloat(metrics.ctr || '0'),
+          averageCpc: parseInt(metrics.averageCpc || '0', 10),
+        });
+      }
+    }
+
+    // Recalculate CTR and average CPC from aggregated values
+    for (const [, metrics] of metricsMap) {
+      metrics.ctr = metrics.impressions > 0 ? metrics.clicks / metrics.impressions : 0;
+      metrics.averageCpc = metrics.clicks > 0 ? Math.round(metrics.costMicros / metrics.clicks) : 0;
+    }
   }
 
-  if (whereClauses.length > 0) {
-    query += ` WHERE ${whereClauses.join(' AND ')}`;
-  }
-
-  query += ` ORDER BY campaign.name`;
-
-  const results = await googleAdsQuery(accessToken, cleanCustomerId, query, developerToken);
+  // Use campaignResults as the base (all campaigns)
+  const results = campaignResults;
 
   // Also fetch ad group and ad counts per campaign
   const countsQuery = `
@@ -692,12 +731,22 @@ export async function fetchCampaigns(
     }
   }
 
-  // Map results to Campaign type
+  // Map results to Campaign type, using metricsMap for date-range metrics
   return results.map((row): Campaign => {
     const campaign = row.campaign || {};
     const budget = row.campaignBudget || {};
-    const metrics = row.metrics || {};
     const campaignId = campaign.id?.toString() || '';
+
+    // Get metrics from metricsMap (aggregated by date range) or default to 0
+    const metrics = metricsMap.get(campaignId) || {
+      impressions: 0,
+      clicks: 0,
+      costMicros: 0,
+      conversions: 0,
+      conversionsValue: 0,
+      ctr: 0,
+      averageCpc: 0,
+    };
 
     return {
       id: campaignId,
@@ -709,13 +758,13 @@ export async function fetchCampaigns(
       budgetId: budget.id?.toString() || '',
       budgetAmount: parseInt(budget.amountMicros || '0', 10),
       budgetName: budget.name || '',
-      impressions: parseInt(metrics.impressions || '0', 10),
-      clicks: parseInt(metrics.clicks || '0', 10),
-      cost: parseInt(metrics.costMicros || '0', 10),
-      conversions: parseFloat(metrics.conversions || '0'),
-      conversionValue: parseFloat(metrics.conversionsValue || '0'),
-      ctr: parseFloat(metrics.ctr || '0'),
-      averageCpc: parseInt(metrics.averageCpc || '0', 10),
+      impressions: metrics.impressions,
+      clicks: metrics.clicks,
+      cost: metrics.costMicros,
+      conversions: metrics.conversions,
+      conversionValue: metrics.conversionsValue,
+      ctr: metrics.ctr,
+      averageCpc: metrics.averageCpc,
       targetCpa: campaign.targetCpa?.targetCpaMicros
         ? parseInt(campaign.targetCpa.targetCpaMicros, 10)
         : undefined,
