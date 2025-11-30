@@ -73,7 +73,7 @@ function LandingPage() {
           <span className="text-emerald-400">Zero Headaches.</span>
         </h1>
         <p className="text-xl text-slate-400 mb-10 leading-relaxed">
-          The hard part isn&apos;t running ads. It&apos;s creating, managing, and scaling 100s of accounts while keeping everything optimized. We built the tools to make that easy.
+          Built by marketers, for marketers. Create, manage, and scale 100s of accounts while keeping everything optimized. AI-powered tools that make it easy to grow your agency the right way.
         </p>
         <a
           href={loginUrl}
