@@ -795,7 +795,13 @@ function MyAccountsView({
 // ACCOUNT DETAIL VIEW - Inline Tree Expansion (Google Ads Style)
 // ============================================================================
 
-function AccountDetailView({ account }: { account: AdAccount }) {
+function AccountDetailView({
+  account,
+  onOpenAdChat,
+}: {
+  account: AdAccount;
+  onOpenAdChat?: (prompt: string, adContext: string) => void;
+}) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loadingCampaigns, setLoadingCampaigns] = useState(false);
   const [dateRange, setDateRange] = useState<"TODAY" | "YESTERDAY" | "LAST_7_DAYS" | "LAST_14_DAYS" | "LAST_30_DAYS">("LAST_7_DAYS");
@@ -1408,6 +1414,7 @@ function AccountDetailView({ account }: { account: AdAccount }) {
           onClose={() => setSelectedAd(null)}
           accountId={account.id}
           customerId={customerId}
+          onOpenChat={onOpenAdChat}
         />
       )}
     </div>
@@ -2279,6 +2286,17 @@ export function KadabraApp() {
           {view === "account-detail" && selectedAccountId && (
             <AccountDetailView
               account={accounts.find(a => a.id === selectedAccountId)!}
+              onOpenAdChat={(prompt, adContext) => {
+                // Create a chat window with ad context and initial prompt
+                const account = accounts.find(a => a.id === selectedAccountId);
+                const contextWithPrompt = `${adContext}\n\nUser Request: ${prompt}`;
+                const newWindow = createChatWindow(
+                  account?.id || null,
+                  account?.googleCid ? `Ad Chat (${formatCid(account.googleCid)})` : "Ad Chat",
+                  contextWithPrompt
+                );
+                setChatWindows([...chatWindows, newWindow]);
+              }}
             />
           )}
           {view === "automations" && <AutomationsPlaceholder />}

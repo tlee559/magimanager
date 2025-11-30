@@ -15,6 +15,7 @@ interface AdDetailPanelProps {
   onClose: () => void;
   accountId: string;
   customerId: string;
+  onOpenChat?: (prompt: string, adContext: string) => void;
 }
 
 interface AIAnalysis {
@@ -127,6 +128,7 @@ export function AdDetailPanel({
   onClose,
   accountId,
   customerId,
+  onOpenChat,
 }: AdDetailPanelProps) {
   const [chatInput, setChatInput] = useState("");
   const [analysis, setAnalysis] = useState<AIAnalysis>({ loading: true });
@@ -195,10 +197,43 @@ export function AdDetailPanel({
     }
   };
 
+  // Build ad context for AI chat
+  const buildAdContext = () => {
+    const headlines = ad.headlines?.join("\n") || "None";
+    const descriptions = ad.descriptions?.join("\n") || "None";
+    return `Ad Details:
+- Name: ${ad.name}
+- Type: ${ad.type}
+- Status: ${ad.status}
+- Score: ${ad.score.overall}/100 (${ad.score.tier})
+- CTR: ${(ad.ctr * 100).toFixed(2)}%
+- Cost: $${ad.cost.toFixed(2)}
+- Clicks: ${ad.clicks}
+- Conversions: ${ad.conversions}
+
+Headlines:
+${headlines}
+
+Descriptions:
+${descriptions}`;
+  };
+
   const handleSendPrompt = (prompt: string) => {
-    // For now, just set the input - in the future this will trigger AI chat
-    setChatInput(prompt);
-    // TODO: Integrate with Gemini agent chat
+    if (onOpenChat) {
+      const adContext = buildAdContext();
+      onOpenChat(prompt, adContext);
+    } else {
+      setChatInput(prompt);
+    }
+  };
+
+  const handleChatSubmit = () => {
+    if (!chatInput.trim()) return;
+    if (onOpenChat) {
+      const adContext = buildAdContext();
+      onOpenChat(chatInput, adContext);
+      setChatInput("");
+    }
   };
 
   const copyToClipboard = (text: string, index: number) => {
@@ -208,7 +243,7 @@ export function AdDetailPanel({
   };
 
   return (
-    <div className="fixed inset-y-0 right-0 w-96 bg-slate-900 border-l border-slate-800 shadow-2xl z-50 flex flex-col">
+    <div className="fixed inset-y-0 right-0 w-96 bg-slate-900 border-l border-slate-800 shadow-2xl z-[60] flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-slate-800">
         <div className="flex-1 min-w-0">
@@ -372,11 +407,18 @@ export function AdDetailPanel({
             type="text"
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleChatSubmit();
+              }
+            }}
             placeholder="e.g., 'Write 3 variations of this ad'"
             className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-violet-500"
           />
           <button
-            disabled={!chatInput.trim()}
+            onClick={handleChatSubmit}
+            disabled={!chatInput.trim() || !onOpenChat}
             className="px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:bg-slate-700 disabled:text-slate-500 text-white transition"
           >
             <Send className="w-4 h-4" />
