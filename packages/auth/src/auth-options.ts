@@ -3,6 +3,26 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@magimanager/database";
 
+// Detect if we're running on a production domain (not localhost)
+function isProductionDomain(): boolean {
+  // Check multiple signals to determine if we're in production
+  if (process.env.NODE_ENV === "production") return true;
+  if (process.env.VERCEL === "1") return true;
+
+  // Check NEXTAUTH_URL for production domain
+  const nextAuthUrl = process.env.NEXTAUTH_URL || "";
+  if (nextAuthUrl.includes("magimanager.com")) return true;
+
+  return false;
+}
+
+// Get the session token cookie name based on environment
+function getSessionTokenName(): string {
+  return isProductionDomain()
+    ? "__Secure-next-auth.session-token"
+    : "next-auth.session-token";
+}
+
 async function getUserByEmail(email: string) {
   try {
     const user = await prisma.user.findUnique({
@@ -130,14 +150,14 @@ export const authOptions: NextAuthOptions = {
   // Always set domain to .magimanager.com so session works on both apps
   cookies: {
     sessionToken: {
-      name: process.env.NODE_ENV === "production" ? "__Secure-next-auth.session-token" : "next-auth.session-token",
+      name: getSessionTokenName(),
       options: {
         httpOnly: true,
         sameSite: "lax" as const,
         path: "/",
-        secure: process.env.NODE_ENV === "production",
-        // In production, share across subdomains; in dev, don't set domain
-        ...(process.env.NODE_ENV === "production" ? { domain: ".magimanager.com" } : {}),
+        secure: isProductionDomain(),
+        // Share across all *.magimanager.com subdomains
+        ...(isProductionDomain() ? { domain: ".magimanager.com" } : {}),
       },
     },
   },

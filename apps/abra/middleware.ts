@@ -4,8 +4,15 @@ import type { NextRequest } from "next/server";
 
 const LOGIN_URL = process.env.NEXT_PUBLIC_LOGIN_URL || "https://login.magimanager.com";
 
+// Cookie name must match auth-options.ts configuration
+const SESSION_COOKIE_NAME = "__Secure-next-auth.session-token";
+
 export async function middleware(request: NextRequest) {
-  const token = await getToken({ req: request });
+  // Explicitly specify cookie name for SSO to work across subdomains
+  const token = await getToken({
+    req: request,
+    cookieName: SESSION_COOKIE_NAME,
+  });
   const isHomePage = request.nextUrl.pathname === "/";
 
   if (!token && !isHomePage) {

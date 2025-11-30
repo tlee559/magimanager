@@ -2,8 +2,15 @@ import { getToken } from "next-auth/jwt";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+// Cookie name must match auth-options.ts configuration
+const SESSION_COOKIE_NAME = "__Secure-next-auth.session-token";
+
 export async function middleware(request: NextRequest) {
-  const token = await getToken({ req: request });
+  // Explicitly specify cookie name for SSO to work across subdomains
+  const token = await getToken({
+    req: request,
+    cookieName: SESSION_COOKIE_NAME,
+  });
   const isHomePage = request.nextUrl.pathname === "/";
   const isLogoutPage = request.nextUrl.pathname === "/logout";
 
