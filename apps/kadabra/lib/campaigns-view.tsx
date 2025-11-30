@@ -572,6 +572,12 @@ export function CampaignsView({ accountId, customerId, accountName }: CampaignsV
         throw new Error("Failed to fetch campaigns");
       }
       const data = await res.json();
+      console.log('[CampaignsView] API Response:', {
+        campaignsCount: data.campaigns?.length,
+        accountSuspended: data.accountSuspended,
+        cachedCampaignCount: data.cachedCampaignCount,
+        firstCampaign: data.campaigns?.[0]?.name,
+      });
       setCampaigns(data.campaigns || []);
       setAccountSuspended(data.accountSuspended || false);
       setCachedCampaignCount(data.cachedCampaignCount);

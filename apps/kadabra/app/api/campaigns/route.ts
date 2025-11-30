@@ -129,6 +129,16 @@ export async function GET(req: NextRequest) {
     const isSuspended = account.accountHealth === "suspended" || account.status === "suspended";
     const hasCachedCampaigns = account.campaignsCount > 0;
 
+    console.log('[API/campaigns] Debug:', {
+      accountId,
+      campaignsReturned: campaigns.length,
+      accountHealth: account.accountHealth,
+      accountStatus: account.status,
+      campaignsCount: account.campaignsCount,
+      isSuspended,
+      hasCachedCampaigns,
+    });
+
     return NextResponse.json({
       campaigns,
       syncedAt: new Date().toISOString(),
