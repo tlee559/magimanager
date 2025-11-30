@@ -1268,11 +1268,39 @@ export function VideoClipperView({
   const [currentJob, setCurrentJob] = useState<VideoClipJob | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
+  const [showBackgroundModal, setShowBackgroundModal] = useState(false);
 
   // Fetch existing jobs on mount
   useEffect(() => {
     fetchJobs();
   }, []);
+
+  // Check for pending job from notification click
+  useEffect(() => {
+    const pendingJobId = sessionStorage.getItem("pendingVideoClipJobId");
+    if (pendingJobId) {
+      sessionStorage.removeItem("pendingVideoClipJobId");
+      // Load and show the pending job
+      loadJobFromNotification(pendingJobId);
+    }
+  }, []);
+
+  const loadJobFromNotification = async (jobId: string) => {
+    try {
+      const res = await fetch(`/api/video-clipper/jobs/${jobId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentJob(data.job);
+        if (data.job.status === "COMPLETED" || data.job.status === "FAILED") {
+          setView("results");
+        } else {
+          setView("processing");
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load job from notification:", error);
+    }
+  };
 
   // Poll for updates when processing
   useEffect(() => {
@@ -1391,7 +1419,8 @@ export function VideoClipperView({
       const jobData = await res.json();
       console.log("[Video Clipper] Job created:", jobData.job.id);
       setCurrentJob(jobData.job);
-      setView("processing");
+      setShowBackgroundModal(true);
+      fetchJobs(); // Refresh job list
     } catch (error) {
       console.error("[Video Clipper] Submit error:", error);
       alert(error instanceof Error ? error.message : "Failed to create job. Please try again.");
@@ -1483,6 +1512,47 @@ export function VideoClipperView({
           />
         )}
       </div>
+
+      {/* Background Processing Modal */}
+      {showBackgroundModal && currentJob && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full">
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-pink-500 to-violet-600 mb-4">
+                <Scissors className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="text-xl font-semibold text-slate-100 mb-2">
+                Processing Started
+              </h3>
+              <p className="text-sm text-slate-400">
+                Your video is being analyzed and clips are being generated.
+                We&apos;ll notify you when it&apos;s ready.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  setShowBackgroundModal(false);
+                  setView("processing");
+                }}
+                className="w-full px-4 py-3 bg-violet-500 hover:bg-violet-400 text-white rounded-xl font-medium transition"
+              >
+                Watch Progress
+              </button>
+              <button
+                onClick={() => {
+                  setShowBackgroundModal(false);
+                  setCurrentJob(null);
+                }}
+                className="w-full px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-medium transition"
+              >
+                Continue Working
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

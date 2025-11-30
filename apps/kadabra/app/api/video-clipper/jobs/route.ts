@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@magimanager/database";
 import { put } from "@vercel/blob";
+import { broadcastEvent, CHANNELS } from "@magimanager/realtime";
 
 // Configure route for long-running video processing
 export const runtime = "nodejs";
@@ -420,6 +421,53 @@ async function processVideoJob(jobId: string) {
         completedAt: new Date(),
       },
     });
+
+    // Get the completed job details for notification
+    const completedJob = await prisma.videoClipJob.findUnique({
+      where: { id: jobId },
+      include: { clips: true },
+    });
+
+    if (completedJob) {
+      const jobName = completedJob.name || completedJob.videoTitle || "your video";
+      const clipCount = completedJob.clips.length;
+
+      // Create notification in database
+      await prisma.notification.create({
+        data: {
+          userId: completedJob.userId,
+          type: "VIDEO_CLIP_COMPLETED",
+          title: "Video clips ready!",
+          message: `${clipCount} clip${clipCount !== 1 ? "s" : ""} generated from "${jobName}"`,
+          entityId: jobId,
+          entityType: "video-clip-job",
+          isRead: false,
+        },
+      });
+
+      // Increment unread notification count
+      await prisma.user.update({
+        where: { id: completedJob.userId },
+        data: {
+          unreadNotifications: { increment: 1 },
+        },
+      });
+
+      // Broadcast real-time notification via Pusher
+      await broadcastEvent(
+        CHANNELS.NOTIFICATIONS(completedJob.userId),
+        "notification:new",
+        {
+          title: "Video clips ready!",
+          message: `${clipCount} clip${clipCount !== 1 ? "s" : ""} generated from "${jobName}"`,
+          type: "VIDEO_CLIP_COMPLETED",
+          entityId: jobId,
+          entityType: "video-clip-job",
+        }
+      );
+
+      console.log("[Video Clipper] Notification sent for job:", jobId);
+    }
 
     console.log("[Video Clipper] Job completed successfully!");
   } catch (error) {

@@ -49,6 +49,7 @@ import type { ChatWindow } from "./chat-types";
 import { CampaignPlannerView } from "./campaign-planner-view";
 import { VideoClipperView } from "./video-clipper-view";
 import { ABRA_URL, APP_VERSION, BUILD_SHA } from "./constants";
+import toast from "react-hot-toast";
 
 // ============================================================================
 // TYPES
@@ -1844,6 +1845,45 @@ export function KadabraApp() {
       fetchData();
     }
   }, [status]);
+
+  // Listen for video clip completion notifications
+  useEffect(() => {
+    const handleVideoClipComplete = (event: CustomEvent<{
+      jobId: string;
+      title: string;
+      message: string;
+    }>) => {
+      toast.custom((t) => (
+        <div
+          className={`${
+            t.visible ? "animate-enter" : "animate-leave"
+          } max-w-md w-full bg-slate-800 border border-violet-500/30 shadow-lg rounded-xl pointer-events-auto flex items-center gap-3 p-4`}
+        >
+          <div className="p-2 bg-violet-500/20 rounded-lg flex-shrink-0">
+            <Sparkles className="w-5 h-5 text-violet-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-slate-100">{event.detail.title}</p>
+            <p className="text-xs text-slate-400 truncate">{event.detail.message}</p>
+          </div>
+          <button
+            onClick={() => {
+              toast.dismiss(t.id);
+              setView("video-clipper");
+            }}
+            className="px-3 py-1.5 bg-violet-500 hover:bg-violet-400 text-white text-xs font-medium rounded-lg transition flex-shrink-0"
+          >
+            View
+          </button>
+        </div>
+      ), { duration: 10000, position: "top-right" });
+    };
+
+    window.addEventListener("videoClipComplete", handleVideoClipComplete as EventListener);
+    return () => {
+      window.removeEventListener("videoClipComplete", handleVideoClipComplete as EventListener);
+    };
+  }, []);
 
   async function fetchData() {
     setLoading(true);

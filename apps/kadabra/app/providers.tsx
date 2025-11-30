@@ -12,10 +12,31 @@ function RealtimeWrapper({ children }: { children: React.ReactNode }) {
   // Cast to extended user type that includes id from our auth config
   const userId = (session?.user as { id?: string } | undefined)?.id ?? null;
 
-  const handleNotification = useCallback((data: { title: string; message: string }) => {
+  const handleNotification = useCallback((data: {
+    title: string;
+    message: string;
+    type?: string;
+    entityId?: string;
+    entityType?: string;
+  }) => {
     // Show browser notification if permitted
     if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
       new Notification(data.title, { body: data.message });
+    }
+
+    // Handle video clip completion notifications
+    if (data.type === "VIDEO_CLIP_COMPLETED" && data.entityId) {
+      // Store job ID for navigation
+      sessionStorage.setItem("pendingVideoClipJobId", data.entityId);
+
+      // Dispatch custom event for toast notification
+      window.dispatchEvent(new CustomEvent("videoClipComplete", {
+        detail: {
+          jobId: data.entityId,
+          title: data.title,
+          message: data.message,
+        }
+      }));
     }
   }, []);
 

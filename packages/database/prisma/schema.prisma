@@ -299,6 +299,7 @@ enum NotificationType {
   ACCOUNT_SUSPENDED
   ACCOUNT_REACTIVATED
   SYSTEM_ALERT
+  VIDEO_CLIP_COMPLETED
 }
 
 model Notification {
