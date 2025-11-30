@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { upload } from "@vercel/blob/client";
 import {
   ArrowLeft,
   Upload,
@@ -1334,29 +1335,29 @@ export function VideoClipperView({
         throw new Error("File too large. Maximum size is 500MB");
       }
 
-      // Upload the video file
+      // Upload the video file using client-side upload (bypasses serverless function limits)
       console.log("[Video Clipper] Uploading video:", data.uploadedFile.name, "Size:", data.uploadedFile.size);
-      const formData = new FormData();
-      formData.append("file", data.uploadedFile);
 
-      let uploadRes: Response;
+      let uploadedVideoUrl: string;
       try {
-        uploadRes = await fetch("/api/video-clipper/upload", {
-          method: "POST",
-          body: formData,
-        });
-      } catch (fetchError) {
-        console.error("[Video Clipper] Upload fetch error:", fetchError);
-        throw new Error("Network error during upload. Please check your connection and try again.");
+        const blob = await upload(
+          `video-clipper/${Date.now()}-${data.uploadedFile.name}`,
+          data.uploadedFile,
+          {
+            access: "public",
+            handleUploadUrl: "/api/video-clipper/upload",
+          }
+        );
+        uploadedVideoUrl = blob.url;
+        console.log("[Video Clipper] Upload complete:", uploadedVideoUrl);
+      } catch (uploadError) {
+        console.error("[Video Clipper] Upload error:", uploadError);
+        throw new Error(
+          uploadError instanceof Error
+            ? uploadError.message
+            : "Failed to upload video. Please try again."
+        );
       }
-
-      if (!uploadRes.ok) {
-        const errorData = await uploadRes.json().catch(() => ({}));
-        throw new Error(errorData.error || `Upload failed with status ${uploadRes.status}`);
-      }
-      const uploadData = await uploadRes.json();
-      const uploadedVideoUrl = uploadData.url;
-      console.log("[Video Clipper] Upload complete:", uploadedVideoUrl);
 
       // Create job
       let res: Response;

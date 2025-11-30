@@ -1,74 +1,66 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { put } from "@vercel/blob";
+import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 
-// Configure route to handle large file uploads (up to 500MB)
+// Configure route for client uploads
 export const runtime = "nodejs";
-export const maxDuration = 300; // 5 minutes for large uploads
 
-// POST /api/video-clipper/upload - Upload a video file to Vercel Blob
+// POST /api/video-clipper/upload - Handle client-side upload to Vercel Blob
 export async function POST(req: NextRequest) {
+  const body = (await req.json()) as HandleUploadBody;
+
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const jsonResponse = await handleUpload({
+      body,
+      request: req,
+      onBeforeGenerateToken: async (pathname) => {
+        // Authenticate the user
+        const session = await getServerSession(authOptions);
+        if (!session?.user) {
+          throw new Error("Unauthorized");
+        }
 
-    const userId = (session.user as { id: string }).id;
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
+        const userId = (session.user as { id: string }).id;
 
-    if (!file) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
-    }
+        // Validate file extension
+        const extension = pathname.split(".").pop()?.toLowerCase() || "";
+        const allowedExtensions = ["mp4", "webm", "mov", "avi", "mkv"];
+        if (!allowedExtensions.includes(extension)) {
+          throw new Error("Invalid file type. Supported: MP4, WebM, MOV, AVI, MKV");
+        }
 
-    // Validate file type
-    const allowedTypes = [
-      "video/mp4",
-      "video/webm",
-      "video/quicktime",
-      "video/x-msvideo",
-      "video/x-matroska",
-    ];
-    if (!allowedTypes.includes(file.type)) {
-      return NextResponse.json(
-        { error: "Invalid file type. Supported: MP4, WebM, MOV, AVI, MKV" },
-        { status: 400 }
-      );
-    }
+        return {
+          allowedContentTypes: [
+            "video/mp4",
+            "video/webm",
+            "video/quicktime",
+            "video/x-msvideo",
+            "video/x-matroska",
+          ],
+          maximumSizeInBytes: 500 * 1024 * 1024, // 500MB
+          tokenPayload: JSON.stringify({ userId }),
+        };
+      },
+      onUploadCompleted: async ({ blob, tokenPayload }) => {
+        // Called after upload is complete
+        console.log("[Video Clipper] Upload completed:", blob.url);
 
-    // Validate file size (500MB max)
-    const maxSize = 500 * 1024 * 1024;
-    if (file.size > maxSize) {
-      return NextResponse.json(
-        { error: "File too large. Maximum size is 500MB" },
-        { status: 400 }
-      );
-    }
-
-    // Generate unique filename
-    const timestamp = Date.now();
-    const extension = file.name.split(".").pop() || "mp4";
-    const filename = `video-clipper/${userId}/${timestamp}.${extension}`;
-
-    // Upload to Vercel Blob
-    const blob = await put(filename, file, {
-      access: "public",
-      addRandomSuffix: true,
+        try {
+          const { userId } = JSON.parse(tokenPayload || "{}");
+          console.log("[Video Clipper] Upload by user:", userId);
+        } catch (error) {
+          console.error("[Video Clipper] Error in onUploadCompleted:", error);
+        }
+      },
     });
 
-    return NextResponse.json({
-      url: blob.url,
-      filename: file.name,
-      size: file.size,
-      contentType: file.type,
-    });
+    return NextResponse.json(jsonResponse);
   } catch (error) {
     console.error("[Video Clipper] Upload error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Upload failed" },
-      { status: 500 }
+      { status: 400 }
     );
   }
 }
