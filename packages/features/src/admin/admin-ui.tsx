@@ -228,7 +228,17 @@ function SquareMLogoIcon({ size = 40 }: { size?: number }) {
 // MAIN ADMIN COMPONENT
 // ============================================================================
 
-export function AdminApp() {
+interface AdminAppProps {
+  appVersion?: string;
+  buildSha?: string;
+  kadabraUrl?: string;
+}
+
+export function AdminApp({
+  appVersion = "0.1.0",
+  buildSha = "local",
+  kadabraUrl = "https://magimanager.com"
+}: AdminAppProps) {
   const { data: session } = useSession();
   const [view, setView] = useState<View>("dashboard");
   const [identities, setIdentities] = useState<Identity[]>([]);
@@ -490,24 +500,40 @@ export function AdminApp() {
           ))}
         </nav>
 
-        <div className="flex-shrink-0 w-full px-6 py-4 border-t border-slate-800">
+        <div className="flex-shrink-0 w-full px-6 py-4 border-t border-slate-800 space-y-3">
+          {/* User Profile Button */}
           <button
             onClick={() => setShowProfileModal(true)}
-            className="w-full mb-3 px-4 py-2 bg-slate-800 rounded-lg hover:bg-slate-700 transition text-left"
+            className="w-full px-4 py-3 bg-slate-800/80 rounded-lg hover:bg-slate-700 transition text-left"
           >
             <div className="text-sm font-medium text-slate-100">{session?.user?.name || "User"}</div>
-            <div className="text-xs text-slate-500">{session?.user?.email || "No email"}</div>
+            <div className="text-xs text-slate-400">{session?.user?.email || "No email"}</div>
           </button>
+
+          {/* MagiManager Ads Console Button - Green */}
+          <a
+            href={`${kadabraUrl}/admin`}
+            className="block w-full px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-500 hover:to-teal-500 transition text-sm text-center"
+          >
+            <span className="font-semibold">MagiManager Ads Console</span>
+            <span className="block text-[11px] text-emerald-100/80">Campaign Management</span>
+          </a>
+
+          {/* Logout Button */}
           <button
-            onClick={() => signOut({ callbackUrl: window.location.origin })}
+            onClick={() => {
+              window.location.href = "/logout";
+            }}
             className="w-full px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition text-sm flex items-center justify-center gap-2"
           >
             <span>🚪</span>
-            Logout
+            <span>Logout</span>
           </button>
-          <div className="mt-3 text-xs text-slate-600 opacity-50 cursor-not-allowed select-none">
-            <div className="font-medium text-slate-500">Dev Environment · Local</div>
-            <div className="text-slate-600">Coming soon</div>
+
+          {/* Version Info */}
+          <div className="pt-2 text-xs text-center">
+            <div className="text-slate-400 font-medium">ABRA v{appVersion}</div>
+            <div className="text-slate-600">Build: {buildSha?.slice(0, 7) || "local"}</div>
           </div>
         </div>
       </aside>

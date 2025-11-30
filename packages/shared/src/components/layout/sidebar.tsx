@@ -94,6 +94,11 @@ interface SidebarProps {
   logoGradientFrom?: string;
   logoGradientTo?: string;
   onLogout?: () => void;
+  appVersion?: string;
+  buildSha?: string;
+  crossAppUrl?: string;
+  crossAppName?: string;
+  crossAppSubtitle?: string;
 }
 
 export function Sidebar({
@@ -107,6 +112,11 @@ export function Sidebar({
   logoGradientFrom = "#4f46e5",
   logoGradientTo = "#9333ea",
   onLogout,
+  appVersion = "0.1.0",
+  buildSha = "local",
+  crossAppUrl,
+  crossAppName,
+  crossAppSubtitle,
 }: SidebarProps) {
   const { theme } = useTheme();
   const navItems = buildNavItems(userRole);
@@ -152,23 +162,41 @@ export function Sidebar({
       </nav>
 
       {/* User Info & Logout */}
-      <div className="flex-shrink-0 w-full px-6 py-4 border-t border-slate-800">
-        <div className="mb-3 px-4 py-2 bg-slate-800 rounded-lg">
+      <div className="flex-shrink-0 w-full px-6 py-4 border-t border-slate-800 space-y-3">
+        {/* User Profile */}
+        <div className="px-4 py-3 bg-slate-800/80 rounded-lg">
           <div className="text-sm font-medium text-slate-100">{userName}</div>
-          <div className="text-xs text-slate-500">{userEmail}</div>
+          <div className="text-xs text-slate-400">{userEmail}</div>
         </div>
+
+        {/* Cross-App Navigation Button */}
+        {crossAppUrl && crossAppName && (
+          <a
+            href={crossAppUrl}
+            className="block w-full px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-500 hover:to-teal-500 transition text-sm text-center"
+          >
+            <span className="font-semibold">{crossAppName}</span>
+            {crossAppSubtitle && (
+              <span className="block text-[11px] text-emerald-100/80">{crossAppSubtitle}</span>
+            )}
+          </a>
+        )}
+
+        {/* Logout Button */}
         {onLogout && (
           <button
             onClick={onLogout}
             className="w-full px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition text-sm flex items-center justify-center gap-2"
           >
-            <span>[X]</span>
-            Logout
+            <span>🚪</span>
+            <span>Logout</span>
           </button>
         )}
-        <div className="mt-3 text-xs text-slate-600 opacity-50 cursor-not-allowed select-none">
-          <div className="font-medium text-slate-500">Dev Environment - Local</div>
-          <div className="text-slate-600">Coming soon</div>
+
+        {/* Version Info */}
+        <div className="pt-2 text-xs text-center">
+          <div className="text-slate-400 font-medium">{appName.toUpperCase()} v{appVersion}</div>
+          <div className="text-slate-600">Build: {buildSha?.slice(0, 7) || "local"}</div>
         </div>
       </div>
     </aside>
