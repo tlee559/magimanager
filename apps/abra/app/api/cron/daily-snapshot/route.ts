@@ -1,21 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-
-// Verify the request is from Vercel Cron
-function isValidCronRequest(request: NextRequest): boolean {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader === `Bearer ${process.env.CRON_SECRET}`) {
-    return true;
-  }
-  if (authHeader === `Bearer ${process.env.TELEGRAM_BOT_TOKEN}`) {
-    return true;
-  }
-  return false;
-}
+import { isValidCronRequest } from "@magimanager/auth";
 
 // GET /api/cron/daily-snapshot - Capture daily spend snapshots for all accounts
 export async function GET(request: NextRequest) {
-  if (!isValidCronRequest(request)) {
+  const authHeader = request.headers.get("authorization");
+  if (!isValidCronRequest(authHeader)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

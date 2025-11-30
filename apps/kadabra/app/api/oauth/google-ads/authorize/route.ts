@@ -12,14 +12,12 @@ import { encryptOAuthState } from '@/lib/encryption';
  * Query params:
  *   - accountId: MagiManager ad account ID (new flow - shows account picker after OAuth)
  *   - cid: Optional Google Ads customer ID being connected (legacy flow)
- *   - debug: If true, shows raw account IDs after OAuth (no linking)
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const accountId = searchParams.get('accountId') || undefined;
     const cid = searchParams.get('cid') || undefined;
-    const debug = searchParams.get('debug') === 'true';
 
     // Check required env vars
     if (!process.env.GOOGLE_ADS_CLIENT_ID) {
@@ -32,8 +30,8 @@ export async function GET(request: NextRequest) {
     // Generate CSRF token
     const csrf = crypto.randomBytes(32).toString('hex');
 
-    // Encrypt state with accountId/CID, CSRF, and debug flag
-    const state = encryptOAuthState({ accountId, cid, csrf, debug });
+    // Encrypt state with accountId/CID and CSRF
+    const state = encryptOAuthState({ accountId, cid, csrf });
 
     // Build callback URL - always use the same registered callback
     const baseUrl = process.env.NEXT_PUBLIC_KADABRA_URL || 'https://magimanager.com';

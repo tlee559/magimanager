@@ -15,8 +15,8 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userRole = (session.user as any).role;
-    const reviewerId = (session.user as any).id;
+    const userRole = session.user.role;
+    const reviewerId = session.user.id;
 
     // Only admins and managers can approve requests
     if (userRole !== "ADMIN" && userRole !== "SUPER_ADMIN" && userRole !== "MANAGER") {

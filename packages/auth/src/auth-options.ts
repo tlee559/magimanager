@@ -90,10 +90,10 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        token.role = (user as any).role;
-        token.firstLogin = (user as any).firstLogin;
-        token.unreadNotifications = (user as any).unreadNotifications;
-        token.mediaBuyerId = (user as any).mediaBuyerId;
+        token.role = user.role;
+        token.firstLogin = user.firstLogin;
+        token.unreadNotifications = user.unreadNotifications;
+        token.mediaBuyerId = user.mediaBuyerId;
       }
       return token;
     },
@@ -101,7 +101,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user && token.id) {
         // Validate that user still exists in database
         const userExists = await prisma.user.findUnique({
-          where: { id: token.id as string },
+          where: { id: token.id },
           select: { id: true },
         });
 
@@ -109,11 +109,11 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Session expired. Please login again.");
         }
 
-        (session.user as any).id = token.id;
-        (session.user as any).role = token.role;
-        (session.user as any).firstLogin = token.firstLogin;
-        (session.user as any).unreadNotifications = token.unreadNotifications;
-        (session.user as any).mediaBuyerId = token.mediaBuyerId;
+        session.user.id = token.id;
+        session.user.role = token.role;
+        session.user.firstLogin = token.firstLogin;
+        session.user.unreadNotifications = token.unreadNotifications;
+        session.user.mediaBuyerId = token.mediaBuyerId;
       }
       return session;
     },

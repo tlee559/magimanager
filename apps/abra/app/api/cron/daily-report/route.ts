@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { isValidCronRequest } from "@magimanager/auth";
 import {
   sendMessage,
   formatDailyReport,
@@ -8,27 +9,10 @@ import {
   type AlertData,
 } from "@magimanager/core";
 
-// Verify the request is from Vercel Cron
-function isValidCronRequest(request: NextRequest): boolean {
-  const authHeader = request.headers.get("authorization");
-
-  // Vercel Cron sends a secret in the Authorization header
-  if (authHeader === `Bearer ${process.env.CRON_SECRET}`) {
-    return true;
-  }
-
-  // Also allow internal calls with bot token
-  if (authHeader === `Bearer ${process.env.TELEGRAM_BOT_TOKEN}`) {
-    return true;
-  }
-
-  return false;
-}
-
 // GET /api/cron/daily-report - Called by Vercel Cron at 9 AM PT daily
 export async function GET(request: NextRequest) {
-  // Verify it's a valid cron request
-  if (!isValidCronRequest(request)) {
+  const authHeader = request.headers.get("authorization");
+  if (!isValidCronRequest(authHeader)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

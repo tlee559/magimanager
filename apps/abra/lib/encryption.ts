@@ -77,7 +77,7 @@ export function generateEncryptionKey(): string {
  * Encrypts OAuth state parameter with CSRF protection
  * Includes timestamp for expiration checking
  */
-export function encryptOAuthState(data: { cid?: string; accountId?: string; csrf: string; debug?: boolean; mode?: string }): string {
+export function encryptOAuthState(data: { cid?: string; accountId?: string; csrf: string; mode?: string }): string {
   const stateData = {
     ...data,
     timestamp: Date.now(),
@@ -89,7 +89,7 @@ export function encryptOAuthState(data: { cid?: string; accountId?: string; csrf
  * Decrypts and validates OAuth state parameter
  * Throws if expired (> 10 minutes old) or invalid
  */
-export function decryptOAuthState(encryptedState: string): { cid?: string; accountId?: string; csrf: string; timestamp: number; debug?: boolean; mode?: string } {
+export function decryptOAuthState(encryptedState: string): { cid?: string; accountId?: string; csrf: string; timestamp: number; mode?: string } {
   const decrypted = decrypt(encryptedState);
   const data = JSON.parse(decrypted);
 

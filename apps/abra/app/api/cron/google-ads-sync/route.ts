@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { decrypt, encrypt } from '@/lib/encryption';
+import { isValidCronRequest } from '@magimanager/auth';
 import {
   refreshAccessToken,
   fetchAccountMetrics,
@@ -16,15 +17,11 @@ import {
  * Called by Vercel Cron every hour.
  */
 export async function GET(request: NextRequest) {
-  // Verify cron secret for security
+  // Verify cron secret using constant-time comparison
   const authHeader = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
 
-  // In production, require cron secret
-  if (process.env.NODE_ENV === 'production' && cronSecret) {
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  if (process.env.NODE_ENV === 'production' && !isValidCronRequest(authHeader)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const startTime = Date.now();

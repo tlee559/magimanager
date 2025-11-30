@@ -153,7 +153,7 @@ export async function POST(
       });
 
       // Log activity
-      const currentUserId = (session.user as any)?.id || null;
+      const currentUserId = session.user.id;
       const proxyNote = proxyAdded ? ` with ${proxyCountry.toUpperCase()} proxy` : "";
       await prisma.identityActivity.create({
         data: {
@@ -253,7 +253,7 @@ export async function DELETE(
     });
 
     // Log activity
-    const currentUserId = (session.user as any)?.id || null;
+    const currentUserId = session.user.id;
     await prisma.identityActivity.create({
       data: {
         identityProfileId: id,

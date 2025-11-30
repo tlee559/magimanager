@@ -12,7 +12,6 @@ import { encryptOAuthState } from '@/lib/encryption';
  * Query params:
  *   - accountId: MagiManager ad account ID (new flow - shows account picker after OAuth)
  *   - cid: Optional Google Ads customer ID being connected (legacy flow)
- *   - debug: If true, shows raw account IDs after OAuth (no linking)
  *   - mode: Optional mode flag ('picker' = return accounts to parent window for selection)
  */
 export async function GET(request: NextRequest) {
@@ -20,7 +19,6 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const accountId = searchParams.get('accountId') || undefined;
     const cid = searchParams.get('cid') || undefined;
-    const debug = searchParams.get('debug') === 'true';
     const mode = searchParams.get('mode') || undefined;
 
     // Check required env vars
@@ -34,8 +32,8 @@ export async function GET(request: NextRequest) {
     // Generate CSRF token
     const csrf = crypto.randomBytes(32).toString('hex');
 
-    // Encrypt state with accountId/CID, CSRF, debug flag, and mode
-    const state = encryptOAuthState({ accountId, cid, csrf, debug, mode });
+    // Encrypt state with accountId/CID, CSRF, and mode
+    const state = encryptOAuthState({ accountId, cid, csrf, mode });
 
     // Build callback URL - always use the same registered callback
     const baseUrl = process.env.NEXT_PUBLIC_ABRA_URL || 'https://abra.magimanager.com';

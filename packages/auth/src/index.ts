@@ -20,3 +20,9 @@ export {
   canAccessAbra,
   canAccessKadabra,
 } from './permissions';
+
+export {
+  constantTimeCompare,
+  isValidCronRequest,
+  isVercelCronRequest,
+} from './security';

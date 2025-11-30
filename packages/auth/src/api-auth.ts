@@ -19,16 +19,19 @@ interface AuthResult {
   error?: NextResponse;
 }
 
+// This function handles type conversion from the generic NextAuth session to our typed SessionUser
+// The cast is needed because getServerSession returns a generic type that doesn't include our augmented fields
 function extractSessionUser(session: Awaited<ReturnType<typeof getServerSession>>): SessionUser | null {
-  const sessionAny = session as any;
-  if (!sessionAny?.user) return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const user = (session as any)?.user;
+  if (!user) return null;
 
   return {
-    id: sessionAny.user.id,
-    email: sessionAny.user.email,
-    name: sessionAny.user.name,
-    role: sessionAny.user.role as UserRole,
-    mediaBuyerId: sessionAny.user.mediaBuyerId,
+    id: user.id,
+    email: user.email || "",
+    name: user.name || "",
+    role: user.role as UserRole,
+    mediaBuyerId: user.mediaBuyerId,
   };
 }
 

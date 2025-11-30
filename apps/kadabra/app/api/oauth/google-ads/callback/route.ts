@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Decrypt and validate state
-    let stateData: { cid?: string; accountId?: string; csrf: string; debug?: boolean };
+    let stateData: { cid?: string; accountId?: string; csrf: string };
     try {
       stateData = decryptOAuthState(state);
     } catch {
@@ -74,58 +74,6 @@ export async function GET(request: NextRequest) {
       console.error('Failed to list accessible customers:', err);
       listCustomersError = err instanceof Error ? err.message : String(err);
       // Continue without accessible CIDs - user might not have any accounts yet
-    }
-
-    // DEBUG MODE: Just show the account IDs, don't save anything
-    if (stateData.debug) {
-      const debugHtml = `
-<!DOCTYPE html>
-<html>
-<head>
-  <title>OAuth Debug - Account IDs</title>
-  <style>
-    body { font-family: system-ui, sans-serif; background: #0a0a0a; color: #e5e5e5; padding: 40px; max-width: 800px; margin: 0 auto; }
-    h1 { color: #34d399; }
-    .card { background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 24px; margin: 20px 0; }
-    .label { color: #9ca3af; font-size: 14px; margin-bottom: 4px; }
-    .value { color: #fff; font-size: 18px; font-family: monospace; }
-    .cid { background: #1e3a5f; padding: 12px 16px; border-radius: 8px; margin: 8px 0; font-family: monospace; font-size: 16px; }
-    .error { color: #f87171; }
-    .success { color: #34d399; }
-    .empty { color: #fbbf24; }
-  </style>
-</head>
-<body>
-  <h1>OAuth Debug Results</h1>
-
-  <div class="card">
-    <div class="label">Connected Google Account</div>
-    <div class="value">${userInfo.email}</div>
-  </div>
-
-  <div class="card">
-    <div class="label">Accessible Google Ads Account IDs</div>
-    ${listCustomersError ? `<div class="error">Error: ${listCustomersError}</div>` : ''}
-    ${accessibleCids.length > 0
-      ? accessibleCids.map(cid => `<div class="cid success">${formatCid(cid)}</div>`).join('')
-      : `<div class="empty">No accounts found - listAccessibleCustomers returned empty</div>`
-    }
-    <div style="margin-top: 16px; color: #9ca3af; font-size: 14px;">
-      Total: ${accessibleCids.length} account(s)
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="label">Raw Response</div>
-    <pre style="background: #111; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 12px;">${JSON.stringify({ email: userInfo.email, accessibleCids, error: listCustomersError }, null, 2)}</pre>
-  </div>
-
-  <button onclick="window.close()" style="margin-top: 20px; padding: 12px 24px; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px;">
-    Close Window
-  </button>
-</body>
-</html>`;
-      return new NextResponse(debugHtml, { headers: { 'Content-Type': 'text/html' } });
     }
 
     // Store the connection

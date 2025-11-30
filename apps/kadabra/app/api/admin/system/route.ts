@@ -15,7 +15,7 @@ export async function GET() {
     }
 
     // Only SUPER_ADMIN can access this endpoint
-    const userRole = (session.user as any)?.role;
+    const userRole = session.user.role;
     if (userRole !== "SUPER_ADMIN") {
       return NextResponse.json({ error: "Forbidden - Super Admin only" }, { status: 403 });
     }

@@ -242,8 +242,8 @@ export function AdminApp() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [alertsCount, setAlertsCount] = useState(0);
   const [criticalAlertsCount, setCriticalAlertsCount] = useState(0);
-  // Get user role from session
-  const userRole = ((session?.user as any)?.role as UserRole) || "SUPER_ADMIN";
+  // Get user role from session (type-safe via @magimanager/auth declarations)
+  const userRole = (session?.user?.role as UserRole) || "SUPER_ADMIN";
   // TODO: Get from session - for now hardcoded as false for testing
   const [firstLogin, setFirstLogin] = useState(false);
   const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
@@ -356,7 +356,7 @@ export function AdminApp() {
   }, []);
 
   // Subscribe to real-time notifications via Pusher
-  const userId = (session?.user as any)?.id || null;
+  const userId = session?.user?.id || null;
   useRealtimeNotifications(userId, () => {
     // When a real-time notification arrives, refresh the notifications list
     fetchNotifications();
@@ -654,8 +654,6 @@ export function AdminApp() {
 
             <a
               href="https://magimanager.com/admin"
-              target="_blank"
-              rel="noopener noreferrer"
               className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg transition flex flex-col items-center"
             >
               <span className="text-xs font-semibold">Kadabra</span>

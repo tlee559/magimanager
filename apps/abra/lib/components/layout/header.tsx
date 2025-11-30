@@ -129,12 +129,11 @@ export function Header({
         </div>
 
         <a
-          href={KADABRA_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="px-3 py-1.5 text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition"
+          href={`${KADABRA_URL}/admin`}
+          className="px-3 py-1.5 text-xs font-semibold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg transition flex flex-col items-center"
         >
-          Kadabra!
+          <span>Kadabra</span>
+          <span className="text-[9px] opacity-80">Ad Manager</span>
         </a>
       </div>
     </header>

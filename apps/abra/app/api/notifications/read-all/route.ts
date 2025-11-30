@@ -12,7 +12,7 @@ export async function PATCH() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
+    const userId = session.user.id;
 
     // Mark all unread notifications as read
     await prisma.notification.updateMany({
