@@ -70,12 +70,11 @@ function LandingPage() {
             AI-Powered Platform
           </div>
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-slate-100 mb-8 leading-tight">
-            Run 100s of Ad Accounts.<br />
-            <span className="text-emerald-400">Zero Headaches.</span>
+            Create. Manage. Scale.<br />
+            <span className="text-emerald-400">100s of Ad Accounts.</span>
           </h1>
           <p className="text-xl md:text-2xl text-slate-400 mb-12 max-w-2xl mx-auto leading-relaxed">
-            AI agents that help you scale. Auto reports that save you hours.
-            Finally, a tool built for agencies that want to grow.
+            Running ads for one client is easy. Running ads for 100 clients? That&apos;s where most agencies break. We built the tool that fixes that.
           </p>
           <a
             href={loginUrl}
@@ -87,154 +86,138 @@ function LandingPage() {
         </div>
       </section>
 
-      {/* Problem Section */}
+      {/* The Problem Section */}
       <section className="px-6 py-24 bg-slate-900/50 border-y border-slate-800">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-100 mb-6">
-            Sound familiar?
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-bold text-slate-100 mb-6 text-center">
+            The more accounts you have,<br />the harder it gets
           </h2>
-          <div className="grid md:grid-cols-2 gap-6 mt-12">
-            <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-8 text-left">
-              <div className="text-3xl mb-4">😫</div>
-              <p className="text-slate-300 text-lg leading-relaxed">
-                &quot;I spend hours every week making reports. I barely have time to actually run the ads.&quot;
+          <p className="text-slate-400 text-lg text-center mb-12 max-w-2xl mx-auto">
+            You know the drill. Every new client means more work. More campaigns to build. More accounts to check. More things to optimize. It never ends.
+          </p>
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-8">
+              <div className="text-3xl mb-4">😩</div>
+              <h3 className="text-xl font-bold text-slate-100 mb-2">Creating is slow</h3>
+              <p className="text-slate-400 leading-relaxed">
+                Every new campaign takes forever. Copy this, paste that, change this setting, fix that targeting. Repeat 100 times.
               </p>
             </div>
-            <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-8 text-left">
+            <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-8">
               <div className="text-3xl mb-4">🤯</div>
-              <p className="text-slate-300 text-lg leading-relaxed">
-                &quot;I want to take on more clients, but I can&apos;t keep up with the ones I have.&quot;
+              <h3 className="text-xl font-bold text-slate-100 mb-2">Managing is chaos</h3>
+              <p className="text-slate-400 leading-relaxed">
+                Which account needs attention? What&apos;s the status of that campaign? Where&apos;s that login? You&apos;re drowning in tabs and spreadsheets.
               </p>
             </div>
-            <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-8 text-left">
-              <div className="text-3xl mb-4">😴</div>
-              <p className="text-slate-300 text-lg leading-relaxed">
-                &quot;I&apos;m tired of checking each account one by one. There has to be a better way.&quot;
+            <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-8">
+              <div className="text-3xl mb-4">😫</div>
+              <h3 className="text-xl font-bold text-slate-100 mb-2">Scaling is painful</h3>
+              <p className="text-slate-400 leading-relaxed">
+                You want more clients. But more clients means more headaches. You&apos;re already maxed out. Something has to change.
               </p>
             </div>
-            <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-8 text-left">
+            <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-8">
               <div className="text-3xl mb-4">💸</div>
-              <p className="text-slate-300 text-lg leading-relaxed">
-                &quot;I miss things because I&apos;m spread too thin. It&apos;s costing me money.&quot;
+              <h3 className="text-xl font-bold text-slate-100 mb-2">Optimizing is impossible</h3>
+              <p className="text-slate-400 leading-relaxed">
+                You can&apos;t watch 100 accounts at once. Things slip. Performance drops. Money gets wasted. And you don&apos;t even know until it&apos;s too late.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Solution Section 1: AI Agents */}
+      {/* The Solution Section */}
       <section className="px-6 py-28 max-w-7xl mx-auto">
-        <div className="grid md:grid-cols-2 gap-16 items-center">
-          <div>
-            <div className="inline-block px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-xs font-medium mb-6">
-              AI AGENTS
-            </div>
-            <h2 className="text-3xl md:text-4xl font-bold text-slate-100 mb-6">
-              Your new team members never sleep
-            </h2>
-            <p className="text-slate-400 text-lg mb-8 leading-relaxed">
-              Our AI agents work around the clock. They watch your campaigns, spot what&apos;s working, and tell you what to fix. It&apos;s like having a team of experts looking at every account, every day.
+        <div className="text-center mb-16">
+          <h2 className="text-3xl md:text-5xl font-bold text-slate-100 mb-6">
+            What if it didn&apos;t have to be this way?
+          </h2>
+          <p className="text-slate-400 text-xl max-w-2xl mx-auto">
+            MagiManager gives you AI tools that handle the hard stuff. So you can run more accounts without working more hours.
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-12">
+          {/* AI Agents */}
+          <div className="bg-gradient-to-br from-emerald-500/5 to-teal-500/5 border border-emerald-500/20 rounded-3xl p-10">
+            <div className="text-6xl mb-6">🤖</div>
+            <h3 className="text-2xl font-bold text-slate-100 mb-4">AI Agents That Work For You</h3>
+            <p className="text-slate-400 text-lg mb-6 leading-relaxed">
+              Our AI watches your campaigns around the clock. It spots problems before they cost you money. It finds what&apos;s working so you can do more of it.
             </p>
-            <ul className="space-y-4">
-              <li className="flex items-start gap-3">
-                <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0 mt-1">
-                  <svg className="w-4 h-4 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <span className="text-slate-300 text-lg">Find winning campaigns faster</span>
+            <ul className="space-y-3">
+              <li className="flex items-center gap-3 text-slate-300">
+                <span className="text-emerald-400">✓</span>
+                <span>Finds winning campaigns and losing ones</span>
               </li>
-              <li className="flex items-start gap-3">
-                <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0 mt-1">
-                  <svg className="w-4 h-4 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <span className="text-slate-300 text-lg">Get ideas for better creatives</span>
+              <li className="flex items-center gap-3 text-slate-300">
+                <span className="text-emerald-400">✓</span>
+                <span>Gives you ideas for better ads</span>
               </li>
-              <li className="flex items-start gap-3">
-                <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0 mt-1">
-                  <svg className="w-4 h-4 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <span className="text-slate-300 text-lg">Track KPIs without the busywork</span>
+              <li className="flex items-center gap-3 text-slate-300">
+                <span className="text-emerald-400">✓</span>
+                <span>Tracks your KPIs so you don&apos;t have to</span>
+              </li>
+              <li className="flex items-center gap-3 text-slate-300">
+                <span className="text-emerald-400">✓</span>
+                <span>Alerts you when something needs fixing</span>
               </li>
             </ul>
           </div>
-          <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-emerald-500/20 rounded-3xl p-12 text-center">
-            <div className="text-8xl mb-6">🤖</div>
-            <p className="text-2xl font-bold text-slate-100 mb-2">AI Agents</p>
-            <p className="text-slate-400">Working for you 24/7</p>
+
+          {/* Account Management */}
+          <div className="bg-gradient-to-br from-purple-500/5 to-pink-500/5 border border-purple-500/20 rounded-3xl p-10">
+            <div className="text-6xl mb-6">📊</div>
+            <h3 className="text-2xl font-bold text-slate-100 mb-4">One Place For Everything</h3>
+            <p className="text-slate-400 text-lg mb-6 leading-relaxed">
+              No more jumping between accounts. No more spreadsheets. See all your accounts, all your campaigns, all your data in one simple dashboard.
+            </p>
+            <ul className="space-y-3">
+              <li className="flex items-center gap-3 text-slate-300">
+                <span className="text-purple-400">✓</span>
+                <span>All accounts in one dashboard</span>
+              </li>
+              <li className="flex items-center gap-3 text-slate-300">
+                <span className="text-purple-400">✓</span>
+                <span>Reports that build themselves</span>
+              </li>
+              <li className="flex items-center gap-3 text-slate-300">
+                <span className="text-purple-400">✓</span>
+                <span>See what needs attention right now</span>
+              </li>
+              <li className="flex items-center gap-3 text-slate-300">
+                <span className="text-purple-400">✓</span>
+                <span>Scale without adding more work</span>
+              </li>
+            </ul>
           </div>
         </div>
       </section>
 
-      {/* Solution Section 2: Account Management */}
-      <section className="px-6 py-28 bg-slate-900/30">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-2 gap-16 items-center">
-            <div className="order-2 md:order-1 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-3xl p-12 text-center">
-              <div className="text-8xl mb-6">📊</div>
-              <p className="text-2xl font-bold text-slate-100 mb-2">Auto Reports</p>
-              <p className="text-slate-400">Hours saved every week</p>
-            </div>
-            <div className="order-1 md:order-2">
-              <div className="inline-block px-3 py-1 bg-purple-500/10 border border-purple-500/20 rounded-full text-purple-400 text-xs font-medium mb-6">
-                ACCOUNT MANAGEMENT
-              </div>
-              <h2 className="text-3xl md:text-4xl font-bold text-slate-100 mb-6">
-                100 accounts? No problem.
-              </h2>
-              <p className="text-slate-400 text-lg mb-8 leading-relaxed">
-                See all your accounts in one place. Get reports without lifting a finger. Know what&apos;s happening across every account, every day. Stop jumping between tabs and spreadsheets.
-              </p>
-              <ul className="space-y-4">
-                <li className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0 mt-1">
-                    <svg className="w-4 h-4 text-purple-400" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <span className="text-slate-300 text-lg">One dashboard for everything</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0 mt-1">
-                    <svg className="w-4 h-4 text-purple-400" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <span className="text-slate-300 text-lg">Reports that build themselves</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0 mt-1">
-                    <svg className="w-4 h-4 text-purple-400" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <span className="text-slate-300 text-lg">Alerts when something needs attention</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Simple Stats */}
-      <section className="px-6 py-20 border-t border-slate-800">
-        <div className="max-w-4xl mx-auto">
-          <div className="grid grid-cols-3 gap-8 text-center">
+      {/* The Result */}
+      <section className="px-6 py-20 bg-slate-900/30 border-y border-slate-800">
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 className="text-3xl md:text-4xl font-bold text-slate-100 mb-12">
+            The result?
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             <div>
               <div className="text-4xl md:text-5xl font-bold text-emerald-400 mb-2">100s</div>
-              <div className="text-slate-400">Accounts managed</div>
+              <div className="text-slate-400">of accounts under control</div>
             </div>
             <div>
               <div className="text-4xl md:text-5xl font-bold text-emerald-400 mb-2">10x</div>
-              <div className="text-slate-400">Faster reporting</div>
+              <div className="text-slate-400">less time on busywork</div>
             </div>
             <div>
               <div className="text-4xl md:text-5xl font-bold text-emerald-400 mb-2">24/7</div>
-              <div className="text-slate-400">AI monitoring</div>
+              <div className="text-slate-400">AI watching your back</div>
+            </div>
+            <div>
+              <div className="text-4xl md:text-5xl font-bold text-emerald-400 mb-2">0</div>
+              <div className="text-slate-400">headaches</div>
             </div>
           </div>
         </div>
@@ -244,10 +227,10 @@ function LandingPage() {
       <section className="px-6 py-32 bg-gradient-to-b from-slate-950 via-emerald-950/20 to-slate-950">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-4xl md:text-5xl font-bold text-slate-100 mb-6">
-            Ready to grow without the chaos?
+            Ready to run 100s of accounts<br />without losing your mind?
           </h2>
           <p className="text-xl text-slate-400 mb-10">
-            Stop working harder. Start working smarter.
+            Stop drowning in work. Start scaling smart.
           </p>
           <a
             href={loginUrl}
