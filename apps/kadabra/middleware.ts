@@ -8,6 +8,14 @@ const REDIRECT_COUNT_COOKIE = "auth_redirect_count";
 const MAX_REDIRECTS = 5;
 
 export async function middleware(request: NextRequest) {
+  // Redirect www to non-www to prevent cookie fragmentation
+  const host = request.headers.get("host") || "";
+  if (host.startsWith("www.")) {
+    const newUrl = new URL(request.url);
+    newUrl.host = host.replace("www.", "");
+    return NextResponse.redirect(newUrl, { status: 301 });
+  }
+
   const isHomePage = request.nextUrl.pathname === "/";
   const isAuthErrorPage = request.nextUrl.pathname === "/auth-error";
   const isLogoutPage = request.nextUrl.pathname === "/logout";
