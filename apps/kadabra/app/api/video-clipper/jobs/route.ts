@@ -162,7 +162,11 @@ interface ReplicatePrediction {
 
 async function callReplicate(
   modelVersion: string,
-  input: Record<string, unknown>
+  input: Record<string, unknown>,
+  options?: {
+    maxTimeoutMinutes?: number;
+    onProgress?: (pollCount: number, maxPolls: number) => Promise<void>;
+  }
 ): Promise<ReplicatePrediction> {
   const apiKey = process.env.REPLICATE_API_TOKEN;
   if (!apiKey) {
@@ -192,16 +196,19 @@ async function callReplicate(
   const prediction = await createResponse.json();
   console.log("[Video Clipper] Prediction created:", prediction.id);
 
-  // Poll for completion
+  // Poll for completion - allow up to 30 minutes for YouTube videos
+  const timeoutMinutes = options?.maxTimeoutMinutes || 30;
+  const pollIntervalMs = 3000; // Poll every 3 seconds
+  const maxPolls = Math.ceil((timeoutMinutes * 60 * 1000) / pollIntervalMs);
+
   let result = prediction;
   let pollCount = 0;
-  const maxPolls = 120; // 4 minutes max (2s * 120)
 
   while (
     (result.status === "starting" || result.status === "processing") &&
     pollCount < maxPolls
   ) {
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     pollCount++;
 
     const statusResponse = await fetch(
@@ -214,7 +221,16 @@ async function callReplicate(
     );
 
     result = await statusResponse.json();
-    console.log(`[Video Clipper] Poll ${pollCount}: ${result.status}`);
+
+    // Log every 10 polls to reduce noise
+    if (pollCount % 10 === 0) {
+      console.log(`[Video Clipper] Poll ${pollCount}/${maxPolls}: ${result.status}`);
+    }
+
+    // Call progress callback if provided
+    if (options?.onProgress) {
+      await options.onProgress(pollCount, maxPolls);
+    }
   }
 
   if (result.status === "failed") {
@@ -222,7 +238,7 @@ async function callReplicate(
   }
 
   if (result.status !== "succeeded") {
-    throw new Error(`Replicate prediction timed out after ${pollCount} polls`);
+    throw new Error(`Replicate prediction timed out after ${Math.round(pollCount * pollIntervalMs / 60000)} minutes`);
   }
 
   return result;
@@ -272,6 +288,17 @@ async function processVideoJob(jobId: string) {
             url: job.sourceUrl,
             model: "large-v3",
             output_format: "txt", // Get text output
+          },
+          {
+            maxTimeoutMinutes: 30, // Allow up to 30 minutes for long videos
+            onProgress: async (pollCount, maxPolls) => {
+              // Update progress from 10% to 40% during transcription
+              const transcriptionProgress = 10 + Math.floor((pollCount / maxPolls) * 30);
+              await prisma.videoClipJob.update({
+                where: { id: jobId },
+                data: { progress: Math.min(transcriptionProgress, 40) },
+              });
+            },
           }
         );
 
