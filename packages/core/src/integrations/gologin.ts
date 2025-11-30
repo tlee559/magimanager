@@ -548,6 +548,21 @@ export async function launchBrowserProfile(
   profileId: string,
   startUrl?: string
 ): Promise<BrowserLaunchResult> {
+  // Check if running in serverless environment (Vercel, AWS Lambda, etc.)
+  // gologin requires Orbita browser which is not available in serverless
+  const isServerless = !!(
+    process.env.VERCEL ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.env.NETLIFY
+  );
+
+  if (isServerless) {
+    return {
+      success: false,
+      message: 'Browser launch is not supported in serverless environments. This feature requires the GoLogin desktop app running on a local machine or dedicated server.',
+    };
+  }
+
   try {
     // Dynamic import to avoid bundling issues in serverless
     // eslint-disable-next-line @typescript-eslint/no-require-imports
