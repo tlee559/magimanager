@@ -78,11 +78,11 @@ function LoginForm({ onBack }: { onBack: () => void }) {
             <SquareMLogoIcon size={80} />
           </div>
           <h1 className="text-3xl font-bold text-slate-100 mb-2">
-            Kadabra
+            MagiManager
           </h1>
-          <p className="text-emerald-400 font-medium mb-1">Ad Manager</p>
+          <p className="text-emerald-400 font-medium mb-1">Ads Console</p>
           <p className="text-slate-400 text-sm">
-            Sign in to your account
+            Ads Management Hub
           </p>
         </div>
 

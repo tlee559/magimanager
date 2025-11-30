@@ -87,11 +87,11 @@ function LoginForm() {
             <SquareMLogoIcon size={80} />
           </div>
           <h1 className="text-3xl font-bold text-slate-100 mb-2">
-            Abra
+            MagiManager
           </h1>
-          <p className="text-emerald-400 font-medium mb-1">Account Factory</p>
+          <p className="text-purple-400 font-medium mb-1">Accounts Console</p>
           <p className="text-slate-400 text-sm">
-            Identity & Account Creation Hub
+            Accounts Management Hub
           </p>
         </div>
 
@@ -162,7 +162,7 @@ function LoginForm() {
         </div>
 
         <p className="mt-6 text-center text-xs text-slate-500">
-          Magimanager Account Factory
+          MagiManager Accounts Console
         </p>
       </div>
     </main>
