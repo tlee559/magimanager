@@ -73,7 +73,7 @@ function LandingPage() {
           <span className="text-emerald-400">Zero Headaches.</span>
         </h1>
         <p className="text-xl text-slate-400 mb-10 leading-relaxed">
-          AI agents that help you scale. Auto reports that save you hours. Finally, a tool built for agencies that want to grow.
+          AI-powered tools built by marketers, for marketers. Scale your campaigns. Optimize what works. Grow your agency the right way.
         </p>
         <a
           href={loginUrl}
