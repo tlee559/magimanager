@@ -568,10 +568,16 @@ export function CampaignsView({ accountId, customerId, accountName }: CampaignsV
 
     try {
       const res = await fetch(`/api/campaigns?accountId=${accountId}&customerId=${customerId}&dateRange=${dateRange}`);
-      if (!res.ok) {
-        throw new Error("Failed to fetch campaigns");
-      }
       const data = await res.json();
+
+      if (!res.ok) {
+        // Check if it's a reauth error
+        if (data.needsReauth) {
+          throw new Error("This account needs to be re-authenticated. Please reconnect via OAuth.");
+        }
+        throw new Error(data.error || "Failed to fetch campaigns");
+      }
+
       console.log('[CampaignsView] API Response:', {
         campaignsCount: data.campaigns?.length,
         accountSuspended: data.accountSuspended,

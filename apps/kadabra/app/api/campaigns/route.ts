@@ -90,8 +90,23 @@ export async function GET(req: NextRequest) {
     }
 
     // Decrypt and check if token needs refresh
-    let accessToken = decrypt(account.connection.accessToken);
-    const refreshToken = decrypt(account.connection.refreshToken);
+    let accessToken: string;
+    let refreshToken: string;
+
+    try {
+      accessToken = decrypt(account.connection.accessToken);
+      refreshToken = decrypt(account.connection.refreshToken);
+    } catch (decryptError) {
+      console.error("Failed to decrypt tokens:", decryptError);
+      return NextResponse.json(
+        {
+          error: "Token decryption failed - encryption key mismatch between apps. Please re-authenticate this account.",
+          needsReauth: true,
+        },
+        { status: 401 }
+      );
+    }
+
     const now = new Date();
 
     if (account.connection.tokenExpiresAt <= now) {
