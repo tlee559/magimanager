@@ -547,6 +547,8 @@ export function CampaignsView({ accountId, customerId, accountName }: CampaignsV
   const [expandedCampaigns, setExpandedCampaigns] = useState<Set<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange>("LAST_7_DAYS");
+  const [accountSuspended, setAccountSuspended] = useState(false);
+  const [cachedCampaignCount, setCachedCampaignCount] = useState<number | undefined>();
 
   // Feature flags
   const canViewCampaigns = isFeatureEnabled("campaigns.view");
@@ -571,6 +573,8 @@ export function CampaignsView({ accountId, customerId, accountName }: CampaignsV
       }
       const data = await res.json();
       setCampaigns(data.campaigns || []);
+      setAccountSuspended(data.accountSuspended || false);
+      setCachedCampaignCount(data.cachedCampaignCount);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load campaigns");
     } finally {
@@ -881,13 +885,30 @@ export function CampaignsView({ accountId, customerId, accountName }: CampaignsV
         {/* Campaign Rows */}
         {filteredCampaigns.length === 0 ? (
           <div className="p-12 text-center">
-            <Layers className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-            <div className="text-slate-400 mb-1">No campaigns found</div>
-            <div className="text-sm text-slate-600">
-              {searchQuery || statusFilter !== "ALL" || typeFilter !== "ALL"
-                ? "Try adjusting your filters"
-                : "This account has no campaigns yet"}
-            </div>
+            {accountSuspended ? (
+              <>
+                <Lock className="w-12 h-12 text-red-500/60 mx-auto mb-3" />
+                <div className="text-red-400 mb-1">Account Suspended</div>
+                <div className="text-sm text-slate-500">
+                  Google Ads API cannot retrieve campaign data for suspended accounts.
+                  {cachedCampaignCount && (
+                    <span className="block mt-1 text-slate-600">
+                      This account previously had {cachedCampaignCount} campaign{cachedCampaignCount !== 1 ? 's' : ''}.
+                    </span>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <Layers className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                <div className="text-slate-400 mb-1">No campaigns found</div>
+                <div className="text-sm text-slate-600">
+                  {searchQuery || statusFilter !== "ALL" || typeFilter !== "ALL"
+                    ? "Try adjusting your filters"
+                    : "This account has no campaigns yet"}
+                </div>
+              </>
+            )}
           </div>
         ) : (
           filteredCampaigns.map((campaign) => (

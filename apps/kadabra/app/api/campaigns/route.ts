@@ -124,9 +124,17 @@ export async function GET(req: NextRequest) {
       dateRangeEnd,
     });
 
+    // Check if account is suspended/inactive and has no campaigns returned
+    // but we know it had campaigns before (from cached count)
+    const isSuspended = account.accountHealth === "suspended" || account.status === "suspended";
+    const hasCachedCampaigns = account.campaignsCount > 0;
+
     return NextResponse.json({
       campaigns,
       syncedAt: new Date().toISOString(),
+      // Provide context when suspended account returns no campaigns
+      accountSuspended: isSuspended && campaigns.length === 0 && hasCachedCampaigns,
+      cachedCampaignCount: hasCachedCampaigns ? account.campaignsCount : undefined,
     });
   } catch (error) {
     console.error("Error fetching campaigns:", error);
