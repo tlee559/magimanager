@@ -147,8 +147,9 @@ export function Sidebar({ currentView, onViewChange, userRole }: SidebarProps) {
         </a>
         <button
           onClick={() => {
-            // Unified logout: sign out and redirect to login page
-            signOut({ callbackUrl: "/" });
+            // Sign out via central login portal
+            const loginUrl = process.env.NEXT_PUBLIC_LOGIN_URL || "https://login.magimanager.com";
+            signOut({ callbackUrl: `${loginUrl}/logout` });
           }}
           className="w-full px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition text-sm flex flex-col items-center gap-0.5"
         >

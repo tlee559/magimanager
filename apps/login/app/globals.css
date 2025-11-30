@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+body {
+  @apply bg-slate-950 text-slate-100;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-700 rounded-full;
+}
+::-webkit-scrollbar-track {
+  @apply bg-slate-900;
+}
+
+/* Smooth transitions for form states */
+.login-card {
+  transition: all 0.3s ease;
+}
+
+.login-card.error {
+  animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+}

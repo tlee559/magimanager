@@ -15,6 +15,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(`${LOGIN_URL}?returnTo=${returnTo}`));
   }
 
+  // If logged in and on home page, redirect to admin
+  if (token && isHomePage) {
+    return NextResponse.redirect(new URL("/admin", request.url));
+  }
+
   return NextResponse.next();
 }
 
