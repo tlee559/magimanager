@@ -1,7 +1,7 @@
 import { getToken } from "next-auth/jwt";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { SESSION_COOKIE_NAME, AUTH_CONFIG } from "@magimanager/auth";
+import { SESSION_COOKIE_NAME, AUTH_CONFIG } from "@magimanager/auth/cookie-config";
 
 // Redirect loop protection
 const REDIRECT_COUNT_COOKIE = "auth_redirect_count";
