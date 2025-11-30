@@ -127,41 +127,41 @@ export function Sidebar({ currentView, onViewChange, userRole }: SidebarProps) {
       </nav>
 
       {/* User Info & Cross-App Navigation & Logout */}
-      <div className="flex-shrink-0 w-full px-6 py-4 border-t border-slate-800 space-y-2">
+      <div className="flex-shrink-0 w-full px-6 py-4 border-t border-slate-800 space-y-3">
+        {/* User Profile Button */}
         <button
           onClick={() => setShowProfileModal(true)}
-          className="w-full px-4 py-2 bg-slate-800 rounded-lg hover:bg-slate-700 transition text-left"
+          className="w-full px-4 py-3 bg-slate-800/80 rounded-lg hover:bg-slate-700 transition text-left"
         >
-          <div className="text-sm font-medium text-slate-100">{session?.user?.name || "User"}</div>
-          <div className="text-xs text-slate-500">{session?.user?.email || "No email"}</div>
+          <div className="text-sm font-medium text-slate-100">{session?.user?.name || "Loading..."}</div>
+          <div className="text-xs text-slate-400">{session?.user?.email || ""}</div>
         </button>
+
+        {/* Kadabra Button - Green */}
         <a
           href="https://magimanager.com/admin"
-          className="w-full px-4 py-2 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg hover:from-emerald-500/20 hover:to-teal-500/20 transition text-sm flex flex-col items-center gap-0.5"
+          className="block w-full px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-500 hover:to-teal-500 transition text-sm text-center"
         >
-          <span className="font-semibold flex items-center gap-1.5">
-            <span>✨</span>
-            MagiManager
-          </span>
-          <span className="text-[10px] text-emerald-400/70">Ads Console</span>
+          <span className="font-semibold">Kadabra</span>
+          <span className="block text-[11px] text-emerald-100/80">Ads Manager</span>
         </a>
+
+        {/* Logout Button */}
         <button
           onClick={() => {
-            // Sign out via central login portal
             const loginUrl = process.env.NEXT_PUBLIC_LOGIN_URL || "https://login.magimanager.com";
             signOut({ callbackUrl: `${loginUrl}/logout` });
           }}
-          className="w-full px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition text-sm flex flex-col items-center gap-0.5"
+          className="w-full px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition text-sm flex items-center justify-center gap-2"
         >
-          <span className="flex items-center gap-2">
-            <span>🚪</span>
-            Logout
-          </span>
-          <span className="text-[10px] text-slate-500">Signs out of both apps</span>
+          <span>🚪</span>
+          <span>Logout</span>
         </button>
-        <div className="mt-2 text-xs text-slate-500">
-          <div className="font-medium">ABRA v{APP_VERSION}</div>
-          <div className="text-slate-600">Build: {BUILD_SHA}</div>
+
+        {/* Version Info */}
+        <div className="pt-2 text-xs text-center">
+          <div className="text-slate-400 font-medium">ABRA v{APP_VERSION}</div>
+          <div className="text-slate-600">Build: {BUILD_SHA?.slice(0, 7) || "local"}</div>
         </div>
       </div>
 
