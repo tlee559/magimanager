@@ -4,12 +4,12 @@ import { Providers } from "./providers";
 import { ToastProvider } from "./components/toast-provider";
 
 export const metadata: Metadata = {
-  title: "MagiManager - Manage 100+ Ad Accounts Without Losing Your Mind",
-  description: "The command center for agencies running massive Google Ads operations. Stop drowning in spreadsheets. Manage hundreds of accounts, team members, and client relationships from one dashboard.",
-  keywords: ["Google Ads management", "agency software", "ad account management", "PPC agency tools", "Google Ads agency", "multi-account management"],
+  title: "MagiManager - AI-Powered Ad Account Management",
+  description: "Scale and optimize 100s of ad accounts with AI. The command center for agencies that want to level up their advertising operations.",
+  keywords: ["AI ad management", "agency automation", "ad account optimization", "AI advertising tools", "scale ad accounts"],
   openGraph: {
-    title: "MagiManager - Scale Your Google Ads Agency",
-    description: "Manage 100+ ad accounts without losing your mind. The command center for agencies that scale.",
+    title: "MagiManager - Scale & Optimize 100s of Ad Accounts",
+    description: "AI-powered tools to manage, scale, and optimize your advertising operations. Level up your agency.",
     type: "website",
   },
 };
