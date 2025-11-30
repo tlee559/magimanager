@@ -10,9 +10,10 @@ const MAX_REDIRECTS = 5;
 export async function middleware(request: NextRequest) {
   const isHomePage = request.nextUrl.pathname === "/";
   const isAuthErrorPage = request.nextUrl.pathname === "/auth-error";
+  const isLogoutPage = request.nextUrl.pathname === "/logout";
 
-  // Always allow error page
-  if (isAuthErrorPage) {
+  // Always allow error and logout pages
+  if (isAuthErrorPage || isLogoutPage) {
     return NextResponse.next();
   }
 

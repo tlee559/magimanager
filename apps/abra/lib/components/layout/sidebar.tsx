@@ -149,8 +149,8 @@ export function Sidebar({ currentView, onViewChange, userRole }: SidebarProps) {
         {/* Logout Button */}
         <button
           onClick={() => {
-            const loginUrl = process.env.NEXT_PUBLIC_LOGIN_URL || "https://login.magimanager.com";
-            signOut({ callbackUrl: `${loginUrl}/logout` });
+            // Redirect to local logout page which handles cookie cleanup
+            window.location.href = "/logout";
           }}
           className="w-full px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition text-sm flex items-center justify-center gap-2"
         >
