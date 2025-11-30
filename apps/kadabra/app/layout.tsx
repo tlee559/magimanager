@@ -4,8 +4,14 @@ import { Providers } from "./providers";
 import { ToastProvider } from "./components/toast-provider";
 
 export const metadata: Metadata = {
-  title: "Magimanager - Internal Factory Tool",
-  description: "Internal Agency Operating System for Google Ads",
+  title: "MagiManager - Manage 100+ Ad Accounts Without Losing Your Mind",
+  description: "The command center for agencies running massive Google Ads operations. Stop drowning in spreadsheets. Manage hundreds of accounts, team members, and client relationships from one dashboard.",
+  keywords: ["Google Ads management", "agency software", "ad account management", "PPC agency tools", "Google Ads agency", "multi-account management"],
+  openGraph: {
+    title: "MagiManager - Scale Your Google Ads Agency",
+    description: "Manage 100+ ad accounts without losing your mind. The command center for agencies that scale.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
