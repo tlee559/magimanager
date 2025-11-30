@@ -26,6 +26,8 @@ import {
   Palette,
   Settings,
   X,
+  Link,
+  Youtube,
 } from "lucide-react";
 
 // ============================================================================
@@ -190,13 +192,24 @@ function getScoreBg(score: number): string {
 // INPUT STEP - SOURCE SELECTION
 // ============================================================================
 
+interface YouTubePreview {
+  title: string;
+  author: string;
+  thumbnail: string;
+  duration: number | null;
+  videoId: string;
+}
+
 function InputStep({
   onSubmit,
   isLoading,
+  uploadProgress,
+  isUploading,
 }: {
   onSubmit: (data: {
-    sourceType: "upload";
-    uploadedFile: File;
+    sourceType: "youtube" | "upload";
+    youtubeUrl?: string;
+    uploadedFile?: File;
     name?: string;
     targetFormat: string;
     targetDuration: number;
@@ -208,8 +221,24 @@ function InputStep({
     targetAudience?: string;
   }) => void;
   isLoading: boolean;
+  uploadProgress?: number;
+  isUploading?: boolean;
 }) {
+  // Source selection
+  const [sourceTab, setSourceTab] = useState<"youtube" | "upload">("youtube");
+
+  // YouTube state
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [youtubePreview, setYoutubePreview] = useState<YouTubePreview | null>(null);
+  const [isValidatingUrl, setIsValidatingUrl] = useState(false);
+  const [youtubeError, setYoutubeError] = useState<string | null>(null);
+  const validateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Upload state
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Shared settings
   const [name, setName] = useState("");
   const [targetFormat, setTargetFormat] = useState("vertical");
   const [targetDuration, setTargetDuration] = useState(60);
@@ -220,7 +249,74 @@ function InputStep({
   const [productContext, setProductContext] = useState("");
   const [targetAudience, setTargetAudience] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Validate YouTube URL with debounce
+  useEffect(() => {
+    if (validateTimeoutRef.current) {
+      clearTimeout(validateTimeoutRef.current);
+    }
+
+    if (!youtubeUrl.trim()) {
+      setYoutubePreview(null);
+      setYoutubeError(null);
+      return;
+    }
+
+    // Check if it looks like a YouTube URL
+    if (!youtubeUrl.includes("youtube.com") && !youtubeUrl.includes("youtu.be")) {
+      setYoutubePreview(null);
+      setYoutubeError(null);
+      return;
+    }
+
+    setIsValidatingUrl(true);
+    setYoutubeError(null);
+
+    validateTimeoutRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/video-clipper/validate-youtube?url=${encodeURIComponent(youtubeUrl)}`);
+        const data = await res.json();
+
+        if (data.valid) {
+          setYoutubePreview({
+            title: data.title,
+            author: data.author,
+            thumbnail: data.thumbnail,
+            duration: data.duration,
+            videoId: data.videoId,
+          });
+          setYoutubeError(null);
+        } else {
+          setYoutubePreview(null);
+          setYoutubeError(data.error || "Invalid YouTube URL");
+        }
+      } catch {
+        setYoutubeError("Failed to validate URL");
+        setYoutubePreview(null);
+      } finally {
+        setIsValidatingUrl(false);
+      }
+    }, 500);
+
+    return () => {
+      if (validateTimeoutRef.current) {
+        clearTimeout(validateTimeoutRef.current);
+      }
+    };
+  }, [youtubeUrl]);
+
+  // Format duration helper
+  const formatDuration = (seconds: number | null) => {
+    if (!seconds) return "";
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    if (mins >= 60) {
+      const hours = Math.floor(mins / 60);
+      const remainingMins = mins % 60;
+      return `${hours}h ${remainingMins}m`;
+    }
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -239,22 +335,43 @@ function InputStep({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!uploadedFile) return;
 
-    onSubmit({
-      sourceType: "upload",
-      uploadedFile,
-      name: name || undefined,
-      targetFormat,
-      targetDuration,
-      maxClips,
-      addCaptions,
-      captionStyle,
-      industry: industry || undefined,
-      productContext: productContext || undefined,
-      targetAudience: targetAudience || undefined,
-    });
+    if (sourceTab === "youtube") {
+      if (!youtubePreview) return;
+      onSubmit({
+        sourceType: "youtube",
+        youtubeUrl,
+        name: name || youtubePreview.title || undefined,
+        targetFormat,
+        targetDuration,
+        maxClips,
+        addCaptions,
+        captionStyle,
+        industry: industry || undefined,
+        productContext: productContext || undefined,
+        targetAudience: targetAudience || undefined,
+      });
+    } else {
+      if (!uploadedFile) return;
+      onSubmit({
+        sourceType: "upload",
+        uploadedFile,
+        name: name || undefined,
+        targetFormat,
+        targetDuration,
+        maxClips,
+        addCaptions,
+        captionStyle,
+        industry: industry || undefined,
+        productContext: productContext || undefined,
+        targetAudience: targetAudience || undefined,
+      });
+    }
   };
+
+  const canSubmit = sourceTab === "youtube"
+    ? !!youtubePreview && !isValidatingUrl
+    : !!uploadedFile;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl mx-auto">
@@ -271,8 +388,109 @@ function InputStep({
         </p>
       </div>
 
+      {/* Source Tabs */}
+      <div className="flex gap-2 p-1 bg-slate-800/50 rounded-xl">
+        <button
+          type="button"
+          onClick={() => setSourceTab("youtube")}
+          className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition ${
+            sourceTab === "youtube"
+              ? "bg-gradient-to-r from-red-500 to-pink-500 text-white"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+          }`}
+        >
+          <Youtube className="w-5 h-5" />
+          YouTube URL
+        </button>
+        <button
+          type="button"
+          onClick={() => setSourceTab("upload")}
+          className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition ${
+            sourceTab === "upload"
+              ? "bg-gradient-to-r from-violet-500 to-purple-500 text-white"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+          }`}
+        >
+          <Upload className="w-5 h-5" />
+          Upload File
+        </button>
+      </div>
+
+      {/* YouTube URL Input */}
+      {sourceTab === "youtube" && (
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              <div className="flex items-center gap-2">
+                <Link className="w-4 h-4 text-pink-400" />
+                YouTube Video URL *
+              </div>
+            </label>
+            <div className="relative">
+              <input
+                type="url"
+                value={youtubeUrl}
+                onChange={(e) => setYoutubeUrl(e.target.value)}
+                placeholder="https://www.youtube.com/watch?v=..."
+                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-500 transition pr-10"
+              />
+              {isValidatingUrl && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <Loader2 className="w-5 h-5 text-slate-500 animate-spin" />
+                </div>
+              )}
+              {youtubePreview && !isValidatingUrl && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <CheckCircle className="w-5 h-5 text-green-500" />
+                </div>
+              )}
+            </div>
+            {youtubeError && (
+              <p className="mt-2 text-sm text-red-400 flex items-center gap-1">
+                <AlertCircle className="w-4 h-4" />
+                {youtubeError}
+              </p>
+            )}
+          </div>
+
+          {/* YouTube Preview */}
+          {youtubePreview && (
+            <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+              <div className="flex gap-4">
+                <img
+                  src={youtubePreview.thumbnail}
+                  alt={youtubePreview.title}
+                  className="w-40 h-24 object-cover rounded-lg flex-shrink-0"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-slate-100 font-medium line-clamp-2 mb-1">
+                    {youtubePreview.title}
+                  </p>
+                  <p className="text-sm text-slate-500 mb-2">
+                    {youtubePreview.author}
+                  </p>
+                  {youtubePreview.duration && (
+                    <p className="text-xs text-slate-400 flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {formatDuration(youtubePreview.duration)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!youtubeUrl && (
+            <p className="text-sm text-slate-500 text-center py-4">
+              Paste a YouTube URL to get started. Works with any public video.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* File Upload */}
-      <div>
+      {sourceTab === "upload" && (
+        <div>
           <label className="block text-sm font-medium text-slate-300 mb-2">
             <div className="flex items-center gap-2">
               <Upload className="w-4 h-4 text-pink-400" />
@@ -326,7 +544,24 @@ function InputStep({
               </div>
             )}
           </div>
+
+          {/* Upload Progress Bar */}
+          {isUploading && uploadProgress !== undefined && (
+            <div className="mt-4 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Uploading video...</span>
+                <span className="text-violet-400">{uploadProgress}%</span>
+              </div>
+              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-pink-500 to-violet-500 transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
+      )}
 
       {/* Project Name */}
       <div>
@@ -545,13 +780,13 @@ function InputStep({
       {/* Submit Button */}
       <button
         type="submit"
-        disabled={isLoading || !uploadedFile}
+        disabled={isLoading || isUploading || !canSubmit}
         className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-pink-500 to-violet-500 hover:from-pink-400 hover:to-violet-400 text-white font-semibold rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {isLoading ? (
+        {isLoading || isUploading ? (
           <>
             <Loader2 className="w-5 h-5 animate-spin" />
-            Creating Project...
+            {isUploading ? "Uploading..." : "Creating Project..."}
           </>
         ) : (
           <>
@@ -1269,6 +1504,8 @@ export function VideoClipperView({
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
   const [showBackgroundModal, setShowBackgroundModal] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Fetch existing jobs on mount
   useEffect(() => {
@@ -1343,8 +1580,9 @@ export function VideoClipperView({
   };
 
   const handleSubmit = async (data: {
-    sourceType: "upload";
-    uploadedFile: File;
+    sourceType: "youtube" | "upload";
+    youtubeUrl?: string;
+    uploadedFile?: File;
     name?: string;
     targetFormat: string;
     targetDuration: number;
@@ -1356,63 +1594,82 @@ export function VideoClipperView({
     targetAudience?: string;
   }) => {
     setIsLoading(true);
+    setUploadProgress(0);
+
     try {
-      // Validate file size before upload
-      const maxSize = 500 * 1024 * 1024; // 500MB
-      if (data.uploadedFile.size > maxSize) {
-        throw new Error("File too large. Maximum size is 500MB");
-      }
+      let uploadedVideoUrl: string | undefined;
 
-      // Upload the video file using client-side upload (bypasses serverless function limits)
-      console.log("[Video Clipper] Uploading video:", data.uploadedFile.name, "Size:", data.uploadedFile.size);
-
-      let uploadedVideoUrl: string;
-      try {
-        const blob = await upload(
-          `video-clipper/${Date.now()}-${data.uploadedFile.name}`,
-          data.uploadedFile,
-          {
-            access: "public",
-            handleUploadUrl: "/api/video-clipper/upload",
-          }
-        );
-        uploadedVideoUrl = blob.url;
-        console.log("[Video Clipper] Upload complete:", uploadedVideoUrl);
-      } catch (uploadError) {
-        console.error("[Video Clipper] Upload error:", uploadError);
-        const errorMessage = uploadError instanceof Error ? uploadError.message : String(uploadError);
-
-        // Provide helpful error messages
-        if (errorMessage.includes("token") || errorMessage.includes("BLOB")) {
-          throw new Error("Server configuration error. Please contact support.");
-        } else if (errorMessage.includes("network") || errorMessage.includes("Network")) {
-          throw new Error("Network error during upload. Please check your connection and try again.");
-        } else if (errorMessage.includes("Unauthorized")) {
-          throw new Error("Session expired. Please refresh and try again.");
+      // Handle file upload if sourceType is upload
+      if (data.sourceType === "upload" && data.uploadedFile) {
+        // Validate file size before upload
+        const maxSize = 500 * 1024 * 1024; // 500MB
+        if (data.uploadedFile.size > maxSize) {
+          throw new Error("File too large. Maximum size is 500MB");
         }
 
-        throw new Error(errorMessage || "Failed to upload video. Please try again.");
+        // Upload the video file using client-side upload (bypasses serverless function limits)
+        console.log("[Video Clipper] Uploading video:", data.uploadedFile.name, "Size:", data.uploadedFile.size);
+        setIsUploading(true);
+
+        try {
+          const blob = await upload(
+            `video-clipper/${Date.now()}-${data.uploadedFile.name}`,
+            data.uploadedFile,
+            {
+              access: "public",
+              handleUploadUrl: "/api/video-clipper/upload",
+              onUploadProgress: (progress) => {
+                setUploadProgress(Math.round(progress.percentage));
+              },
+            }
+          );
+          uploadedVideoUrl = blob.url;
+          console.log("[Video Clipper] Upload complete:", uploadedVideoUrl);
+        } catch (uploadError) {
+          console.error("[Video Clipper] Upload error:", uploadError);
+          const errorMessage = uploadError instanceof Error ? uploadError.message : String(uploadError);
+
+          // Provide helpful error messages
+          if (errorMessage.includes("token") || errorMessage.includes("BLOB")) {
+            throw new Error("Server configuration error. Please contact support.");
+          } else if (errorMessage.includes("network") || errorMessage.includes("Network")) {
+            throw new Error("Network error during upload. Please check your connection and try again.");
+          } else if (errorMessage.includes("Unauthorized")) {
+            throw new Error("Session expired. Please refresh and try again.");
+          }
+
+          throw new Error(errorMessage || "Failed to upload video. Please try again.");
+        } finally {
+          setIsUploading(false);
+        }
       }
 
       // Create job
       let res: Response;
       try {
+        const jobPayload: Record<string, unknown> = {
+          sourceType: data.sourceType,
+          name: data.name,
+          targetFormat: data.targetFormat,
+          targetDuration: data.targetDuration,
+          maxClips: data.maxClips,
+          addCaptions: data.addCaptions,
+          captionStyle: data.captionStyle,
+          industry: data.industry,
+          productContext: data.productContext,
+          targetAudience: data.targetAudience,
+        };
+
+        if (data.sourceType === "youtube") {
+          jobPayload.sourceUrl = data.youtubeUrl;
+        } else {
+          jobPayload.uploadedVideoUrl = uploadedVideoUrl;
+        }
+
         res = await fetch("/api/video-clipper/jobs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sourceType: "upload",
-            uploadedVideoUrl,
-            name: data.name,
-            targetFormat: data.targetFormat,
-            targetDuration: data.targetDuration,
-            maxClips: data.maxClips,
-            addCaptions: data.addCaptions,
-            captionStyle: data.captionStyle,
-            industry: data.industry,
-            productContext: data.productContext,
-            targetAudience: data.targetAudience,
-          }),
+          body: JSON.stringify(jobPayload),
         });
       } catch (fetchError) {
         console.error("[Video Clipper] Job creation fetch error:", fetchError);
@@ -1435,6 +1692,8 @@ export function VideoClipperView({
       alert(error instanceof Error ? error.message : "Failed to create job. Please try again.");
     } finally {
       setIsLoading(false);
+      setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -1491,7 +1750,12 @@ export function VideoClipperView({
       <div className="max-w-6xl mx-auto px-6 py-8">
         {view === "input" && (
           <div className="space-y-8">
-            <InputStep onSubmit={handleSubmit} isLoading={isLoading} />
+            <InputStep
+              onSubmit={handleSubmit}
+              isLoading={isLoading}
+              uploadProgress={uploadProgress}
+              isUploading={isUploading}
+            />
             <JobList
               jobs={jobs}
               onSelectJob={handleSelectJob}
@@ -1523,7 +1787,6 @@ export function VideoClipperView({
       </div>
 
       {/* Background Processing Modal */}
-      {console.log("[Video Clipper] Modal check - showBackgroundModal:", showBackgroundModal, "currentJob:", !!currentJob)}
       {showBackgroundModal && currentJob && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full">

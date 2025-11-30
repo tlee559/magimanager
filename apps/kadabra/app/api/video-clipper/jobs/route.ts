@@ -86,17 +86,24 @@ export async function POST(req: NextRequest) {
       targetAudience,
     } = body;
 
-    // Validate required fields - upload only
-    if (sourceType !== "upload") {
+    // Validate required fields based on source type
+    if (sourceType !== "upload" && sourceType !== "youtube") {
       return NextResponse.json(
-        { error: "Only video upload is supported" },
+        { error: "Source type must be 'upload' or 'youtube'" },
         { status: 400 }
       );
     }
 
-    if (!uploadedVideoUrl) {
+    if (sourceType === "upload" && !uploadedVideoUrl) {
       return NextResponse.json(
         { error: "Uploaded video URL is required" },
+        { status: 400 }
+      );
+    }
+
+    if (sourceType === "youtube" && !sourceUrl) {
+      return NextResponse.json(
+        { error: "YouTube URL is required" },
         { status: 400 }
       );
     }
@@ -243,14 +250,84 @@ async function processVideoJob(jobId: string) {
 
     if (!job) return;
 
-    // Upload-only: get the uploaded video URL
-    if (!job.uploadedVideoUrl) {
-      throw new Error("No uploaded video found");
-    }
-
-    const videoUrl = job.uploadedVideoUrl;
-    const videoTitle = job.name || "Uploaded Video";
+    let videoUrl: string | null = null;
+    let videoTitle = job.name || "Video";
     let transcript: TranscriptSegment[] = [];
+
+    // Handle YouTube source
+    if (job.sourceType === "youtube" && job.sourceUrl) {
+      console.log("[Video Clipper] Processing YouTube video:", job.sourceUrl);
+
+      await prisma.videoClipJob.update({
+        where: { id: jobId },
+        data: { status: "DOWNLOADING", progress: 10 },
+      });
+
+      // Use yt-whisper which downloads and transcribes YouTube in one step
+      try {
+        console.log("[Video Clipper] Using yt-whisper for YouTube transcription...");
+        const ytWhisperResult = await callReplicate(
+          "zsxkib/yt-whisper:95fc0093e387a290b6ce58f544dd9fc86c40bfc9aef5cd8ed268c2fa8b5b17cc",
+          {
+            url: job.sourceUrl,
+            model: "large-v3",
+            output_format: "txt", // Get text output
+          }
+        );
+
+        console.log("[Video Clipper] yt-whisper output:", JSON.stringify(ytWhisperResult.output).slice(0, 500));
+
+        // Parse the transcription output
+        if (ytWhisperResult.output) {
+          transcript = parseYtWhisperOutput(ytWhisperResult.output);
+          console.log(`[Video Clipper] Parsed ${transcript.length} transcript segments from yt-whisper`);
+        }
+      } catch (ytError) {
+        console.error("[Video Clipper] yt-whisper error:", ytError);
+        // Fall back to standard Whisper if yt-whisper fails
+      }
+
+      // For video clipping, we need to get a direct video URL
+      // We'll use the Cobalt API as a fallback to get the video
+      if (!videoUrl) {
+        try {
+          console.log("[Video Clipper] Getting direct video URL for clipping...");
+          const cobaltResult = await fetch("https://api.cobalt.tools/api/json", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: JSON.stringify({
+              url: job.sourceUrl,
+              vQuality: "720",
+              filenamePattern: "basic",
+            }),
+          });
+
+          if (cobaltResult.ok) {
+            const cobaltData = await cobaltResult.json();
+            if (cobaltData.url) {
+              videoUrl = cobaltData.url;
+              console.log("[Video Clipper] Got direct video URL from Cobalt");
+            }
+          }
+        } catch (cobaltError) {
+          console.error("[Video Clipper] Cobalt API error:", cobaltError);
+        }
+      }
+
+      // Set video title from YouTube URL metadata if available
+      videoTitle = job.name || "YouTube Video";
+
+    } else if (job.sourceType === "upload" && job.uploadedVideoUrl) {
+      // Handle uploaded video
+      videoUrl = job.uploadedVideoUrl;
+      videoTitle = job.name || "Uploaded Video";
+      console.log("[Video Clipper] Processing uploaded video:", videoUrl);
+    } else {
+      throw new Error("No video source found");
+    }
 
     // Update progress
     await prisma.videoClipJob.update({
@@ -262,12 +339,10 @@ async function processVideoJob(jobId: string) {
       },
     });
 
-    console.log("[Video Clipper] Processing uploaded video:", videoUrl);
-
-    // Transcribe the uploaded video using Whisper
-    if (transcript.length === 0) {
+    // Transcribe using Whisper if we don't have a transcript yet (for uploads or if yt-whisper failed)
+    if (transcript.length === 0 && videoUrl) {
       try {
-        console.log("[Video Clipper] Transcribing uploaded video with Whisper...");
+        console.log("[Video Clipper] Transcribing video with Whisper...");
         const whisperResult = await callReplicate(
           "vaibhavs10/incredibly-fast-whisper:3ab86df6c8f54c11309d4d1f930ac292bad43ace52d10c80d87eb258b3c9f79c",
           {
@@ -354,10 +429,11 @@ async function processVideoJob(jobId: string) {
     }
 
     // Now process each clip - extract video, generate thumbnail, optionally add captions
-    const sourceVideoUrl = job.uploadedVideoUrl || job.sourceUrl;
+    // Use the videoUrl we determined earlier (which handles both upload and YouTube sources)
+    const sourceVideoUrl = videoUrl || job.uploadedVideoUrl;
 
     if (sourceVideoUrl) {
-      console.log("[Video Clipper] Processing clips from source:", sourceVideoUrl);
+      console.log("[Video Clipper] Processing clips from source:", sourceVideoUrl.substring(0, 100));
 
       let processedCount = 0;
       for (const clipInfo of createdClips) {
@@ -409,6 +485,20 @@ async function processVideoJob(jobId: string) {
             },
           });
         }
+      }
+    } else {
+      // No direct video URL available (e.g., YouTube without Cobalt)
+      // Mark clips as completed with analysis only (no actual video files)
+      console.log("[Video Clipper] No direct video URL available - completing with analysis only");
+      for (const clipInfo of createdClips) {
+        await prisma.videoClip.update({
+          where: { id: clipInfo.id },
+          data: {
+            status: "COMPLETED",
+            processingProgress: 100,
+            // No clip URLs - UI will show timestamps for manual clipping
+          },
+        });
       }
     }
 
@@ -750,6 +840,86 @@ function parseWhisperOutput(output: unknown): TranscriptSegment[] {
     }
   } catch (error) {
     console.error("[Video Clipper] Error parsing Whisper output:", error);
+  }
+
+  return segments;
+}
+
+// Parse yt-whisper output (slightly different format)
+function parseYtWhisperOutput(output: unknown): TranscriptSegment[] {
+  const segments: TranscriptSegment[] = [];
+
+  try {
+    // yt-whisper can output in different formats
+    if (typeof output === "string") {
+      // Plain text output - split into sentences and estimate timestamps
+      const sentences = output.match(/[^.!?]+[.!?]+/g) || [output];
+      const avgSentenceLength = 5; // seconds per sentence estimate
+      let currentTime = 0;
+
+      for (const sentence of sentences) {
+        const text = sentence.trim();
+        if (text.length > 5) {
+          segments.push({
+            start: currentTime,
+            end: currentTime + avgSentenceLength,
+            text,
+          });
+          currentTime += avgSentenceLength;
+        }
+      }
+    } else if (typeof output === "object" && output !== null) {
+      const data = output as Record<string, unknown>;
+
+      // Check for segments array
+      if (Array.isArray(data.segments)) {
+        for (const seg of data.segments) {
+          segments.push({
+            start: seg.start || 0,
+            end: seg.end || seg.start + 5,
+            text: seg.text || "",
+          });
+        }
+      } else if (typeof data.text === "string") {
+        // Just text, split into estimated segments
+        const text = data.text as string;
+        const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+        const avgSentenceLength = 5;
+        let currentTime = 0;
+
+        for (const sentence of sentences) {
+          const sentenceText = sentence.trim();
+          if (sentenceText.length > 5) {
+            segments.push({
+              start: currentTime,
+              end: currentTime + avgSentenceLength,
+              text: sentenceText,
+            });
+            currentTime += avgSentenceLength;
+          }
+        }
+      }
+
+      // Handle SRT format output
+      if (typeof data.srt === "string") {
+        const srtLines = (data.srt as string).split("\n\n");
+        for (const block of srtLines) {
+          const lines = block.split("\n");
+          if (lines.length >= 3) {
+            const timeLine = lines[1];
+            const textLine = lines.slice(2).join(" ");
+            const timeMatch = timeLine.match(/(\d{2}):(\d{2}):(\d{2}),(\d{3}) --> (\d{2}):(\d{2}):(\d{2}),(\d{3})/);
+            if (timeMatch) {
+              const start = parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]) + parseInt(timeMatch[4]) / 1000;
+              const end = parseInt(timeMatch[5]) * 3600 + parseInt(timeMatch[6]) * 60 + parseInt(timeMatch[7]) + parseInt(timeMatch[8]) / 1000;
+              segments.push({ start, end, text: textLine.trim() });
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error("[Video Clipper] Error parsing yt-whisper output:", error);
   }
 
   return segments;
