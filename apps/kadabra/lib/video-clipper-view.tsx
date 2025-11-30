@@ -1425,8 +1425,10 @@ export function VideoClipperView({
       }
       const jobData = await res.json();
       console.log("[Video Clipper] Job created:", jobData.job.id);
+      console.log("[Video Clipper] Setting currentJob and showing modal");
       setCurrentJob(jobData.job);
       setShowBackgroundModal(true);
+      console.log("[Video Clipper] Modal should now be visible");
       fetchJobs(); // Refresh job list
     } catch (error) {
       console.error("[Video Clipper] Submit error:", error);
@@ -1521,6 +1523,7 @@ export function VideoClipperView({
       </div>
 
       {/* Background Processing Modal */}
+      {console.log("[Video Clipper] Modal check - showBackgroundModal:", showBackgroundModal, "currentJob:", !!currentJob)}
       {showBackgroundModal && currentJob && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full">
