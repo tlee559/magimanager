@@ -50,7 +50,7 @@ function LandingPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50 flex flex-col">
       {/* Header */}
-      <header className="w-full px-6 py-4 flex justify-between items-center max-w-5xl mx-auto">
+      <header className="w-full px-6 py-4 flex justify-between items-center max-w-4xl mx-auto">
         <div className="flex items-center gap-3">
           <SquareMLogoIcon size={40} />
           <span className="text-xl font-bold text-slate-100">MagiManager</span>
@@ -64,7 +64,7 @@ function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="px-6 pt-20 pb-16 max-w-3xl mx-auto text-center">
+      <section className="px-6 pt-24 pb-20 max-w-2xl mx-auto text-center">
         <div className="inline-block px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-sm font-medium mb-8">
           AI-Powered Platform
         </div>
@@ -72,7 +72,7 @@ function LandingPage() {
           Run 100s of Ad Accounts.<br />
           <span className="text-emerald-400">Zero Headaches.</span>
         </h1>
-        <p className="text-xl text-slate-400 mb-10 max-w-xl mx-auto leading-relaxed">
+        <p className="text-xl text-slate-400 mb-10 leading-relaxed">
           AI agents that help you scale. Auto reports that save you hours. Finally, a tool built for agencies that want to grow.
         </p>
         <a
@@ -84,62 +84,48 @@ function LandingPage() {
         <p className="text-slate-500 text-sm mt-4">Invite-only access</p>
       </section>
 
-      {/* Pain Points Section */}
-      <section className="px-6 py-16 max-w-3xl mx-auto">
-        <h2 className="text-3xl font-bold text-slate-100 mb-10 text-center">
+      {/* Sound Familiar Section */}
+      <section className="px-6 py-16 max-w-2xl mx-auto text-center">
+        <h2 className="text-3xl font-bold text-slate-100 mb-10">
           Sound familiar?
         </h2>
-        <div className="grid sm:grid-cols-2 gap-6">
-          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-            <div className="text-3xl mb-3">😫</div>
-            <p className="text-slate-300 leading-relaxed">
-              &quot;I spend hours every week making reports. I barely have time to actually run the ads.&quot;
-            </p>
+        <div className="space-y-4 text-left max-w-md mx-auto">
+          <div className="flex items-start gap-4 bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+            <span className="text-2xl">😩</span>
+            <p className="text-slate-300 text-lg">Stuck finding winning ad copy and creatives?</p>
           </div>
-          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-            <div className="text-3xl mb-3">🤯</div>
-            <p className="text-slate-300 leading-relaxed">
-              &quot;I want to take on more clients, but I can&apos;t keep up with the ones I have.&quot;
-            </p>
+          <div className="flex items-start gap-4 bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+            <span className="text-2xl">😴</span>
+            <p className="text-slate-300 text-lg">Tired of checking each account one by one?</p>
           </div>
-          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-            <div className="text-3xl mb-3">😴</div>
-            <p className="text-slate-300 leading-relaxed">
-              &quot;I&apos;m tired of checking each account one by one. There has to be a better way.&quot;
-            </p>
-          </div>
-          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-            <div className="text-3xl mb-3">💸</div>
-            <p className="text-slate-300 leading-relaxed">
-              &quot;I miss things because I&apos;m spread too thin. It&apos;s costing me money.&quot;
-            </p>
+          <div className="flex items-start gap-4 bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+            <span className="text-2xl">🤯</span>
+            <p className="text-slate-300 text-lg">Stuck in a loop cause you&apos;re just doing too much?</p>
           </div>
         </div>
       </section>
 
       {/* CTA Section */}
-      <section className="px-6 py-16 max-w-3xl mx-auto text-center flex-1 flex flex-col justify-center">
+      <section className="px-6 py-20 max-w-2xl mx-auto text-center flex-1">
         <h2 className="text-3xl md:text-4xl font-bold text-slate-100 mb-8">
           If this sounds like you...
         </h2>
         <a
           href={loginUrl}
-          className="inline-block px-12 py-5 bg-emerald-500 text-slate-950 font-bold rounded-xl hover:bg-emerald-400 transition text-xl shadow-lg shadow-emerald-500/25"
+          className="inline-block px-14 py-5 bg-emerald-500 text-slate-950 font-bold rounded-xl hover:bg-emerald-400 transition text-2xl shadow-lg shadow-emerald-500/25"
         >
-          Login NOW
+          Login NOW!
         </a>
       </section>
 
       {/* Footer */}
-      <footer className="px-6 py-6 border-t border-slate-800">
-        <div className="max-w-5xl mx-auto flex justify-between items-center">
+      <footer className="px-6 py-6 border-t border-slate-800 mt-auto">
+        <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-2">
             <SquareMLogoIcon size={24} />
             <span className="font-semibold text-slate-100">MagiManager</span>
           </div>
-          <p className="text-sm text-slate-500">
-            © 2024 MagiManager
-          </p>
+          <p className="text-sm text-slate-500">© 2024 MagiManager</p>
         </div>
       </footer>
     </main>
@@ -150,14 +136,12 @@ export default function Home() {
   const router = useRouter();
   const { status } = useSession();
 
-  // If already logged in, redirect to admin
   useEffect(() => {
     if (status === "authenticated") {
       router.push("/admin");
     }
   }, [status, router]);
 
-  // Show loading while checking session
   if (status === "loading") {
     return (
       <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
@@ -166,7 +150,6 @@ export default function Home() {
     );
   }
 
-  // If authenticated, don't render anything (redirect will happen)
   if (status === "authenticated") {
     return null;
   }
