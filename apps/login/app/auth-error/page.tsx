@@ -50,11 +50,14 @@ function clearAllCookies() {
 }
 
 export default function AuthErrorPage() {
+  const loginUrl =
+    process.env.NEXT_PUBLIC_LOGIN_URL || "https://login.magimanager.com";
+
   const handleClearAndRetry = () => {
     clearAllCookies();
     // Small delay to ensure cookies are cleared
     setTimeout(() => {
-      window.location.href = "https://login.magimanager.com";
+      window.location.href = loginUrl;
     }, 100);
   };
 

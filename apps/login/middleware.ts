@@ -49,7 +49,7 @@ export async function middleware(request: NextRequest) {
         const isValidDomain =
           parsed.hostname === "magimanager.com" ||
           parsed.hostname.endsWith(".magimanager.com") ||
-          parsed.hostname === "localhost";
+          (process.env.NODE_ENV !== "production" && parsed.hostname === "localhost");
 
         if (isValidDomain) {
           // Clear redirect counter on successful auth
