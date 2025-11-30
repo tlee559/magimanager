@@ -500,11 +500,11 @@ export function AdminApp({
           ))}
         </nav>
 
-        <div className="flex-shrink-0 w-full px-6 py-4 border-t border-slate-800 space-y-3">
+        <div className="flex-shrink-0 w-full px-4 py-3 border-t border-slate-800 space-y-2">
           {/* User Profile Button */}
           <button
             onClick={() => setShowProfileModal(true)}
-            className="w-full px-4 py-3 bg-slate-800/80 rounded-lg hover:bg-slate-700 transition text-left"
+            className="w-full px-3 py-2 bg-slate-800/80 rounded-lg hover:bg-slate-700 transition text-left"
           >
             <div className="text-sm font-medium text-slate-100">{session?.user?.name || "User"}</div>
             <div className="text-xs text-slate-400">{session?.user?.email || "No email"}</div>
@@ -513,10 +513,9 @@ export function AdminApp({
           {/* MagiManager Ads Console Button - Green */}
           <a
             href={`${kadabraUrl}/admin`}
-            className="block w-full px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-500 hover:to-teal-500 transition text-sm text-center"
+            className="block w-full px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-500 hover:to-teal-500 transition text-sm text-center"
           >
             <span className="font-semibold">MagiManager Ads Console</span>
-            <span className="block text-[11px] text-emerald-100/80">Campaign Management</span>
           </a>
 
           {/* Logout Button */}
@@ -524,16 +523,15 @@ export function AdminApp({
             onClick={() => {
               window.location.href = "/logout";
             }}
-            className="w-full px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition text-sm flex items-center justify-center gap-2"
+            className="w-full px-3 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition text-sm flex items-center justify-center gap-2"
           >
             <span>🚪</span>
             <span>Logout</span>
           </button>
 
           {/* Version Info */}
-          <div className="pt-2 text-xs text-center">
-            <div className="text-slate-400 font-medium">ABRA v{appVersion}</div>
-            <div className="text-slate-600">Build: {buildSha?.slice(0, 7) || "local"}</div>
+          <div className="text-[10px] text-center text-slate-500">
+            ABRA v{appVersion} · {buildSha?.slice(0, 7) || "local"}
           </div>
         </div>
       </aside>
