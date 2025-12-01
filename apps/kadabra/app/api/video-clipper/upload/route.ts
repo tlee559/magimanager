@@ -6,8 +6,13 @@ import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 // Configure route for client uploads
 export const runtime = "nodejs";
 
+// Max file size: 1GB (matches client-side validation)
+const MAX_FILE_SIZE_BYTES = 1024 * 1024 * 1024; // 1GB
+
 // POST /api/video-clipper/upload - Handle client-side upload to Vercel Blob
+// Supports both regular and multipart uploads for large files
 export async function POST(req: NextRequest) {
+  const startTime = Date.now();
   console.log("[Video Clipper Upload] Received request");
 
   // Check if BLOB token is configured
@@ -20,7 +25,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = (await req.json()) as HandleUploadBody;
-  console.log("[Video Clipper Upload] Request type:", body.type);
+  console.log(`[Video Clipper Upload] Request type: ${body.type}`);
 
   try {
     const jsonResponse = await handleUpload({
@@ -37,10 +42,12 @@ export async function POST(req: NextRequest) {
 
         // Validate file extension
         const extension = pathname.split(".").pop()?.toLowerCase() || "";
-        const allowedExtensions = ["mp4", "webm", "mov", "avi", "mkv"];
+        const allowedExtensions = ["mp4", "webm", "mov", "avi", "mkv", "m4v"];
         if (!allowedExtensions.includes(extension)) {
-          throw new Error("Invalid file type. Supported: MP4, WebM, MOV, AVI, MKV");
+          throw new Error("Invalid file type. Supported: MP4, WebM, MOV, AVI, MKV, M4V");
         }
+
+        console.log(`[Video Clipper Upload] Generating token for: ${pathname} (user: ${userId})`);
 
         return {
           allowedContentTypes: [
@@ -49,27 +56,30 @@ export async function POST(req: NextRequest) {
             "video/quicktime",
             "video/x-msvideo",
             "video/x-matroska",
+            "video/x-m4v",
           ],
-          maximumSizeInBytes: 500 * 1024 * 1024, // 500MB
+          maximumSizeInBytes: MAX_FILE_SIZE_BYTES,
           tokenPayload: JSON.stringify({ userId }),
         };
       },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
         // Called after upload is complete
-        console.log("[Video Clipper] Upload completed:", blob.url);
+        const durationSec = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(`[Video Clipper Upload] Complete: ${blob.url}`);
+        console.log(`[Video Clipper Upload] Duration: ${durationSec}s`);
 
         try {
           const { userId } = JSON.parse(tokenPayload || "{}");
-          console.log("[Video Clipper] Upload by user:", userId);
+          console.log(`[Video Clipper Upload] User: ${userId}`);
         } catch (error) {
-          console.error("[Video Clipper] Error in onUploadCompleted:", error);
+          console.error("[Video Clipper Upload] Error in onUploadCompleted:", error);
         }
       },
     });
 
     return NextResponse.json(jsonResponse);
   } catch (error) {
-    console.error("[Video Clipper] Upload error:", error);
+    console.error("[Video Clipper Upload] Error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Upload failed" },
       { status: 400 }

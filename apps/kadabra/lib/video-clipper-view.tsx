@@ -1948,14 +1948,17 @@ export function VideoClipperView({
 
       // Handle file upload
       if (data.uploadedFile) {
-        // Validate file size before upload
-        const maxSize = 500 * 1024 * 1024; // 500MB
+        // Validate file size before upload (1GB max to match UI)
+        const maxSize = 1024 * 1024 * 1024; // 1GB
         if (data.uploadedFile.size > maxSize) {
-          throw new Error("File too large. Maximum size is 500MB");
+          throw new Error("File too large. Maximum size is 1GB");
         }
 
-        // Upload the video file using client-side upload (bypasses serverless function limits)
-        console.log("[Video Clipper] Uploading video:", data.uploadedFile.name, "Size:", data.uploadedFile.size);
+        // Upload the video file using client-side multipart upload
+        // Multipart uploads chunks in parallel for much faster large file uploads
+        const fileSizeMB = Math.round(data.uploadedFile.size / (1024 * 1024));
+        console.log(`[Video Clipper] Uploading video: ${data.uploadedFile.name} (${fileSizeMB}MB)`);
+        console.log("[Video Clipper] Using multipart upload for parallel chunk uploading");
         setIsUploading(true);
 
         try {
@@ -1965,6 +1968,7 @@ export function VideoClipperView({
             {
               access: "public",
               handleUploadUrl: "/api/video-clipper/upload",
+              multipart: true, // Enable multipart for faster parallel uploads
               onUploadProgress: (progress) => {
                 setUploadProgress(Math.round(progress.percentage));
               },
