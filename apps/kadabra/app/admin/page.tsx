@@ -7,7 +7,7 @@ import { useKadabraLayout } from "./layout";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { openChatForAccount } = useKadabraLayout();
+  const layoutContext = useKadabraLayout();
   const [accounts, setAccounts] = useState<AdAccount[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -55,7 +55,7 @@ export default function DashboardPage() {
         router.push(`/admin/accounts/${accountId}`);
       }}
       onChatAboutAccount={(account) => {
-        openChatForAccount(account);
+        layoutContext?.openChatForAccount(account);
       }}
     />
   );
