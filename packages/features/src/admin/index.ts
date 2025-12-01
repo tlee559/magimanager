@@ -21,17 +21,3 @@ export {
   SkeletonCheckInHistory,
   LoadingSpinner,
 } from "./skeleton-loaders";
-
-// Individual view exports for URL-based routing
-export {
-  TeamView,
-  SystemView,
-  SettingsView,
-  MyAccountsView,
-  MyRequestsView,
-  AdminRequestsView,
-  IdentitiesListView,
-  CreateIdentityView,
-  IdentityDetailView,
-  EditIdentityView,
-} from "./admin-ui";

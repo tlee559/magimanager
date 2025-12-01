@@ -126,8 +126,6 @@ const CAPTION_STYLES = [
 // ============================================================================
 
 function formatDuration(seconds: number): string {
-  // Handle NaN, null, undefined, or negative values
-  if (!seconds || isNaN(seconds) || seconds < 0) return "0:00";
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, "0")}`;
@@ -307,8 +305,7 @@ function InputStep({
 
   // Format duration helper
   const formatDuration = (seconds: number | null) => {
-    // Handle NaN, null, undefined, or negative values
-    if (!seconds || isNaN(seconds) || seconds < 0) return "";
+    if (!seconds) return "";
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     if (mins >= 60) {
