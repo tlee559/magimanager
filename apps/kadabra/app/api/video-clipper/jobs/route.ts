@@ -112,24 +112,17 @@ export async function POST(req: NextRequest) {
       targetAudience,
     } = body;
 
-    // Validate required fields based on source type
-    if (sourceType !== "upload" && sourceType !== "youtube") {
+    // Validate required fields - upload only (YouTube support removed)
+    if (sourceType !== "upload") {
       return NextResponse.json(
-        { error: "Source type must be 'upload' or 'youtube'" },
+        { error: "Source type must be 'upload'. YouTube URL support has been removed." },
         { status: 400 }
       );
     }
 
-    if (sourceType === "upload" && !uploadedVideoUrl) {
+    if (!uploadedVideoUrl) {
       return NextResponse.json(
         { error: "Uploaded video URL is required" },
-        { status: 400 }
-      );
-    }
-
-    if (sourceType === "youtube" && !sourceUrl) {
-      return NextResponse.json(
-        { error: "YouTube URL is required" },
         { status: 400 }
       );
     }
@@ -350,7 +343,6 @@ async function processVideoJob(jobId: string) {
 
     console.log(`${LOG_PREFIX} Job loaded from DB:`);
     console.log(`${LOG_PREFIX}   - sourceType: ${job.sourceType}`);
-    console.log(`${LOG_PREFIX}   - sourceUrl: ${job.sourceUrl?.substring(0, 80) || 'null'}`);
     console.log(`${LOG_PREFIX}   - uploadedVideoUrl: ${job.uploadedVideoUrl?.substring(0, 80) || 'null'}`);
     console.log(`${LOG_PREFIX}   - maxClips: ${job.maxClips}`);
     console.log(`${LOG_PREFIX}   - targetDuration: ${job.targetDuration}`);
@@ -359,44 +351,14 @@ async function processVideoJob(jobId: string) {
     let videoTitle = job.name || "Video";
     let transcript: TranscriptSegment[] = [];
 
-    // Handle YouTube source
-    if (job.sourceType === "youtube" && job.sourceUrl) {
-      console.log(`${LOG_PREFIX} ========== YOUTUBE MODE ==========`);
-      console.log(`${LOG_PREFIX} YouTube URL: ${job.sourceUrl}`);
-
-      await prisma.videoClipJob.update({
-        where: { id: jobId },
-        data: { status: "DOWNLOADING", progress: 10 },
-      });
-
-      // Step 1: Get direct video URL from YouTube
-      // Try multiple download providers in cascade
-      console.log(`${LOG_PREFIX} Step 1: Getting direct video URL...`);
-      videoUrl = await downloadYouTubeVideoUrl(job.sourceUrl);
-
-      if (!videoUrl) {
-        console.error(`${LOG_PREFIX} FATAL: Could not get YouTube video URL!`);
-        throw new Error(VIDEO_CLIPPER_ERRORS.YOUTUBE_DOWNLOAD_FAILED);
-      }
-
-      console.log(`${LOG_PREFIX} Video URL obtained: ${videoUrl.substring(0, 100)}...`);
-
-      await prisma.videoClipJob.update({
-        where: { id: jobId },
-        data: { progress: 25 },
-      });
-
-      // Set video title from YouTube URL metadata if available
-      videoTitle = job.name || "YouTube Video";
-
-    } else if (job.sourceType === "upload" && job.uploadedVideoUrl) {
-      // Handle uploaded video
+    // Handle uploaded video (YouTube support removed)
+    if (job.sourceType === "upload" && job.uploadedVideoUrl) {
       console.log(`${LOG_PREFIX} ========== UPLOAD MODE ==========`);
       videoUrl = job.uploadedVideoUrl;
       videoTitle = job.name || "Uploaded Video";
       console.log(`${LOG_PREFIX} Uploaded video URL: ${videoUrl}`);
     } else {
-      console.error(`${LOG_PREFIX} ERROR: Invalid source - sourceType: ${job.sourceType}, sourceUrl: ${job.sourceUrl}, uploadedVideoUrl: ${job.uploadedVideoUrl}`);
+      console.error(`${LOG_PREFIX} ERROR: Invalid source - sourceType: ${job.sourceType}, uploadedVideoUrl: ${job.uploadedVideoUrl}`);
       throw new Error(VIDEO_CLIPPER_ERRORS.INVALID_VIDEO_URL);
     }
 
@@ -666,7 +628,7 @@ async function processVideoJob(jobId: string) {
     } else {
       // No direct video URL available - fail with clear error
       console.error(`${LOG_PREFIX} FATAL: No source video URL available for clipping!`);
-      throw new Error(VIDEO_CLIPPER_ERRORS.YOUTUBE_DOWNLOAD_FAILED);
+      throw new Error(VIDEO_CLIPPER_ERRORS.INVALID_VIDEO_URL);
     }
 
     // Mark job as completed
@@ -699,296 +661,6 @@ async function processVideoJob(jobId: string) {
       },
     });
   }
-}
-
-// ============================================================================
-// YOUTUBE DOWNLOAD (MULTI-PROVIDER CASCADE)
-// ============================================================================
-
-async function downloadYouTubeVideoUrl(youtubeUrl: string): Promise<string | null> {
-  console.log("[YouTube Download] ========== STARTING ==========");
-  console.log("[YouTube Download] URL:", youtubeUrl);
-
-  // Extract video ID for APIs that need it
-  const videoId = extractYouTubeVideoId(youtubeUrl);
-  console.log("[YouTube Download] Video ID:", videoId);
-
-  // Try multiple providers in order
-  // Note: Cobalt public API now requires auth (shut down Nov 2024)
-  // Using alternative free APIs
-  const providers = [
-    { name: "Loader.to", fn: () => tryLoaderToApi(videoId) },
-    { name: "ssyoutube", fn: () => trySsYoutubeApi(youtubeUrl) },
-    { name: "Y2mate", fn: () => tryY2mateApi(videoId) },
-    { name: "yt1s", fn: () => tryYt1sApi(videoId) },
-  ];
-
-  for (let i = 0; i < providers.length; i++) {
-    const provider = providers[i];
-    console.log(`[YouTube Download] Attempt ${i + 1}/${providers.length}: ${provider.name}`);
-    try {
-      const url = await provider.fn();
-      if (url) {
-        console.log(`[YouTube Download] ✅ SUCCESS with ${provider.name}`);
-        console.log(`[YouTube Download] Direct URL: ${url.substring(0, 100)}...`);
-        return url;
-      } else {
-        console.warn(`[YouTube Download] ${provider.name} returned null/empty`);
-      }
-    } catch (error) {
-      console.error(`[YouTube Download] ❌ ${provider.name} FAILED:`, error);
-    }
-  }
-
-  console.error("[YouTube Download] ========== ALL PROVIDERS FAILED ==========");
-  return null;
-}
-
-// Extract YouTube video ID from various URL formats
-function extractYouTubeVideoId(url: string): string | null {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([^&\n?#]+)/,
-    /^([a-zA-Z0-9_-]{11})$/, // Just the ID
-  ];
-
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match && match[1]) {
-      return match[1];
-    }
-  }
-  return null;
-}
-
-// Loader.to API - Free YouTube downloader
-async function tryLoaderToApi(videoId: string | null): Promise<string | null> {
-  if (!videoId) {
-    throw new Error("No video ID provided");
-  }
-
-  console.log("[Loader.to] Getting download link for:", videoId);
-
-  // Step 1: Initialize download
-  const initResponse = await fetch("https://loader.to/api/button/", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: `url=https://www.youtube.com/watch?v=${videoId}&format=720p`,
-    signal: AbortSignal.timeout(30000),
-  });
-
-  if (!initResponse.ok) {
-    throw new Error(`Loader.to init failed: ${initResponse.status}`);
-  }
-
-  const initData = await initResponse.json();
-  console.log("[Loader.to] Init response:", JSON.stringify(initData).slice(0, 200));
-
-  if (initData.download_url) {
-    return initData.download_url;
-  }
-
-  // If there's a conversion ID, poll for completion
-  if (initData.id) {
-    const pollUrl = `https://loader.to/api/get-info?id=${initData.id}`;
-    let attempts = 0;
-    const maxAttempts = 30;
-
-    while (attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      attempts++;
-
-      const pollResponse = await fetch(pollUrl);
-      const pollData = await pollResponse.json();
-      console.log(`[Loader.to] Poll ${attempts}: ${pollData.status || 'unknown'}`);
-
-      if (pollData.download_url) {
-        return pollData.download_url;
-      }
-
-      if (pollData.status === "error" || pollData.error) {
-        throw new Error(`Loader.to conversion failed: ${pollData.error || 'Unknown error'}`);
-      }
-    }
-
-    throw new Error("Loader.to conversion timed out");
-  }
-
-  throw new Error("Loader.to: No download URL in response");
-}
-
-// ssyoutube API - Alternative YouTube downloader
-async function trySsYoutubeApi(youtubeUrl: string): Promise<string | null> {
-  console.log("[ssyoutube] Getting download link...");
-
-  const response = await fetch("https://ssyoutube.com/api/convert", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "Accept": "application/json",
-    },
-    body: `url=${encodeURIComponent(youtubeUrl)}`,
-    signal: AbortSignal.timeout(30000),
-  });
-
-  console.log(`[ssyoutube] Response status: ${response.status}`);
-
-  if (!response.ok) {
-    throw new Error(`ssyoutube API returned ${response.status}`);
-  }
-
-  const data = await response.json();
-  console.log("[ssyoutube] Response:", JSON.stringify(data).slice(0, 300));
-
-  // Look for MP4 download link
-  if (data.url) return data.url;
-  if (data.links) {
-    const mp4Link = data.links.find((l: { type?: string; url?: string }) =>
-      l.type?.includes("mp4") || l.url?.includes(".mp4")
-    );
-    if (mp4Link?.url) return mp4Link.url;
-  }
-
-  throw new Error("ssyoutube: No download URL found");
-}
-
-// Y2mate-style API (commonly used)
-async function tryY2mateApi(videoId: string | null): Promise<string | null> {
-  if (!videoId) {
-    throw new Error("No video ID provided");
-  }
-
-  console.log("[Y2mate] Analyzing video:", videoId);
-
-  // Step 1: Analyze the video
-  const analyzeResponse = await fetch("https://www.y2mate.com/mates/analyzeV2/ajax", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: `k_query=https://www.youtube.com/watch?v=${videoId}&k_page=home&hl=en&q_auto=1`,
-    signal: AbortSignal.timeout(30000),
-  });
-
-  if (!analyzeResponse.ok) {
-    throw new Error(`Y2mate analyze failed: ${analyzeResponse.status}`);
-  }
-
-  const analyzeData = await analyzeResponse.json();
-  console.log("[Y2mate] Analyze response status:", analyzeData.status);
-
-  if (analyzeData.status !== "ok" || !analyzeData.links?.mp4) {
-    throw new Error("Y2mate: No download links found");
-  }
-
-  // Find 720p or best available quality
-  const mp4Links = analyzeData.links.mp4;
-  const quality720 = Object.values(mp4Links).find((link: unknown) => {
-    const l = link as { q?: string };
-    return l.q === "720p" || l.q === "720";
-  }) as { k?: string; q?: string } | undefined;
-
-  const bestQuality = quality720 || Object.values(mp4Links)[0] as { k?: string } | undefined;
-
-  if (!bestQuality?.k) {
-    throw new Error("Y2mate: No suitable quality found");
-  }
-
-  console.log("[Y2mate] Converting with key:", bestQuality.k);
-
-  // Step 2: Convert/get download URL
-  const convertResponse = await fetch("https://www.y2mate.com/mates/convertV2/index", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: `vid=${videoId}&k=${bestQuality.k}`,
-    signal: AbortSignal.timeout(60000), // Longer timeout for conversion
-  });
-
-  if (!convertResponse.ok) {
-    throw new Error(`Y2mate convert failed: ${convertResponse.status}`);
-  }
-
-  const convertData = await convertResponse.json();
-  console.log("[Y2mate] Convert response status:", convertData.status);
-
-  if (convertData.status === "ok" && convertData.dlink) {
-    return convertData.dlink;
-  }
-
-  throw new Error("Y2mate: Conversion failed");
-}
-
-// yt1s API - Popular YouTube downloader
-async function tryYt1sApi(videoId: string | null): Promise<string | null> {
-  if (!videoId) {
-    throw new Error("No video ID provided");
-  }
-
-  console.log("[yt1s] Analyzing video:", videoId);
-
-  // Step 1: Analyze video
-  const analyzeResponse = await fetch("https://www.yt1s.com/api/ajaxSearch/index", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "Origin": "https://www.yt1s.com",
-      "Referer": "https://www.yt1s.com/",
-    },
-    body: `q=https://www.youtube.com/watch?v=${videoId}&vt=home`,
-    signal: AbortSignal.timeout(30000),
-  });
-
-  if (!analyzeResponse.ok) {
-    throw new Error(`yt1s analyze failed: ${analyzeResponse.status}`);
-  }
-
-  const analyzeData = await analyzeResponse.json();
-  console.log("[yt1s] Analyze response status:", analyzeData.status);
-
-  if (analyzeData.status !== "ok" || !analyzeData.links?.mp4) {
-    throw new Error("yt1s: No download links found");
-  }
-
-  // Find 720p or best available
-  const mp4Links = analyzeData.links.mp4;
-  const linkKeys = Object.keys(mp4Links);
-  const quality720 = linkKeys.find(k => k.includes("720") || mp4Links[k]?.q === "720p");
-  const selectedKey = quality720 || linkKeys[0];
-  const selectedLink = mp4Links[selectedKey];
-
-  if (!selectedLink?.k) {
-    throw new Error("yt1s: No suitable quality found");
-  }
-
-  console.log("[yt1s] Converting with key:", selectedLink.k);
-
-  // Step 2: Convert
-  const convertResponse = await fetch("https://www.yt1s.com/api/ajaxConvert/convert", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "Origin": "https://www.yt1s.com",
-      "Referer": "https://www.yt1s.com/",
-    },
-    body: `vid=${videoId}&k=${encodeURIComponent(selectedLink.k)}`,
-    signal: AbortSignal.timeout(60000),
-  });
-
-  if (!convertResponse.ok) {
-    throw new Error(`yt1s convert failed: ${convertResponse.status}`);
-  }
-
-  const convertData = await convertResponse.json();
-  console.log("[yt1s] Convert response status:", convertData.status);
-
-  if (convertData.status === "ok" && convertData.dlink) {
-    return convertData.dlink;
-  }
-
-  throw new Error("yt1s: Conversion failed");
 }
 
 // ============================================================================

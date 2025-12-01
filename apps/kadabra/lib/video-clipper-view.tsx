@@ -26,8 +26,6 @@ import {
   Palette,
   Settings,
   X,
-  Link,
-  Youtube,
 } from "lucide-react";
 
 // ============================================================================
@@ -37,8 +35,7 @@ import {
 interface VideoClipJob {
   id: string;
   name?: string;
-  sourceType: "youtube" | "upload";
-  sourceUrl?: string;
+  sourceType: "upload";
   uploadedVideoUrl?: string;
   videoDuration?: number;
   videoTitle?: string;
@@ -189,16 +186,8 @@ function getScoreBg(score: number): string {
 }
 
 // ============================================================================
-// INPUT STEP - SOURCE SELECTION
+// INPUT STEP - UPLOAD ONLY
 // ============================================================================
-
-interface YouTubePreview {
-  title: string;
-  author: string;
-  thumbnail: string;
-  duration: number | null;
-  videoId: string;
-}
 
 function InputStep({
   onSubmit,
@@ -207,8 +196,7 @@ function InputStep({
   isUploading,
 }: {
   onSubmit: (data: {
-    sourceType: "youtube" | "upload";
-    youtubeUrl?: string;
+    sourceType: "upload";
     uploadedFile?: File;
     name?: string;
     targetFormat: string;
@@ -224,21 +212,11 @@ function InputStep({
   uploadProgress?: number;
   isUploading?: boolean;
 }) {
-  // Source selection
-  const [sourceTab, setSourceTab] = useState<"youtube" | "upload">("youtube");
-
-  // YouTube state
-  const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [youtubePreview, setYoutubePreview] = useState<YouTubePreview | null>(null);
-  const [isValidatingUrl, setIsValidatingUrl] = useState(false);
-  const [youtubeError, setYoutubeError] = useState<string | null>(null);
-  const validateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
   // Upload state
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Shared settings
+  // Settings
   const [name, setName] = useState("");
   const [targetFormat, setTargetFormat] = useState("vertical");
   const [targetDuration, setTargetDuration] = useState(60);
@@ -247,74 +225,6 @@ function InputStep({
   const [productContext, setProductContext] = useState("");
   const [targetAudience, setTargetAudience] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
-
-  // Validate YouTube URL with debounce
-  useEffect(() => {
-    if (validateTimeoutRef.current) {
-      clearTimeout(validateTimeoutRef.current);
-    }
-
-    if (!youtubeUrl.trim()) {
-      setYoutubePreview(null);
-      setYoutubeError(null);
-      return;
-    }
-
-    // Check if it looks like a YouTube URL
-    if (!youtubeUrl.includes("youtube.com") && !youtubeUrl.includes("youtu.be")) {
-      setYoutubePreview(null);
-      setYoutubeError(null);
-      return;
-    }
-
-    setIsValidatingUrl(true);
-    setYoutubeError(null);
-
-    validateTimeoutRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/video-clipper/validate-youtube?url=${encodeURIComponent(youtubeUrl)}`);
-        const data = await res.json();
-
-        if (data.valid) {
-          setYoutubePreview({
-            title: data.title,
-            author: data.author,
-            thumbnail: data.thumbnail,
-            duration: data.duration,
-            videoId: data.videoId,
-          });
-          setYoutubeError(null);
-        } else {
-          setYoutubePreview(null);
-          setYoutubeError(data.error || "Invalid YouTube URL");
-        }
-      } catch {
-        setYoutubeError("Failed to validate URL");
-        setYoutubePreview(null);
-      } finally {
-        setIsValidatingUrl(false);
-      }
-    }, 500);
-
-    return () => {
-      if (validateTimeoutRef.current) {
-        clearTimeout(validateTimeoutRef.current);
-      }
-    };
-  }, [youtubeUrl]);
-
-  // Format duration helper
-  const formatDuration = (seconds: number | null) => {
-    if (!seconds) return "";
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    if (mins >= 60) {
-      const hours = Math.floor(mins / 60);
-      const remainingMins = mins % 60;
-      return `${hours}h ${remainingMins}m`;
-    }
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -333,43 +243,24 @@ function InputStep({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!uploadedFile) return;
 
-    if (sourceTab === "youtube") {
-      if (!youtubePreview) return;
-      onSubmit({
-        sourceType: "youtube",
-        youtubeUrl,
-        name: name || youtubePreview.title || undefined,
-        targetFormat,
-        targetDuration,
-        maxClips,
-        addCaptions: false,  // Captions added on-demand after clip generation
-        captionStyle: "modern",  // Default, will be selected when adding captions
-        industry: industry || undefined,
-        productContext: productContext || undefined,
-        targetAudience: targetAudience || undefined,
-      });
-    } else {
-      if (!uploadedFile) return;
-      onSubmit({
-        sourceType: "upload",
-        uploadedFile,
-        name: name || undefined,
-        targetFormat,
-        targetDuration,
-        maxClips,
-        addCaptions: false,  // Captions added on-demand after clip generation
-        captionStyle: "modern",  // Default, will be selected when adding captions
-        industry: industry || undefined,
-        productContext: productContext || undefined,
-        targetAudience: targetAudience || undefined,
-      });
-    }
+    onSubmit({
+      sourceType: "upload",
+      uploadedFile,
+      name: name || undefined,
+      targetFormat,
+      targetDuration,
+      maxClips,
+      addCaptions: false,
+      captionStyle: "modern",
+      industry: industry || undefined,
+      productContext: productContext || undefined,
+      targetAudience: targetAudience || undefined,
+    });
   };
 
-  const canSubmit = sourceTab === "youtube"
-    ? !!youtubePreview && !isValidatingUrl
-    : !!uploadedFile;
+  const canSubmit = !!uploadedFile;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl mx-auto">
@@ -386,109 +277,8 @@ function InputStep({
         </p>
       </div>
 
-      {/* Source Tabs */}
-      <div className="flex gap-2 p-1 bg-slate-800/50 rounded-xl">
-        <button
-          type="button"
-          onClick={() => setSourceTab("youtube")}
-          className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition ${
-            sourceTab === "youtube"
-              ? "bg-gradient-to-r from-red-500 to-pink-500 text-white"
-              : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
-          }`}
-        >
-          <Youtube className="w-5 h-5" />
-          YouTube URL
-        </button>
-        <button
-          type="button"
-          onClick={() => setSourceTab("upload")}
-          className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition ${
-            sourceTab === "upload"
-              ? "bg-gradient-to-r from-violet-500 to-purple-500 text-white"
-              : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
-          }`}
-        >
-          <Upload className="w-5 h-5" />
-          Upload File
-        </button>
-      </div>
-
-      {/* YouTube URL Input */}
-      {sourceTab === "youtube" && (
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              <div className="flex items-center gap-2">
-                <Link className="w-4 h-4 text-pink-400" />
-                YouTube Video URL *
-              </div>
-            </label>
-            <div className="relative">
-              <input
-                type="url"
-                value={youtubeUrl}
-                onChange={(e) => setYoutubeUrl(e.target.value)}
-                placeholder="https://www.youtube.com/watch?v=..."
-                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-500 transition pr-10"
-              />
-              {isValidatingUrl && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <Loader2 className="w-5 h-5 text-slate-500 animate-spin" />
-                </div>
-              )}
-              {youtubePreview && !isValidatingUrl && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <CheckCircle className="w-5 h-5 text-green-500" />
-                </div>
-              )}
-            </div>
-            {youtubeError && (
-              <p className="mt-2 text-sm text-red-400 flex items-center gap-1">
-                <AlertCircle className="w-4 h-4" />
-                {youtubeError}
-              </p>
-            )}
-          </div>
-
-          {/* YouTube Preview */}
-          {youtubePreview && (
-            <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
-              <div className="flex gap-4">
-                <img
-                  src={youtubePreview.thumbnail}
-                  alt={youtubePreview.title}
-                  className="w-40 h-24 object-cover rounded-lg flex-shrink-0"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-slate-100 font-medium line-clamp-2 mb-1">
-                    {youtubePreview.title}
-                  </p>
-                  <p className="text-sm text-slate-500 mb-2">
-                    {youtubePreview.author}
-                  </p>
-                  {youtubePreview.duration && (
-                    <p className="text-xs text-slate-400 flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {formatDuration(youtubePreview.duration)}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {!youtubeUrl && (
-            <p className="text-sm text-slate-500 text-center py-4">
-              Paste a YouTube URL to get started. Works with any public video.
-            </p>
-          )}
-        </div>
-      )}
-
       {/* File Upload */}
-      {sourceTab === "upload" && (
-        <div>
+      <div>
           <label className="block text-sm font-medium text-slate-300 mb-2">
             <div className="flex items-center gap-2">
               <Upload className="w-4 h-4 text-pink-400" />
@@ -558,8 +348,7 @@ function InputStep({
               </div>
             </div>
           )}
-        </div>
-      )}
+      </div>
 
       {/* Project Name */}
       <div>
@@ -1755,8 +1544,7 @@ export function VideoClipperView({
   };
 
   const handleSubmit = async (data: {
-    sourceType: "youtube" | "upload";
-    youtubeUrl?: string;
+    sourceType: "upload";
     uploadedFile?: File;
     name?: string;
     targetFormat: string;
@@ -1774,8 +1562,8 @@ export function VideoClipperView({
     try {
       let uploadedVideoUrl: string | undefined;
 
-      // Handle file upload if sourceType is upload
-      if (data.sourceType === "upload" && data.uploadedFile) {
+      // Handle file upload
+      if (data.uploadedFile) {
         // Validate file size before upload
         const maxSize = 500 * 1024 * 1024; // 500MB
         if (data.uploadedFile.size > maxSize) {
@@ -1817,13 +1605,16 @@ export function VideoClipperView({
         } finally {
           setIsUploading(false);
         }
+      } else {
+        throw new Error("Please select a video file to upload.");
       }
 
       // Create job
       let res: Response;
       try {
         const jobPayload: Record<string, unknown> = {
-          sourceType: data.sourceType,
+          sourceType: "upload",
+          uploadedVideoUrl,
           name: data.name,
           targetFormat: data.targetFormat,
           targetDuration: data.targetDuration,
@@ -1834,12 +1625,6 @@ export function VideoClipperView({
           productContext: data.productContext,
           targetAudience: data.targetAudience,
         };
-
-        if (data.sourceType === "youtube") {
-          jobPayload.sourceUrl = data.youtubeUrl;
-        } else {
-          jobPayload.uploadedVideoUrl = uploadedVideoUrl;
-        }
 
         res = await fetch("/api/video-clipper/jobs", {
           method: "POST",

@@ -65,7 +65,6 @@ export function validateVideoClipperConfig(): VideoClipperConfigResult {
  */
 export const VIDEO_CLIPPER_ERRORS = {
   CONFIG_INVALID: "Server configuration error. Please contact support.",
-  YOUTUBE_DOWNLOAD_FAILED: "Could not download YouTube video. Please try uploading the file directly.",
   TRANSCRIPTION_FAILED: "Failed to transcribe video audio. Please try a different video or shorter clip.",
   ANALYSIS_FAILED: "AI analysis failed. Please try again.",
   CLIP_GENERATION_FAILED: "Failed to generate video clip. Please try again.",
