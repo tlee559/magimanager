@@ -513,14 +513,9 @@ async function processVideoJob(jobId: string) {
       // This is non-blocking - we start all jobs and return immediately
       // The webhook endpoint will handle completion
       for (const clipInfo of createdClips) {
-        await prisma.videoClip.update({
-          where: { id: clipInfo.id },
-          data: { status: "PROCESSING", processingProgress: 10 },
-        });
-
         // Start clip processing with webhook callback
         try {
-          await startReplicateWithWebhook(
+          const predictionId = await startReplicateWithWebhook(
             "lucataco/trim-video:a58ed80215326cba0a80c77a11dd0d0968c567388228891b3c5c67de2a8d10cb",
             {
               video: sourceVideoUrl,
@@ -531,6 +526,16 @@ async function processVideoJob(jobId: string) {
             },
             { jobId, step: "clip", clipId: clipInfo.id }
           );
+
+          // Store prediction ID for potential cancellation
+          await prisma.videoClip.update({
+            where: { id: clipInfo.id },
+            data: {
+              status: "PROCESSING",
+              processingProgress: 10,
+              replicatePredictionId: predictionId,
+            },
+          });
         } catch (error) {
           console.error(`[Video Clipper] Failed to start clip ${clipInfo.id}:`, error);
           await prisma.videoClip.update({

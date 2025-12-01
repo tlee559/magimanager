@@ -1076,6 +1076,7 @@ model VideoClip {
   status              ClipStatus  @default(PENDING)
   processingProgress  Int         @default(0)
   processingError     String?     @db.Text
+  replicatePredictionId String?   // Replicate prediction ID for cancellation
 
   // Output files (Vercel Blob URLs)
   clipUrl             String?     // Final processed clip
