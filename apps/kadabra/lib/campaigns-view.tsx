@@ -540,7 +540,6 @@ export function CampaignsView({ accountId, customerId, accountName }: CampaignsV
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [needsConnection, setNeedsConnection] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<CampaignStatus | "ALL">("ALL");
   const [typeFilter, setTypeFilter] = useState<CampaignType | "ALL">("ALL");
@@ -573,21 +572,12 @@ export function CampaignsView({ accountId, customerId, accountName }: CampaignsV
       const data = await res.json();
 
       if (!res.ok) {
-        // Check if account needs to be connected to Google Ads
-        if (data.error?.includes("not connected")) {
-          setNeedsConnection(true);
-          setLoading(false);
-          return;
-        }
         // Check if it's a reauth error
         if (data.needsReauth) {
-          throw new Error("This account needs to be re-authenticated. Please reconnect via OAuth.");
+          throw new Error("This account needs to be re-authenticated. Please reconnect via OAuth in Abra.");
         }
         throw new Error(data.error || "Failed to fetch campaigns");
       }
-
-      // Connection succeeded - clear the flag
-      setNeedsConnection(false);
 
       console.log('[CampaignsView] API Response:', {
         campaignsCount: data.campaigns?.length,
@@ -609,32 +599,6 @@ export function CampaignsView({ accountId, customerId, accountName }: CampaignsV
     fetchCampaigns();
   }, [accountId, customerId, dateRange]);
 
-  // Poll for connection when needsConnection is true (to detect OAuth completion)
-  useEffect(() => {
-    if (!needsConnection) return;
-
-    // Poll every 2 seconds to check if connection was made
-    const interval = setInterval(() => {
-      fetchCampaigns();
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [needsConnection]);
-
-  // Handle OAuth connect
-  function handleConnectOAuth() {
-    const width = 600;
-    const height = 700;
-    const left = window.screenX + (window.innerWidth - width) / 2;
-    const top = window.screenY + (window.innerHeight - height) / 2;
-
-    window.open(
-      `/api/oauth/google-ads/authorize?accountId=${accountId}`,
-      "google-oauth",
-      `width=${width},height=${height},left=${left},top=${top}`
-    );
-  }
-
   // Sync account with Google Ads (triggers full data refresh)
   async function syncAccount(): Promise<boolean> {
     try {
@@ -644,11 +608,6 @@ export function CampaignsView({ accountId, customerId, accountName }: CampaignsV
       const data = await res.json();
 
       if (!res.ok) {
-        // Check if account needs to be connected
-        if (data.error?.includes("not connected") || data.error?.includes("OAuth")) {
-          setNeedsConnection(true);
-          return false;
-        }
         console.error("Sync failed:", data.error);
         return false;
       }
@@ -791,33 +750,6 @@ export function CampaignsView({ accountId, customerId, accountName }: CampaignsV
           ))}
         </div>
         <div className="h-64 bg-slate-800/50 rounded-xl animate-pulse" />
-      </div>
-    );
-  }
-
-  // Needs connection state - prompt user to connect Google Ads
-  if (needsConnection) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mb-4">
-          <Link2 className="w-8 h-8 text-blue-400" />
-        </div>
-        <h3 className="text-lg font-semibold text-slate-100 mb-2">
-          Connect Google Ads
-        </h3>
-        <p className="text-sm text-slate-400 mb-6 max-w-md">
-          This account needs to be connected to Google Ads to view campaigns and performance data.
-        </p>
-        <button
-          onClick={handleConnectOAuth}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 transition"
-        >
-          <Link2 className="w-4 h-4" />
-          Connect to Google Ads
-        </button>
-        <p className="text-xs text-slate-500 mt-4">
-          A popup will open to authenticate with Google
-        </p>
       </div>
     );
   }
