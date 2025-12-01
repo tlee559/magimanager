@@ -806,6 +806,7 @@ function AccountDetailView({
 }) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loadingCampaigns, setLoadingCampaigns] = useState(false);
+  const [needsConnection, setNeedsConnection] = useState(false);
   const [dateRange, setDateRange] = useState<"TODAY" | "YESTERDAY" | "LAST_7_DAYS" | "LAST_14_DAYS" | "LAST_30_DAYS">("LAST_7_DAYS");
 
   // Inline expansion state
@@ -869,16 +870,53 @@ function AccountDetailView({
       const res = await fetch(
         `/api/campaigns?accountId=${account.id}&customerId=${customerId}&dateRange=${dateRange}`
       );
-      if (res.ok) {
-        const data = await res.json();
-        setCampaigns(data.campaigns || []);
+      const data = await res.json();
+
+      if (!res.ok) {
+        // Check if account needs to be connected to Google Ads
+        if (data.error?.includes("not connected")) {
+          setNeedsConnection(true);
+          setLoadingCampaigns(false);
+          return;
+        }
+        console.error("Failed to fetch campaigns:", data.error);
+        return;
       }
+
+      // Connection succeeded - clear the flag
+      setNeedsConnection(false);
+      setCampaigns(data.campaigns || []);
     } catch (err) {
       console.error("Failed to fetch campaigns:", err);
     } finally {
       setLoadingCampaigns(false);
     }
   };
+
+  // Poll for connection when needsConnection is true
+  useEffect(() => {
+    if (!needsConnection) return;
+
+    const interval = setInterval(() => {
+      fetchCampaigns();
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [needsConnection]);
+
+  // Handle OAuth connect
+  function handleConnectOAuth() {
+    const width = 600;
+    const height = 700;
+    const left = window.screenX + (window.innerWidth - width) / 2;
+    const top = window.screenY + (window.innerHeight - height) / 2;
+
+    window.open(
+      `/api/oauth/google-ads/authorize?accountId=${account.id}`,
+      "google-oauth",
+      `width=${width},height=${height},left=${left},top=${top}`
+    );
+  }
 
   // Fetch ad groups for a campaign
   const fetchAdGroups = async (campaignId: string) => {
@@ -1106,6 +1144,28 @@ function AccountDetailView({
             <div className="px-6 py-12 text-center text-slate-500">
               <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3" />
               Loading campaigns...
+            </div>
+          ) : needsConnection ? (
+            <div className="px-6 py-12 text-center">
+              <div className="w-12 h-12 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Link2 className="w-6 h-6 text-blue-400" />
+              </div>
+              <h3 className="text-base font-medium text-slate-200 mb-2">
+                Connect Google Ads
+              </h3>
+              <p className="text-sm text-slate-500 mb-4 max-w-sm mx-auto">
+                This account needs to be connected to Google Ads to view campaigns.
+              </p>
+              <button
+                onClick={handleConnectOAuth}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg inline-flex items-center gap-2 transition"
+              >
+                <Link2 className="w-4 h-4" />
+                Connect to Google Ads
+              </button>
+              <p className="text-xs text-slate-600 mt-3">
+                A popup will open to authenticate with Google
+              </p>
             </div>
           ) : campaigns.length === 0 ? (
             <div className="px-6 py-12 text-center text-slate-500">
