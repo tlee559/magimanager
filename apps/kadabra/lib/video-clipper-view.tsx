@@ -26,6 +26,9 @@ import {
   Palette,
   Settings,
   X,
+  Copy,
+  Check,
+  BarChart,
 } from "lucide-react";
 
 // ============================================================================
@@ -59,6 +62,17 @@ interface VideoClipJob {
   clips: VideoClip[];
 }
 
+interface ScoreBreakdown {
+  factors: Array<{ name: string; score: number; weight: number; reason: string }>;
+  improvementTips: string[];
+}
+
+interface PlatformRecommendation {
+  fit: number;
+  reasons: string[];
+  adjustments: string[];
+}
+
 interface VideoClip {
   id: string;
   jobId: string;
@@ -74,6 +88,23 @@ interface VideoClip {
   suggestedCaption?: string;
   keyMoments?: string;
   transcript?: string;
+  // Enhanced AI fields
+  marketingScoreBreakdown?: ScoreBreakdown;
+  hookStrengthBreakdown?: ScoreBreakdown;
+  conversionBreakdown?: ScoreBreakdown;
+  platformRecommendations?: {
+    google_ads?: PlatformRecommendation;
+    youtube_shorts?: PlatformRecommendation;
+    reels?: PlatformRecommendation;
+    tiktok?: PlatformRecommendation;
+  };
+  googleAdsHeadlines?: string[];
+  googleAdsDescriptions?: string[];
+  youtubeHook?: string;
+  reelsCaption?: string;
+  improvementSuggestions?: string[];
+  keyQuotes?: string[];
+  // Processing status
   status: "PENDING" | "PROCESSING" | "CAPTIONING" | "COMPLETED" | "FAILED";
   processingProgress: number;
   processingError?: string;
@@ -85,6 +116,17 @@ interface VideoClip {
   createdAt: string;
   updatedAt: string;
 }
+
+// ============================================================================
+// UPLOAD LIMITS
+// ============================================================================
+
+const UPLOAD_LIMITS = {
+  maxSizeMB: 1024, // 1GB max
+  maxDurationMin: 30, // 30 minutes max
+  allowedFormats: ["video/mp4", "video/quicktime", "video/webm", "video/x-m4v"],
+  allowedExtensions: [".mp4", ".mov", ".webm", ".m4v"],
+};
 
 // ============================================================================
 // CONSTANTS
@@ -214,7 +256,10 @@ function InputStep({
 }) {
   // Upload state
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [videoDuration, setVideoDuration] = useState<number | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoPreviewRef = useRef<HTMLVideoElement>(null);
 
   // Settings
   const [name, setName] = useState("");
@@ -226,10 +271,58 @@ function InputStep({
   const [targetAudience, setTargetAudience] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  // Validate video file
+  const validateAndSetFile = useCallback((file: File) => {
+    setValidationError(null);
+    setVideoDuration(null);
+
+    // Check file type
+    const isValidType = UPLOAD_LIMITS.allowedFormats.includes(file.type) ||
+      UPLOAD_LIMITS.allowedExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+
+    if (!isValidType) {
+      setValidationError(`Invalid file type. Supported formats: ${UPLOAD_LIMITS.allowedExtensions.join(", ")}`);
+      return;
+    }
+
+    // Check file size
+    const fileSizeMB = file.size / (1024 * 1024);
+    if (fileSizeMB > UPLOAD_LIMITS.maxSizeMB) {
+      setValidationError(`File too large (${fileSizeMB.toFixed(0)}MB). Maximum size is ${UPLOAD_LIMITS.maxSizeMB}MB (1GB)`);
+      return;
+    }
+
+    // Create video element to check duration
+    const video = document.createElement("video");
+    video.preload = "metadata";
+
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(video.src);
+      const durationMin = video.duration / 60;
+
+      if (durationMin > UPLOAD_LIMITS.maxDurationMin) {
+        setValidationError(`Video too long (${durationMin.toFixed(1)} min). Maximum duration is ${UPLOAD_LIMITS.maxDurationMin} minutes`);
+        return;
+      }
+
+      // Video is valid
+      setVideoDuration(video.duration);
+      setUploadedFile(file);
+    };
+
+    video.onerror = () => {
+      URL.revokeObjectURL(video.src);
+      // File might still be valid, just can't read metadata client-side
+      setUploadedFile(file);
+    };
+
+    video.src = URL.createObjectURL(file);
+  }, []);
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setUploadedFile(file);
+      validateAndSetFile(file);
     }
   };
 
@@ -237,9 +330,9 @@ function InputStep({
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];
     if (file && file.type.startsWith("video/")) {
-      setUploadedFile(file);
+      validateAndSetFile(file);
     }
-  }, []);
+  }, [validateAndSetFile]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -260,7 +353,7 @@ function InputStep({
     });
   };
 
-  const canSubmit = !!uploadedFile;
+  const canSubmit = !!uploadedFile && !validationError;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl mx-auto">
@@ -308,12 +401,15 @@ function InputStep({
                 <p className="text-slate-100 font-medium">{uploadedFile.name}</p>
                 <p className="text-xs text-slate-400">
                   {formatFileSize(uploadedFile.size)}
+                  {videoDuration && ` • ${formatDuration(videoDuration)}`}
                 </p>
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     setUploadedFile(null);
+                    setVideoDuration(null);
+                    setValidationError(null);
                   }}
                   className="text-xs text-red-400 hover:text-red-300"
                 >
@@ -327,11 +423,21 @@ function InputStep({
                   Drag & drop or click to upload
                 </p>
                 <p className="text-xs text-slate-500">
-                  MP4, MOV, WebM up to 500MB
+                  MP4, MOV, WebM • Max 1GB • Max 30 min
                 </p>
               </div>
             )}
           </div>
+
+          {/* Validation Error */}
+          {validationError && (
+            <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                <p className="text-sm text-red-400">{validationError}</p>
+              </div>
+            </div>
+          )}
 
           {/* Upload Progress Bar */}
           {isUploading && uploadProgress !== undefined && (
@@ -913,6 +1019,127 @@ function ClipCard({
 // CLIP PREVIEW MODAL
 // ============================================================================
 
+// Copy to clipboard helper
+function CopyableText({
+  text,
+  charLimit,
+  label,
+}: {
+  text: string;
+  charLimit?: number;
+  label?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const isOverLimit = charLimit && text.length > charLimit;
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="group relative flex items-start gap-2 p-2 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition">
+      <p className={`flex-1 text-sm ${isOverLimit ? "text-red-400" : "text-slate-200"}`}>
+        {text}
+      </p>
+      <button
+        onClick={handleCopy}
+        className="opacity-0 group-hover:opacity-100 p-1.5 bg-slate-600 rounded hover:bg-violet-500 transition"
+        title="Copy to clipboard"
+      >
+        {copied ? (
+          <Check className="w-3.5 h-3.5 text-green-400" />
+        ) : (
+          <Copy className="w-3.5 h-3.5 text-slate-300" />
+        )}
+      </button>
+      {charLimit && (
+        <span className={`text-[10px] ${isOverLimit ? "text-red-400" : "text-slate-500"}`}>
+          {text.length}/{charLimit}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Score breakdown component
+function ScoreBreakdownPanel({ breakdown, title }: { breakdown?: ScoreBreakdown; title: string }) {
+  if (!breakdown) return null;
+
+  return (
+    <div className="space-y-3">
+      <h5 className="text-xs font-medium text-slate-400 uppercase">{title} Breakdown</h5>
+      <div className="space-y-2">
+        {breakdown.factors.map((factor, i) => (
+          <div key={i} className="p-2 bg-slate-700/30 rounded-lg">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-slate-300 font-medium">{factor.name}</span>
+              <span className={`text-xs font-bold ${getScoreColor(factor.score)}`}>
+                {factor.score}
+              </span>
+            </div>
+            <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden mb-1">
+              <div
+                className={`h-full rounded-full ${factor.score >= 80 ? "bg-green-500" : factor.score >= 60 ? "bg-yellow-500" : "bg-red-500"}`}
+                style={{ width: `${factor.score}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-slate-500">{factor.reason}</p>
+          </div>
+        ))}
+      </div>
+      {breakdown.improvementTips.length > 0 && (
+        <div className="mt-3 p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+          <p className="text-[10px] text-amber-400 uppercase font-medium mb-1">Improve this score:</p>
+          <ul className="text-xs text-amber-300/80 space-y-1">
+            {breakdown.improvementTips.map((tip, i) => (
+              <li key={i}>• {tip}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Platform recommendation badge
+function PlatformBadge({ platform, rec }: { platform: string; rec?: PlatformRecommendation }) {
+  if (!rec) return null;
+
+  const platformNames: Record<string, string> = {
+    google_ads: "Google Ads",
+    youtube_shorts: "YouTube Shorts",
+    reels: "Reels",
+    tiktok: "TikTok",
+  };
+
+  return (
+    <div className="p-3 bg-slate-700/30 rounded-lg">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm font-medium text-slate-200">{platformNames[platform] || platform}</span>
+        <span className={`text-sm font-bold ${getScoreColor(rec.fit)}`}>{rec.fit}%</span>
+      </div>
+      {rec.reasons.length > 0 && (
+        <div className="mb-2">
+          <p className="text-[10px] text-green-400 uppercase">Why it works:</p>
+          <ul className="text-xs text-slate-400">
+            {rec.reasons.map((r, i) => <li key={i}>✓ {r}</li>)}
+          </ul>
+        </div>
+      )}
+      {rec.adjustments.length > 0 && (
+        <div>
+          <p className="text-[10px] text-amber-400 uppercase">Adjustments needed:</p>
+          <ul className="text-xs text-slate-400">
+            {rec.adjustments.map((a, i) => <li key={i}>• {a}</li>)}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ClipPreviewModal({
   clip,
   onClose,
@@ -926,6 +1153,7 @@ function ClipPreviewModal({
   const [isAddingCaptions, setIsAddingCaptions] = useState(false);
   const [showCaptionStyles, setShowCaptionStyles] = useState(false);
   const [captionError, setCaptionError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"overview" | "scores" | "copy" | "platforms">("overview");
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const momentConfig = MOMENT_TYPES[clip.momentType as keyof typeof MOMENT_TYPES] || {
@@ -1198,40 +1426,196 @@ function ClipPreviewModal({
           </div>
         </div>
 
-        {/* Analysis Content */}
-        <div className="p-4 space-y-4 max-h-[30vh] overflow-y-auto">
-          {/* Why Selected */}
-          <div>
-            <h4 className="text-xs font-medium text-slate-400 uppercase mb-2 flex items-center gap-2">
-              <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-              Why This Moment
-            </h4>
-            <p className="text-sm text-slate-300 leading-relaxed">{clip.whySelected}</p>
-          </div>
+        {/* Tab Navigation */}
+        <div className="flex border-b border-slate-800">
+          {[
+            { id: "overview", label: "Overview", icon: Sparkles },
+            { id: "scores", label: "Score Details", icon: BarChart },
+            { id: "copy", label: "Ad Copy", icon: Copy },
+            { id: "platforms", label: "Platforms", icon: Target },
+          ].map((tab) => {
+            const TabIcon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                className={`flex-1 px-3 py-3 text-xs font-medium transition flex items-center justify-center gap-1.5 ${
+                  activeTab === tab.id
+                    ? "text-violet-400 border-b-2 border-violet-500 bg-violet-500/5"
+                    : "text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                <TabIcon className="w-3.5 h-3.5" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
 
-          {/* Suggested Caption */}
-          {clip.suggestedCaption && (
-            <div>
-              <h4 className="text-xs font-medium text-slate-400 uppercase mb-2 flex items-center gap-2">
-                <Type className="w-3.5 h-3.5 text-pink-400" />
-                Suggested Caption
-              </h4>
-              <div className="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
-                <p className="text-sm text-slate-200 font-medium">&ldquo;{clip.suggestedCaption}&rdquo;</p>
+        {/* Tab Content */}
+        <div className="p-4 space-y-4 max-h-[35vh] overflow-y-auto">
+          {/* Overview Tab */}
+          {activeTab === "overview" && (
+            <>
+              {/* Why Selected */}
+              <div>
+                <h4 className="text-xs font-medium text-slate-400 uppercase mb-2 flex items-center gap-2">
+                  <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                  Why This Moment
+                </h4>
+                <p className="text-sm text-slate-300 leading-relaxed">{clip.whySelected}</p>
               </div>
+
+              {/* Key Quotes */}
+              {clip.keyQuotes && clip.keyQuotes.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-medium text-slate-400 uppercase mb-2 flex items-center gap-2">
+                    <MessageSquare className="w-3.5 h-3.5 text-pink-400" />
+                    Key Quotes
+                  </h4>
+                  <div className="space-y-2">
+                    {clip.keyQuotes.map((quote, i) => (
+                      <CopyableText key={i} text={`"${quote}"`} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Improvement Suggestions */}
+              {clip.improvementSuggestions && clip.improvementSuggestions.length > 0 && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                  <h4 className="text-xs font-medium text-amber-400 uppercase mb-2 flex items-center gap-2">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    How to Improve
+                  </h4>
+                  <ul className="text-sm text-amber-300/80 space-y-1">
+                    {clip.improvementSuggestions.map((tip, i) => (
+                      <li key={i}>• {tip}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Transcript */}
+              {clip.transcript && (
+                <div>
+                  <h4 className="text-xs font-medium text-slate-400 uppercase mb-2 flex items-center gap-2">
+                    <Type className="w-3.5 h-3.5 text-blue-400" />
+                    Transcript
+                  </h4>
+                  <div className="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <p className="text-sm text-slate-400 italic">&ldquo;{clip.transcript}&rdquo;</p>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Scores Tab */}
+          {activeTab === "scores" && (
+            <div className="space-y-6">
+              <ScoreBreakdownPanel breakdown={clip.marketingScoreBreakdown} title="Marketing Score" />
+              <ScoreBreakdownPanel breakdown={clip.hookStrengthBreakdown} title="Hook Strength" />
+              <ScoreBreakdownPanel breakdown={clip.conversionBreakdown} title="Conversion Potential" />
+              {!clip.marketingScoreBreakdown && !clip.hookStrengthBreakdown && !clip.conversionBreakdown && (
+                <p className="text-sm text-slate-500 text-center py-8">
+                  Score breakdowns not available for this clip.
+                </p>
+              )}
             </div>
           )}
 
-          {/* Transcript */}
-          {clip.transcript && (
-            <div>
-              <h4 className="text-xs font-medium text-slate-400 uppercase mb-2 flex items-center gap-2">
-                <MessageSquare className="w-3.5 h-3.5 text-blue-400" />
-                Transcript
-              </h4>
-              <div className="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
-                <p className="text-sm text-slate-400 italic">&ldquo;{clip.transcript}&rdquo;</p>
-              </div>
+          {/* Ad Copy Tab */}
+          {activeTab === "copy" && (
+            <div className="space-y-6">
+              {/* Google Ads Headlines */}
+              {clip.googleAdsHeadlines && clip.googleAdsHeadlines.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-medium text-slate-400 uppercase mb-2 flex items-center gap-2">
+                    <Target className="w-3.5 h-3.5 text-blue-400" />
+                    Google Ads Headlines
+                    <span className="text-[10px] text-slate-500">(30 char max)</span>
+                  </h4>
+                  <div className="space-y-2">
+                    {clip.googleAdsHeadlines.map((headline, i) => (
+                      <CopyableText key={i} text={headline} charLimit={30} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Google Ads Descriptions */}
+              {clip.googleAdsDescriptions && clip.googleAdsDescriptions.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-medium text-slate-400 uppercase mb-2 flex items-center gap-2">
+                    <Type className="w-3.5 h-3.5 text-blue-400" />
+                    Google Ads Descriptions
+                    <span className="text-[10px] text-slate-500">(90 char max)</span>
+                  </h4>
+                  <div className="space-y-2">
+                    {clip.googleAdsDescriptions.map((desc, i) => (
+                      <CopyableText key={i} text={desc} charLimit={90} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* YouTube Hook */}
+              {clip.youtubeHook && (
+                <div>
+                  <h4 className="text-xs font-medium text-slate-400 uppercase mb-2 flex items-center gap-2">
+                    <Play className="w-3.5 h-3.5 text-red-400" />
+                    YouTube Shorts Hook
+                  </h4>
+                  <CopyableText text={clip.youtubeHook} />
+                </div>
+              )}
+
+              {/* Reels Caption */}
+              {clip.reelsCaption && (
+                <div>
+                  <h4 className="text-xs font-medium text-slate-400 uppercase mb-2 flex items-center gap-2">
+                    <Film className="w-3.5 h-3.5 text-pink-400" />
+                    Reels/TikTok Caption
+                  </h4>
+                  <CopyableText text={clip.reelsCaption} />
+                </div>
+              )}
+
+              {/* Suggested Caption fallback */}
+              {!clip.googleAdsHeadlines && !clip.youtubeHook && !clip.reelsCaption && clip.suggestedCaption && (
+                <div>
+                  <h4 className="text-xs font-medium text-slate-400 uppercase mb-2 flex items-center gap-2">
+                    <Type className="w-3.5 h-3.5 text-pink-400" />
+                    Suggested Caption
+                  </h4>
+                  <CopyableText text={clip.suggestedCaption} />
+                </div>
+              )}
+
+              {!clip.googleAdsHeadlines && !clip.youtubeHook && !clip.reelsCaption && !clip.suggestedCaption && (
+                <p className="text-sm text-slate-500 text-center py-8">
+                  Ad copy not available for this clip.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Platforms Tab */}
+          {activeTab === "platforms" && (
+            <div className="space-y-3">
+              {clip.platformRecommendations ? (
+                <>
+                  <PlatformBadge platform="google_ads" rec={clip.platformRecommendations.google_ads} />
+                  <PlatformBadge platform="youtube_shorts" rec={clip.platformRecommendations.youtube_shorts} />
+                  <PlatformBadge platform="reels" rec={clip.platformRecommendations.reels} />
+                  <PlatformBadge platform="tiktok" rec={clip.platformRecommendations.tiktok} />
+                </>
+              ) : (
+                <p className="text-sm text-slate-500 text-center py-8">
+                  Platform recommendations not available for this clip.
+                </p>
+              )}
             </div>
           )}
         </div>

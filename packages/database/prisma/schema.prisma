@@ -1072,6 +1072,26 @@ model VideoClip {
   keyMoments          String?     @db.Text  // JSON: timestamps of key frames within clip
   transcript          String?     @db.Text  // Transcript for this clip segment
 
+  // Score breakdowns (JSON) - detailed factors explaining each score
+  marketingScoreBreakdown   Json?  // {factors: [{name, score, weight, reason}], improvementTips: []}
+  hookStrengthBreakdown     Json?  // Hook-specific breakdown
+  conversionBreakdown       Json?  // Conversion-specific breakdown
+
+  // Platform recommendations
+  platformRecommendations   Json?  // {google_ads: {fit: 85, reasons: [], adjustments: []}, ...}
+
+  // Generated ad copy
+  googleAdsHeadlines        Json?  // ["Headline 1", "Headline 2", ...] (30 char max each)
+  googleAdsDescriptions     Json?  // ["Description 1", ...] (90 char max each)
+  youtubeHook               String? @db.Text  // Skip-proof opening line for Shorts
+  reelsCaption              String? @db.Text  // Native caption with hashtags
+
+  // Improvement suggestions
+  improvementSuggestions    Json?  // ["Add specific numbers", "Include CTA", ...]
+
+  // Extracted quotes
+  keyQuotes                 Json?  // ["Best quote from clip", ...]
+
   // Processing status
   status              ClipStatus  @default(PENDING)
   processingProgress  Int         @default(0)

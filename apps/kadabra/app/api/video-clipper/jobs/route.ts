@@ -485,6 +485,17 @@ async function processVideoJob(jobId: string) {
           whySelected: moment.whySelected,
           suggestedCaption: moment.suggestedCaption,
           transcript: moment.transcript,
+          // New enhanced fields from Gemini
+          marketingScoreBreakdown: moment.marketingScoreBreakdown || undefined,
+          hookStrengthBreakdown: moment.hookStrengthBreakdown || undefined,
+          conversionBreakdown: moment.conversionBreakdown || undefined,
+          platformRecommendations: moment.platformRecommendations || undefined,
+          googleAdsHeadlines: moment.googleAdsHeadlines || undefined,
+          googleAdsDescriptions: moment.googleAdsDescriptions || undefined,
+          youtubeHook: moment.youtubeHook || undefined,
+          reelsCaption: moment.reelsCaption || undefined,
+          improvementSuggestions: moment.improvementSuggestions || undefined,
+          keyQuotes: moment.keyQuotes || undefined,
           status: "PENDING",
           processingProgress: 0,
         },
@@ -1147,6 +1158,45 @@ function getMockTranscript(): TranscriptSegment[] {
 // GEMINI ANALYSIS
 // ============================================================================
 
+// Marketing moment with enhanced AI analysis
+interface EnhancedMarketingMoment {
+  startTime: number;
+  endTime: number;
+  type: string;
+  marketingScore: number;
+  conversionPotential: number;
+  hookStrength: number;
+  emotionalImpact: number;
+  whySelected: string;
+  suggestedCaption: string;
+  transcript: string;
+  // New enhanced fields
+  marketingScoreBreakdown?: {
+    factors: Array<{ name: string; score: number; weight: number; reason: string }>;
+    improvementTips: string[];
+  };
+  hookStrengthBreakdown?: {
+    factors: Array<{ name: string; score: number; weight: number; reason: string }>;
+    improvementTips: string[];
+  };
+  conversionBreakdown?: {
+    factors: Array<{ name: string; score: number; weight: number; reason: string }>;
+    improvementTips: string[];
+  };
+  platformRecommendations?: {
+    google_ads: { fit: number; reasons: string[]; adjustments: string[] };
+    youtube_shorts: { fit: number; reasons: string[]; adjustments: string[] };
+    reels: { fit: number; reasons: string[]; adjustments: string[] };
+    tiktok: { fit: number; reasons: string[]; adjustments: string[] };
+  };
+  googleAdsHeadlines?: string[];
+  googleAdsDescriptions?: string[];
+  youtubeHook?: string;
+  reelsCaption?: string;
+  improvementSuggestions?: string[];
+  keyQuotes?: string[];
+}
+
 async function analyzeTranscriptWithGemini(
   transcript: TranscriptSegment[],
   job: {
@@ -1157,18 +1207,7 @@ async function analyzeTranscriptWithGemini(
     maxClips: number;
   }
 ): Promise<{
-  moments: Array<{
-    startTime: number;
-    endTime: number;
-    type: string;
-    marketingScore: number;
-    conversionPotential: number;
-    hookStrength: number;
-    emotionalImpact: number;
-    whySelected: string;
-    suggestedCaption: string;
-    transcript: string;
-  }>;
+  moments: EnhancedMarketingMoment[];
 }> {
   const apiKey = process.env.GOOGLE_API_KEY;
 
@@ -1177,36 +1216,48 @@ async function analyzeTranscriptWithGemini(
     .map((seg) => `[${formatTime(seg.start)} - ${formatTime(seg.end)}] ${seg.text}`)
     .join("\n");
 
-  const prompt = `You are an expert marketing analyst specializing in identifying HIGH-CONVERTING video moments for social media ads.
+  const prompt = `You are an ELITE marketing analyst specializing in creating HIGH-CONVERTING video ads for Google Ads, YouTube Shorts, Instagram Reels, and TikTok. Your clients are marketing agencies and affiliate marketers who need clips that SELL.
 
-CONTEXT:
-- Industry: ${job.industry || "General"}
-- Product/Service: ${job.productContext || "Not specified"}
+## CONTEXT
+- Industry: ${job.industry || "Affiliate Marketing / Direct Response"}
+- Product/Service: ${job.productContext || "Not specified - analyze the content"}
 - Target Audience: ${job.targetAudience || "General audience"}
 - Target Clip Duration: ~${job.targetDuration} seconds
 - Number of Clips Needed: ${job.maxClips}
 
-TRANSCRIPT:
+## TRANSCRIPT
 ${formattedTranscript}
 
-TASK:
-Analyze this transcript and identify the ${job.maxClips} BEST moments for creating short-form video ads (Reels/TikTok).
+## YOUR TASK
+Analyze this transcript and identify the ${job.maxClips} BEST moments for creating high-converting video ads. Think like a direct response marketer - what moments will STOP THE SCROLL and DRIVE ACTION?
 
-MOMENT TYPES TO LOOK FOR:
-- hook: Strong opening that grabs attention (pattern interrupts, bold claims)
-- testimonial: Customer success stories with specific results
-- benefit: Clear value proposition or feature explanation
-- cta: Call-to-action with urgency
-- social_proof: Numbers, testimonials, authority mentions
-- urgency: Time-sensitive offers, scarcity messaging
+## HOOK PATTERNS TO IDENTIFY (score higher)
+- PATTERN INTERRUPT: "Stop doing X", "Forget what you know", shocking statistics
+- CURIOSITY GAP: "Here's why...", "The secret...", incomplete information
+- IDENTITY HOOK: "If you're a [type of person]...", "For anyone who..."
+- CONTRARIAN: "Everything you've been told is wrong", "Nobody talks about this"
+- SPECIFIC RESULTS: "$X in Y days", "Lost X pounds", exact numbers + timeframes
 
-SCORING (1-100):
-- marketingScore: How well does this sell?
-- conversionPotential: Will it drive action?
-- hookStrength: Does it grab attention in first 3 seconds?
-- emotionalImpact: Does it create emotional connection?
+## SCORING RUBRIC (be strict!)
 
-Return ONLY a valid JSON object in this exact format:
+Marketing Score (1-100):
+- 95+: Specific numbers + pattern interrupt + clear value prop + social proof
+- 80-94: Strong hook with 3 of 4 elements
+- 60-79: Decent content, missing specificity or proof
+- <60: Generic, no hook, vague claims
+
+Hook Strength (1-100):
+- 95+: Would stop someone mid-scroll. Pattern interrupt + curiosity + specific claim
+- 80-94: Strong attention-grabber but missing one element
+- 60-79: Decent opening but could be stronger
+- <60: Weak or generic opening
+
+Conversion Potential (1-100):
+- Based on: specificity of claim, proof elements, urgency, clear next step, emotional trigger
+
+## OUTPUT FORMAT
+Return ONLY valid JSON. No markdown, no explanation, just the JSON object:
+
 {
   "moments": [
     {
@@ -1217,12 +1268,74 @@ Return ONLY a valid JSON object in this exact format:
       "conversionPotential": 88,
       "hookStrength": 95,
       "emotionalImpact": 85,
-      "whySelected": "Detailed explanation of why this moment would convert well",
+      "whySelected": "Detailed explanation of why this converts - mention specific patterns detected",
       "suggestedCaption": "Short punchy caption for social media",
-      "transcript": "The exact words from this segment"
+      "transcript": "Exact words from this segment",
+      "marketingScoreBreakdown": {
+        "factors": [
+          {"name": "Specificity", "score": 90, "weight": 30, "reason": "Includes specific dollar amount and timeframe"},
+          {"name": "Social Proof", "score": 85, "weight": 25, "reason": "References customer success story"},
+          {"name": "Hook Quality", "score": 95, "weight": 25, "reason": "Strong pattern interrupt opening"},
+          {"name": "Value Clarity", "score": 88, "weight": 20, "reason": "Clear benefit stated"}
+        ],
+        "improvementTips": ["Add more specific numbers", "Include a testimonial quote"]
+      },
+      "hookStrengthBreakdown": {
+        "factors": [
+          {"name": "Pattern Interrupt", "score": 95, "weight": 40, "reason": "Bold contrarian statement"},
+          {"name": "Curiosity Gap", "score": 85, "weight": 30, "reason": "Creates open loop"},
+          {"name": "Relevance", "score": 90, "weight": 30, "reason": "Speaks directly to target audience"}
+        ],
+        "improvementTips": ["Could add a specific number to increase impact"]
+      },
+      "conversionBreakdown": {
+        "factors": [
+          {"name": "Urgency", "score": 80, "weight": 25, "reason": "Time-limited element"},
+          {"name": "Proof", "score": 90, "weight": 30, "reason": "Specific results mentioned"},
+          {"name": "CTA Clarity", "score": 85, "weight": 25, "reason": "Clear next step"},
+          {"name": "Emotional Trigger", "score": 88, "weight": 20, "reason": "Appeals to fear of missing out"}
+        ],
+        "improvementTips": ["Strengthen urgency with deadline", "Add more social proof"]
+      },
+      "platformRecommendations": {
+        "google_ads": {"fit": 90, "reasons": ["Clear problem-solution", "Strong CTA"], "adjustments": ["Trim to 30 sec for optimal YouTube ads"]},
+        "youtube_shorts": {"fit": 95, "reasons": ["Strong hook in first second", "Vertical-friendly"], "adjustments": ["Add text overlay for silent viewing"]},
+        "reels": {"fit": 88, "reasons": ["Engaging hook", "Trendy format"], "adjustments": ["Add trending audio", "More dynamic cuts"]},
+        "tiktok": {"fit": 85, "reasons": ["Authentic feel"], "adjustments": ["Make it feel more native", "Add captions"]}
+      },
+      "googleAdsHeadlines": [
+        "Secret to $10K Months",
+        "Stop Wasting Money on Ads",
+        "3X Your Results in 30 Days",
+        "The Method Nobody Shares",
+        "Discover the Missing Link"
+      ],
+      "googleAdsDescriptions": [
+        "Learn the exact strategy that generated $10K in 30 days. Free guide reveals all.",
+        "Stop wasting ad spend. See how top marketers get 3X results with this method.",
+        "Join 10,000+ marketers who discovered this hidden technique. Limited time access."
+      ],
+      "youtubeHook": "Stop what you're doing - this changed everything for me",
+      "reelsCaption": "This is what they don't want you to know... 👀 #marketing #affiliate #business #entrepreneur #growth",
+      "improvementSuggestions": [
+        "Add specific dollar amounts for more impact",
+        "Include a quick testimonial clip",
+        "Add urgency with a deadline mention"
+      ],
+      "keyQuotes": [
+        "This completely changed my business",
+        "I went from zero to $10K in 30 days"
+      ]
     }
   ]
-}`;
+}
+
+IMPORTANT:
+- Google Ads headlines MUST be under 30 characters each
+- Google Ads descriptions MUST be under 90 characters each
+- Extract 2-3 actual quotes from the transcript that are memorable/shareable
+- Be HARSH with scoring - only the best moments should score 80+
+- Focus on moments that would work as standalone ads`;
 
   try {
     if (!apiKey) {
@@ -1238,8 +1351,8 @@ Return ONLY a valid JSON object in this exact format:
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 4096,
+            temperature: 0.4,
+            maxOutputTokens: 8192,
           },
         }),
       }
