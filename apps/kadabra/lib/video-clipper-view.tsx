@@ -243,8 +243,6 @@ function InputStep({
   const [targetFormat, setTargetFormat] = useState("vertical");
   const [targetDuration, setTargetDuration] = useState(60);
   const [maxClips, setMaxClips] = useState(5);
-  const [addCaptions, setAddCaptions] = useState(true);
-  const [captionStyle, setCaptionStyle] = useState("modern");
   const [industry, setIndustry] = useState("");
   const [productContext, setProductContext] = useState("");
   const [targetAudience, setTargetAudience] = useState("");
@@ -345,8 +343,8 @@ function InputStep({
         targetFormat,
         targetDuration,
         maxClips,
-        addCaptions,
-        captionStyle,
+        addCaptions: false,  // Captions added on-demand after clip generation
+        captionStyle: "modern",  // Default, will be selected when adding captions
         industry: industry || undefined,
         productContext: productContext || undefined,
         targetAudience: targetAudience || undefined,
@@ -360,8 +358,8 @@ function InputStep({
         targetFormat,
         targetDuration,
         maxClips,
-        addCaptions,
-        captionStyle,
+        addCaptions: false,  // Captions added on-demand after clip generation
+        captionStyle: "modern",  // Default, will be selected when adding captions
         industry: industry || undefined,
         productContext: productContext || undefined,
         targetAudience: targetAudience || undefined,
@@ -650,63 +648,6 @@ function InputStep({
         </div>
       </div>
 
-      {/* Captions Toggle */}
-      <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-xl">
-        <div className="flex items-center gap-3">
-          <Type className="w-5 h-5 text-pink-400" />
-          <div>
-            <span className="text-sm font-medium text-slate-100">Auto-Captions</span>
-            <p className="text-xs text-slate-500">Add dynamic captions to clips</p>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => setAddCaptions(!addCaptions)}
-          className={`relative w-12 h-6 rounded-full transition ${
-            addCaptions ? "bg-violet-500" : "bg-slate-700"
-          }`}
-        >
-          <span
-            className={`absolute top-1 w-4 h-4 rounded-full bg-white transition ${
-              addCaptions ? "left-7" : "left-1"
-            }`}
-          />
-        </button>
-      </div>
-
-      {/* Caption Style */}
-      {addCaptions && (
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
-            <div className="flex items-center gap-2">
-              <Palette className="w-4 h-4 text-pink-400" />
-              Caption Style
-            </div>
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            {CAPTION_STYLES.map((style) => (
-              <button
-                key={style.value}
-                type="button"
-                onClick={() => setCaptionStyle(style.value)}
-                className={`p-3 rounded-xl border transition text-left ${
-                  captionStyle === style.value
-                    ? "border-violet-500 bg-violet-500/10"
-                    : "border-slate-700 hover:border-slate-600"
-                }`}
-              >
-                <span className="block text-sm font-medium text-slate-100">
-                  {style.label}
-                </span>
-                <span className="block text-xs text-slate-500">
-                  {style.description}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Advanced Settings Toggle */}
       <button
         type="button"
@@ -874,10 +815,16 @@ function ProcessingView({
 function ClipCard({
   clip,
   onPreview,
+  onCaptionsAdded,
 }: {
   clip: VideoClip;
   onPreview: (clip: VideoClip) => void;
+  onCaptionsAdded?: () => void;
 }) {
+  const [isAddingCaptions, setIsAddingCaptions] = useState(false);
+  const [showCaptionStyles, setShowCaptionStyles] = useState(false);
+  const [captionError, setCaptionError] = useState<string | null>(null);
+
   const momentConfig = MOMENT_TYPES[clip.momentType as keyof typeof MOMENT_TYPES] || {
     label: clip.momentType,
     icon: Zap,
@@ -905,6 +852,34 @@ function ClipCard({
       window.URL.revokeObjectURL(downloadUrl);
     } catch (err) {
       console.error("Download failed:", err);
+    }
+  };
+
+  const handleAddCaptions = async (e: React.MouseEvent, style: string) => {
+    e.stopPropagation();
+    setIsAddingCaptions(true);
+    setCaptionError(null);
+    setShowCaptionStyles(false);
+
+    try {
+      const res = await fetch(`/api/video-clipper/clips/${clip.id}/captions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ captionStyle: style }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to add captions");
+      }
+
+      // Refresh the clip data
+      onCaptionsAdded?.();
+    } catch (err) {
+      console.error("Caption generation failed:", err);
+      setCaptionError(err instanceof Error ? err.message : "Failed to add captions");
+    } finally {
+      setIsAddingCaptions(false);
     }
   };
 
@@ -1017,6 +992,64 @@ function ClipCard({
           </div>
         )}
 
+        {/* Add Captions Button - show if video exists but no captions yet */}
+        {hasVideo && clip.status === "COMPLETED" && !clip.clipWithCaptionsUrl && (
+          <div className="relative">
+            {isAddingCaptions ? (
+              <div className="flex items-center justify-center gap-2 px-3 py-2 bg-pink-500/20 border border-pink-500/30 rounded-lg">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-pink-400" />
+                <span className="text-xs text-pink-300">Adding captions...</span>
+              </div>
+            ) : (
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowCaptionStyles(!showCaptionStyles);
+                    setCaptionError(null);
+                  }}
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-pink-500 hover:bg-pink-400 rounded-lg text-xs text-white transition"
+                >
+                  <Type className="w-3.5 h-3.5" />
+                  Add Captions
+                </button>
+
+                {/* Caption Style Dropdown */}
+                {showCaptionStyles && (
+                  <div className="absolute bottom-full left-0 right-0 mb-1 bg-slate-800 border border-slate-600 rounded-lg shadow-xl z-10 overflow-hidden">
+                    <div className="p-2 border-b border-slate-700">
+                      <span className="text-[10px] text-slate-400 uppercase font-medium">Select Style</span>
+                    </div>
+                    {CAPTION_STYLES.map((style) => (
+                      <button
+                        key={style.value}
+                        onClick={(e) => handleAddCaptions(e, style.value)}
+                        className="w-full px-3 py-2 text-left hover:bg-slate-700 transition"
+                      >
+                        <div className="text-xs text-slate-200 font-medium">{style.label}</div>
+                        <div className="text-[10px] text-slate-500">{style.description}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Caption Error */}
+            {captionError && (
+              <p className="mt-1 text-[10px] text-red-400 text-center">{captionError}</p>
+            )}
+          </div>
+        )}
+
+        {/* Caption in progress indicator for CAPTIONING status */}
+        {clip.status === "CAPTIONING" && (
+          <div className="flex items-center justify-center gap-2 px-3 py-2 bg-pink-500/20 border border-pink-500/30 rounded-lg">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-pink-400" />
+            <span className="text-xs text-pink-300">Adding captions...</span>
+          </div>
+        )}
+
         {/* Action Button */}
         <button
           onClick={() => onPreview(clip)}
@@ -1037,11 +1070,16 @@ function ClipCard({
 function ClipPreviewModal({
   clip,
   onClose,
+  onCaptionsAdded,
 }: {
   clip: VideoClip;
   onClose: () => void;
+  onCaptionsAdded?: () => void;
 }) {
   const [showCaptionedVersion, setShowCaptionedVersion] = useState(false);
+  const [isAddingCaptions, setIsAddingCaptions] = useState(false);
+  const [showCaptionStyles, setShowCaptionStyles] = useState(false);
+  const [captionError, setCaptionError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const momentConfig = MOMENT_TYPES[clip.momentType as keyof typeof MOMENT_TYPES] || {
@@ -1070,6 +1108,33 @@ function ClipPreviewModal({
       window.URL.revokeObjectURL(downloadUrl);
     } catch (err) {
       console.error("Download failed:", err);
+    }
+  };
+
+  const handleAddCaptions = async (style: string) => {
+    setIsAddingCaptions(true);
+    setCaptionError(null);
+    setShowCaptionStyles(false);
+
+    try {
+      const res = await fetch(`/api/video-clipper/clips/${clip.id}/captions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ captionStyle: style }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to add captions");
+      }
+
+      // Refresh the clip data
+      onCaptionsAdded?.();
+    } catch (err) {
+      console.error("Caption generation failed:", err);
+      setCaptionError(err instanceof Error ? err.message : "Failed to add captions");
+    } finally {
+      setIsAddingCaptions(false);
     }
   };
 
@@ -1208,6 +1273,55 @@ function ClipPreviewModal({
           </div>
         )}
 
+        {/* Add Captions Button - show if video exists but no captions yet */}
+        {hasVideo && !hasCaptionedVideo && clip.status === "COMPLETED" && (
+          <div className="p-4 border-b border-slate-800">
+            {isAddingCaptions ? (
+              <div className="flex items-center justify-center gap-3 py-3 bg-pink-500/20 border border-pink-500/30 rounded-xl">
+                <Loader2 className="w-5 h-5 animate-spin text-pink-400" />
+                <span className="text-sm text-pink-300">Adding captions... This may take a few minutes.</span>
+              </div>
+            ) : (
+              <div className="relative">
+                <button
+                  onClick={() => setShowCaptionStyles(!showCaptionStyles)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-pink-500 to-violet-500 hover:from-pink-400 hover:to-violet-400 rounded-xl text-sm text-white font-medium transition"
+                >
+                  <Type className="w-4 h-4" />
+                  Add Captions
+                </button>
+
+                {/* Caption Style Dropdown */}
+                {showCaptionStyles && (
+                  <div className="absolute bottom-full left-0 right-0 mb-2 bg-slate-800 border border-slate-600 rounded-xl shadow-xl z-10 overflow-hidden">
+                    <div className="p-3 border-b border-slate-700">
+                      <span className="text-xs text-slate-400 uppercase font-medium">Select Caption Style</span>
+                    </div>
+                    {CAPTION_STYLES.map((style) => (
+                      <button
+                        key={style.value}
+                        onClick={() => handleAddCaptions(style.value)}
+                        className="w-full px-4 py-3 text-left hover:bg-slate-700 transition flex items-center justify-between"
+                      >
+                        <div>
+                          <div className="text-sm text-slate-200 font-medium">{style.label}</div>
+                          <div className="text-xs text-slate-500">{style.description}</div>
+                        </div>
+                        <Palette className="w-4 h-4 text-slate-500" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Caption Error */}
+                {captionError && (
+                  <p className="mt-2 text-sm text-red-400 text-center">{captionError}</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Scores Grid */}
         <div className="p-4 border-b border-slate-800">
           <div className="grid grid-cols-4 gap-3">
@@ -1296,9 +1410,11 @@ function ClipPreviewModal({
 function ResultsView({
   job,
   onBack,
+  onRefresh,
 }: {
   job: VideoClipJob;
   onBack: () => void;
+  onRefresh?: () => void;
 }) {
   const [previewClip, setPreviewClip] = useState<VideoClip | null>(null);
   const completedClips = job.clips.filter((c) => c.status === "COMPLETED");
@@ -1309,18 +1425,18 @@ function ResultsView({
 
   return (
     <div className="space-y-6">
-      {/* Info Banner - Video export coming soon */}
+      {/* Info Banner - Shows when clips have analysis but no video files (fallback mode) */}
       {!hasVideoFiles && sortedClips.length > 0 && (
-        <div className="bg-violet-500/10 border border-violet-500/30 rounded-xl p-4">
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
           <div className="flex items-start gap-3">
-            <div className="p-2 bg-violet-500/20 rounded-lg">
-              <Sparkles className="w-5 h-5 text-violet-400" />
+            <div className="p-2 bg-amber-500/20 rounded-lg">
+              <Sparkles className="w-5 h-5 text-amber-400" />
             </div>
             <div>
-              <h4 className="text-sm font-medium text-violet-300">AI Analysis Complete</h4>
-              <p className="text-xs text-violet-400/80 mt-1">
-                The AI has identified the best marketing moments in your video. Video clip export feature coming soon -
-                for now, use the timestamps to manually clip these moments in your video editor.
+              <h4 className="text-sm font-medium text-amber-300">Video Processing Unavailable</h4>
+              <p className="text-xs text-amber-400/80 mt-1">
+                The AI has identified the best marketing moments, but video clip generation was unavailable for this source.
+                Use the timestamps below to manually clip these moments in your video editor.
               </p>
             </div>
           </div>
@@ -1377,6 +1493,7 @@ function ResultsView({
             key={clip.id}
             clip={clip}
             onPreview={setPreviewClip}
+            onCaptionsAdded={onRefresh}
           />
         ))}
       </div>
@@ -1386,6 +1503,7 @@ function ResultsView({
         <ClipPreviewModal
           clip={previewClip}
           onClose={() => setPreviewClip(null)}
+          onCaptionsAdded={onRefresh}
         />
       )}
     </div>
@@ -1782,6 +1900,7 @@ export function VideoClipperView({
               setView("input");
               setCurrentJob(null);
             }}
+            onRefresh={() => fetchJobStatus(currentJob.id)}
           />
         )}
       </div>

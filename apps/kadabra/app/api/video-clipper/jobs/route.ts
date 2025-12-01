@@ -462,22 +462,29 @@ async function processVideoJob(jobId: string) {
     if (sourceVideoUrl) {
       console.log("[Video Clipper] Processing clips from source:", sourceVideoUrl.substring(0, 100));
 
-      let processedCount = 0;
-      for (const clipInfo of createdClips) {
-        try {
-          await prisma.videoClip.update({
+      // Mark all clips as processing
+      await Promise.all(
+        createdClips.map((clipInfo) =>
+          prisma.videoClip.update({
             where: { id: clipInfo.id },
             data: { status: "PROCESSING", processingProgress: 10 },
-          });
+          })
+        )
+      );
 
-          // Process the clip
+      // Process ALL clips in parallel for maximum speed
+      // Limit concurrency to 3 to avoid overwhelming Replicate API
+      const CONCURRENCY_LIMIT = 3;
+      let processedCount = 0;
+
+      const processClipWithTracking = async (clipInfo: typeof createdClips[0]) => {
+        try {
+          // Process clip without captions - captions are added on-demand later
           const clipResult = await processVideoClip(
             sourceVideoUrl,
             clipInfo.startTime,
             clipInfo.endTime,
             job.targetFormat,
-            job.addCaptions ? clipInfo.transcript : null,
-            job.captionStyle,
             job.userId,
             clipInfo.id
           );
@@ -502,6 +509,7 @@ async function processVideoJob(jobId: string) {
             data: { progress: overallProgress },
           });
 
+          return { success: true, clipId: clipInfo.id };
         } catch (clipError) {
           console.error(`[Video Clipper] Error processing clip ${clipInfo.id}:`, clipError);
           await prisma.videoClip.update({
@@ -511,8 +519,19 @@ async function processVideoJob(jobId: string) {
               processingError: clipError instanceof Error ? clipError.message : "Failed to process clip",
             },
           });
+          return { success: false, clipId: clipInfo.id };
         }
+      };
+
+      // Process clips in batches with concurrency limit
+      const results: Array<{ success: boolean; clipId: string }> = [];
+      for (let i = 0; i < createdClips.length; i += CONCURRENCY_LIMIT) {
+        const batch = createdClips.slice(i, i + CONCURRENCY_LIMIT);
+        const batchResults = await Promise.all(batch.map(processClipWithTracking));
+        results.push(...batchResults);
       }
+
+      console.log(`[Video Clipper] Processed ${results.filter(r => r.success).length}/${results.length} clips successfully`);
     } else {
       // No direct video URL available (e.g., YouTube without Cobalt)
       // Mark clips as completed with analysis only (no actual video files)
@@ -603,6 +622,13 @@ async function processVideoJob(jobId: string) {
 // VIDEO CLIP PROCESSING
 // ============================================================================
 
+// Helper to convert seconds to "MM:SS" format for Replicate trim-video model
+function formatTimeForReplicate(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+}
+
 interface ClipProcessingResult {
   clipUrl: string;
   clipWithCaptionsUrl: string | null;
@@ -616,8 +642,6 @@ async function processVideoClip(
   startTime: number,
   endTime: number,
   targetFormat: string,
-  transcript: string | null,
-  captionStyle: string,
   userId: string,
   clipId: string
 ): Promise<ClipProcessingResult> {
@@ -632,15 +656,17 @@ async function processVideoClip(
 
   console.log(`[Video Clipper] Processing clip: ${startTime}s - ${endTime}s from ${sourceUrl}`);
 
-  // Use Replicate's video splitter model
-  // Model: lucataco/video-splitter - splits video into clips
+  // Use Replicate's trim-video model (verified working)
+  // Model: lucataco/trim-video - trims video to specified timestamps
   try {
     const clipResult = await callReplicate(
-      "lucataco/video-splitter:e248ab98ca2d13ce9c08fdfe6d7d1a85c80f8e08c2fb3e6d62e94e9b14c5f60e",
+      "lucataco/trim-video:a58ed80215326cba0a80c77a11dd0d0968c567388228891b3c5c67de2a8d10cb",
       {
         video: sourceUrl,
-        start_second: startTime,
-        end_second: endTime,
+        start_time: formatTimeForReplicate(startTime),
+        end_time: formatTimeForReplicate(endTime),
+        output_format: "mp4",
+        quality: "fast",
       }
     );
 
@@ -652,24 +678,12 @@ async function processVideoClip(
         `video-clipper/${userId}/${clipId}/clip.mp4`
       );
 
-      // Generate thumbnail from video
+      // Generate thumbnail only - captions are added on-demand via separate API
       const thumbnailUrl = await generateVideoThumbnail(clipBlob.url, userId, clipId);
-
-      // Add captions if requested
-      let clipWithCaptionsUrl: string | null = null;
-      if (transcript) {
-        clipWithCaptionsUrl = await generateCaptionedVideo(
-          clipBlob.url,
-          transcript,
-          captionStyle,
-          userId,
-          clipId
-        );
-      }
 
       return {
         clipUrl: clipBlob.url,
-        clipWithCaptionsUrl,
+        clipWithCaptionsUrl: null,  // Captions generated on-demand
         thumbnailUrl,
         fileSize: clipBlob.size,
         resolution,
@@ -696,13 +710,14 @@ async function generateVideoThumbnail(
   userId: string,
   clipId: string
 ): Promise<string> {
-  // Try to generate a thumbnail using Replicate
+  // Generate thumbnail using frame-extractor model (verified working)
+  // Model: lucataco/frame-extractor - extracts first or last frame from video
   try {
     const thumbnailResult = await callReplicate(
-      "lucataco/video-to-image:8e456e96bc5e4e5c5bfa5fbd5f5c5d5e5f5e5d5c5b5a595857565554535251",
+      "lucataco/frame-extractor:c02b3c1df64728476b1c21b0876235119e6ac08b0c9b8a99b82c5f0e0d42442d",
       {
         video: videoUrl,
-        frame_number: 10, // Get frame 10 for thumbnail
+        return_first_frame: true, // Get first frame for thumbnail
       }
     );
 
@@ -728,29 +743,82 @@ async function generateCaptionedVideo(
   userId: string,
   clipId: string
 ): Promise<string | null> {
-  // Caption styling based on style preference
-  const styles: Record<string, string> = {
-    minimal: "white text, thin outline",
-    modern: "white text with shadow, medium size",
-    bold: "yellow text, thick black outline",
-    branded: "white text with purple shadow",
+  // Caption style configurations for fictions-ai/autocaption model
+  const styleConfigs: Record<string, {
+    font: string;
+    caption_color: string;
+    highlight_color: string;
+    stroke_color: string;
+    stroke_width: number;
+    font_size: number;
+  }> = {
+    minimal: {
+      font: "Poppins-Regular",
+      caption_color: "white",
+      highlight_color: "white",
+      stroke_color: "black",
+      stroke_width: 1.5,
+      font_size: 5,
+    },
+    modern: {
+      font: "Poppins-ExtraBold",
+      caption_color: "white",
+      highlight_color: "yellow",
+      stroke_color: "black",
+      stroke_width: 2.6,
+      font_size: 4,
+    },
+    bold: {
+      font: "Poppins-Black",
+      caption_color: "yellow",
+      highlight_color: "white",
+      stroke_color: "black",
+      stroke_width: 4,
+      font_size: 5,
+    },
+    branded: {
+      font: "Poppins-Bold",
+      caption_color: "#8B5CF6",
+      highlight_color: "#EC4899",
+      stroke_color: "black",
+      stroke_width: 3,
+      font_size: 4,
+    },
   };
+
+  const config = styleConfigs[captionStyle] || styleConfigs.modern;
 
   console.log(`[Video Clipper] Adding ${captionStyle} captions to video`);
 
-  // Use a captioning model from Replicate
+  // Use fictions-ai/autocaption model (verified working)
   try {
     const captionResult = await callReplicate(
-      "fofr/autocaption:e0c4d0e4c0b0a090807060504030201009080706050403020100908070605",
+      "fictions-ai/autocaption:18a45ff0d95feb4449d192bbdc06b4a6df168fa33def76dfc51b78ae224b599b",
       {
-        video: videoUrl,
-        transcript: transcript.substring(0, 500),
-        style: styles[captionStyle] || styles.modern,
-        position: "bottom",
+        video_file_input: videoUrl,
+        font: config.font,
+        caption_color: config.caption_color,
+        highlight_color: config.highlight_color,
+        stroke_color: config.stroke_color,
+        stroke_width: config.stroke_width,
+        font_size: config.font_size,
+        max_characters: 10, // Good for vertical/short-form video
+        subs_position: "bottom75",
+        output_video: true,
+        output_transcript: false,
       }
     );
 
-    const captionedUrl = captionResult.output as string;
+    // autocaption returns an array: [video_url, transcript_url] or just the video URL
+    const output = captionResult.output;
+    let captionedUrl: string | null = null;
+
+    if (Array.isArray(output) && output.length > 0) {
+      captionedUrl = output[0];
+    } else if (typeof output === "string") {
+      captionedUrl = output;
+    }
+
     if (captionedUrl) {
       const captionedBlob = await downloadAndUploadToBlob(
         captionedUrl,
