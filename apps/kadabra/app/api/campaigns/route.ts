@@ -82,7 +82,33 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Account not found" }, { status: 404 });
     }
 
+    // Helper to return cached campaigns (account is guaranteed to exist at this point)
+    function returnCachedCampaigns(reason: string) {
+      const acc = account!; // TypeScript narrowing
+      if (acc.cachedCampaigns && acc.campaignsCachedAt) {
+        try {
+          const campaigns = JSON.parse(acc.cachedCampaigns);
+          const cacheAge = Date.now() - new Date(acc.campaignsCachedAt).getTime();
+          console.log(`[API/campaigns] Returning cached data (${reason}): ${campaigns.length} campaigns, cached ${Math.round(cacheAge / 60000)} min ago`);
+          return NextResponse.json({
+            campaigns,
+            syncedAt: acc.campaignsCachedAt,
+            fromCache: true,
+            cacheAge,
+            cacheReason: reason,
+            accountSuspended: acc.accountHealth === "suspended",
+          });
+        } catch (parseError) {
+          console.error("[API/campaigns] Failed to parse cached campaigns:", parseError);
+        }
+      }
+      return null;
+    }
+
+    // No connection - try to return cached data
     if (!account.connection) {
+      const cached = returnCachedCampaigns("no_connection");
+      if (cached) return cached;
       return NextResponse.json(
         { error: "Account is not connected to Google Ads" },
         { status: 400 }
@@ -98,6 +124,8 @@ export async function GET(req: NextRequest) {
       refreshToken = decrypt(account.connection.refreshToken);
     } catch (decryptError) {
       console.error("Failed to decrypt tokens:", decryptError);
+      const cached = returnCachedCampaigns("token_decrypt_failed");
+      if (cached) return cached;
       return NextResponse.json(
         {
           error: "Token decryption failed - encryption key mismatch between apps. Please re-authenticate this account.",
@@ -125,8 +153,10 @@ export async function GET(req: NextRequest) {
         });
       } catch (refreshError) {
         console.error("Failed to refresh token:", refreshError);
+        const cached = returnCachedCampaigns("token_refresh_failed");
+        if (cached) return cached;
         return NextResponse.json(
-          { error: "Failed to refresh OAuth token" },
+          { error: "Failed to refresh OAuth token", needsReauth: true },
           { status: 401 }
         );
       }
@@ -143,12 +173,29 @@ export async function GET(req: NextRequest) {
         dateRangeStart,
         dateRangeEnd,
       });
+
+      // Update cache with fresh data
+      try {
+        await prisma.adAccount.update({
+          where: { id: accountId },
+          data: {
+            cachedCampaigns: JSON.stringify(campaigns),
+            campaignsCachedAt: new Date(),
+          },
+        });
+      } catch (cacheUpdateError) {
+        console.error("[API/campaigns] Failed to update cache:", cacheUpdateError);
+      }
     } catch (fetchError) {
       // If the account is suspended/disabled, Google Ads API will throw an error
-      // We catch it here and return empty campaigns with a flag
+      // We catch it here and try to return cached data
       const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
-      console.log('[API/campaigns] Fetch error (likely suspended account):', errorMessage);
+      console.log('[API/campaigns] Fetch error:', errorMessage);
       apiError = errorMessage;
+
+      // Try to return cached data on fetch error
+      const cached = returnCachedCampaigns("api_fetch_failed");
+      if (cached) return cached;
     }
 
     // Check if account is suspended/inactive
@@ -158,21 +205,10 @@ export async function GET(req: NextRequest) {
     const isSuspendedByStatus = account.accountHealth === "suspended" || account.status === "suspended";
     const isSuspended = isSuspendedByStatus || isSuspendedByApi;
 
-    console.log('[API/campaigns] Debug:', {
-      accountId,
-      campaignsReturned: campaigns.length,
-      accountHealth: account.accountHealth,
-      accountStatus: account.status,
-      campaignsCount: account.campaignsCount,
-      isSuspended,
-      isSuspendedByApi,
-      hasCachedCampaigns,
-      apiError,
-    });
-
     return NextResponse.json({
       campaigns,
       syncedAt: new Date().toISOString(),
+      fromCache: false,
       // Provide context when suspended account returns no campaigns
       accountSuspended: isSuspended && campaigns.length === 0 && hasCachedCampaigns,
       cachedCampaignCount: hasCachedCampaigns ? account.campaignsCount : undefined,

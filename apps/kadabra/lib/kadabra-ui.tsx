@@ -808,6 +808,10 @@ function AccountDetailView({
   const [loadingCampaigns, setLoadingCampaigns] = useState(false);
   const [dateRange, setDateRange] = useState<"TODAY" | "YESTERDAY" | "LAST_7_DAYS" | "LAST_14_DAYS" | "LAST_30_DAYS">("LAST_7_DAYS");
 
+  // Cache status tracking
+  const [fromCache, setFromCache] = useState(false);
+  const [cacheAge, setCacheAge] = useState<number | null>(null);
+
   // Inline expansion state
   const [expandedCampaignId, setExpandedCampaignId] = useState<string | null>(null);
   const [expandedAdGroupId, setExpandedAdGroupId] = useState<string | null>(null);
@@ -883,6 +887,8 @@ function AccountDetailView({
       }
 
       setCampaigns(data.campaigns || []);
+      setFromCache(data.fromCache || false);
+      setCacheAge(data.cacheAge || null);
     } catch (err) {
       console.error("Failed to fetch campaigns:", err);
     } finally {
@@ -1099,6 +1105,17 @@ function AccountDetailView({
               <h3 className="text-lg font-semibold text-slate-100">Campaigns</h3>
               <p className="text-xs text-slate-500">{campaigns.length} campaigns • Click to expand</p>
             </div>
+            {/* Cache indicator */}
+            {fromCache && cacheAge !== null && (
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-400">
+                <Clock className="w-3 h-3" />
+                <span>
+                  Cached {cacheAge < 60000 ? 'just now' :
+                    cacheAge < 3600000 ? `${Math.round(cacheAge / 60000)}m ago` :
+                    `${Math.round(cacheAge / 3600000)}h ago`}
+                </span>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-3">
             {/* Date Range Selector */}

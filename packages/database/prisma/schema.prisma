@@ -103,6 +103,10 @@ model AdAccount {
   googleSyncError       String?
   googleCidVerified     Boolean  @default(false)
 
+  // Campaign cache (for offline viewing when OAuth expires)
+  cachedCampaigns       String?   @db.Text  // JSON array of campaign objects
+  campaignsCachedAt     DateTime?           // When cache was last updated
+
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

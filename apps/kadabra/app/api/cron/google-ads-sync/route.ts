@@ -5,8 +5,18 @@ import { isValidCronRequest } from '@magimanager/auth';
 import {
   refreshAccessToken,
   fetchAccountMetrics,
+  fetchCampaigns,
   mapGoogleStatus,
 } from '@/lib/google-ads-api';
+
+/**
+ * Get a date string in YYYY-MM-DD format with an optional offset
+ */
+function getDateString(daysOffset: number = 0): string {
+  const date = new Date();
+  date.setDate(date.getDate() + daysOffset);
+  return date.toISOString().split('T')[0];
+}
 
 /**
  * GET /api/cron/google-ads-sync
@@ -181,6 +191,28 @@ export async function GET(request: NextRequest) {
               accountHealth: mapGoogleStatus(metrics.status),
             },
           });
+
+          // Cache campaigns for offline viewing
+          try {
+            const campaigns = await fetchCampaigns(accessToken, account.googleCid.replace(/-/g, ''), {
+              includeMetrics: true,
+              dateRangeStart: getDateString(-6), // Last 7 days
+              dateRangeEnd: getDateString(0),
+            });
+
+            await prisma.adAccount.update({
+              where: { id: account.id },
+              data: {
+                cachedCampaigns: JSON.stringify(campaigns),
+                campaignsCachedAt: new Date(),
+              },
+            });
+
+            console.log(`[Google Ads Sync] Cached ${campaigns.length} campaigns for ${account.googleCid}`);
+          } catch (cacheError) {
+            // Don't fail the sync if campaign caching fails
+            console.error(`[Google Ads Sync] Campaign caching failed for ${account.googleCid}:`, cacheError);
+          }
 
           results.synced++;
           results.details.push({

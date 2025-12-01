@@ -31,6 +31,15 @@ const GOOGLE_OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_ADS_API_VERSION = 'v22';
 const GOOGLE_ADS_API_BASE = `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}`;
 
+/**
+ * Get a date string in YYYY-MM-DD format with an optional offset
+ */
+function getDateString(daysOffset: number = 0): string {
+  const date = new Date();
+  date.setDate(date.getDate() + daysOffset);
+  return date.toISOString().split('T')[0];
+}
+
 interface TokenResponse {
   access_token: string;
   refresh_token?: string;
@@ -503,6 +512,28 @@ export async function syncSingleAccount(
         accountHealth: mapGoogleStatus(metrics.status),
       },
     });
+
+    // Cache campaigns for offline viewing
+    try {
+      const campaigns = await fetchCampaigns(accessToken, googleCid.replace(/-/g, ''), {
+        includeMetrics: true,
+        dateRangeStart: getDateString(-6), // Last 7 days
+        dateRangeEnd: getDateString(0),
+      });
+
+      await prismaClient.adAccount.update({
+        where: { id: accountId },
+        data: {
+          cachedCampaigns: JSON.stringify(campaigns),
+          campaignsCachedAt: new Date(),
+        },
+      });
+
+      console.log(`[Sync] Cached ${campaigns.length} campaigns for account ${accountId}`);
+    } catch (cacheError) {
+      // Don't fail the sync if campaign caching fails
+      console.error('[Sync] Campaign caching failed:', cacheError);
+    }
 
     return metrics;
   } catch (error) {
