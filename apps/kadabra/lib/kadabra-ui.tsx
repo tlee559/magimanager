@@ -2501,3 +2501,23 @@ function AutomationsPlaceholder() {
 
   return <AutomationsView />;
 }
+
+// ============================================================================
+// EXPORTS FOR URL-BASED ROUTING
+// ============================================================================
+
+export {
+  DashboardView,
+  MyAccountsView,
+  AccountDetailView,
+  ToolsView,
+  RequestsView,
+  NotificationsView,
+  RequestModal,
+  ActionQueueView,
+  AutomationsPlaceholder,
+  CardSkeleton,
+  ComingSoonBadge,
+};
+
+export type { AdAccount, Notification, AccountRequest };

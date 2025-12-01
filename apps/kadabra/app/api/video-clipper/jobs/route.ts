@@ -317,82 +317,56 @@ async function processVideoJob(jobId: string) {
     let videoTitle = job.name || "Video";
     let transcript: TranscriptSegment[] = [];
 
-    // Handle YouTube source
+    // Handle YouTube source - use async webhook-based processing
     if (job.sourceType === "youtube" && job.sourceUrl) {
-      console.log("[Video Clipper] Processing YouTube video:", job.sourceUrl);
+      console.log("[Video Clipper] Processing YouTube video with webhooks:", job.sourceUrl);
 
       await prisma.videoClipJob.update({
         where: { id: jobId },
         data: { status: "DOWNLOADING", progress: 10 },
       });
 
-      // Use yt-whisper which downloads and transcribes YouTube in one step
+      // Use yt-whisper with webhook callback (non-blocking!)
+      // This returns immediately - webhook will be called when transcription completes
       try {
-        console.log("[Video Clipper] Using yt-whisper for YouTube transcription...");
-        const ytWhisperResult = await callReplicate(
+        console.log("[Video Clipper] Starting async yt-whisper transcription...");
+        const predictionId = await startReplicateWithWebhook(
           "zsxkib/yt-whisper:95fc0093e387a290b6ce58f544dd9fc86c40bfc9aef5cd8ed268c2fa8b5b17cc",
           {
             url: job.sourceUrl,
             model: "large-v3",
-            output_format: "txt", // Get text output
+            output_format: "srt", // SRT format has timestamps!
           },
-          {
-            maxTimeoutMinutes: 30, // Allow up to 30 minutes for long videos
-            onProgress: async (pollCount, maxPolls) => {
-              // Update progress from 10% to 40% during transcription
-              const transcriptionProgress = 10 + Math.floor((pollCount / maxPolls) * 30);
-              await prisma.videoClipJob.update({
-                where: { id: jobId },
-                data: { progress: Math.min(transcriptionProgress, 40) },
-              });
-            },
-          }
+          { jobId, step: "transcription" }
         );
 
-        console.log("[Video Clipper] yt-whisper output:", JSON.stringify(ytWhisperResult.output).slice(0, 500));
+        console.log(`[Video Clipper] Transcription started (prediction: ${predictionId}), waiting for webhook callback`);
 
-        // Parse the transcription output
-        if (ytWhisperResult.output) {
-          transcript = parseYtWhisperOutput(ytWhisperResult.output);
-          console.log(`[Video Clipper] Parsed ${transcript.length} transcript segments from yt-whisper`);
-        }
+        // Store prediction ID in job for potential cancellation
+        await prisma.videoClipJob.update({
+          where: { id: jobId },
+          data: {
+            status: "DOWNLOADING",
+            progress: 15,
+            // Store prediction ID in analysis results temporarily
+            analysisResults: JSON.stringify({ transcriptionPredictionId: predictionId }),
+          },
+        });
+
+        // Return early! Don't block. Webhook will continue processing.
+        console.log(`[Video Clipper] Job ${jobId} started, returning early - webhook will continue`);
+        return;
       } catch (ytError) {
-        console.error("[Video Clipper] yt-whisper error:", ytError);
-        // Fall back to standard Whisper if yt-whisper fails
+        console.error("[Video Clipper] Failed to start yt-whisper:", ytError);
+        await prisma.videoClipJob.update({
+          where: { id: jobId },
+          data: {
+            status: "FAILED",
+            processingError: `Failed to start transcription: ${ytError instanceof Error ? ytError.message : "Unknown error"}`,
+          },
+        });
+        return;
       }
-
-      // For video clipping, we need to get a direct video URL
-      // We'll use the Cobalt API as a fallback to get the video
-      if (!videoUrl) {
-        try {
-          console.log("[Video Clipper] Getting direct video URL for clipping...");
-          const cobaltResult = await fetch("https://api.cobalt.tools/api/json", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Accept": "application/json",
-            },
-            body: JSON.stringify({
-              url: job.sourceUrl,
-              vQuality: "720",
-              filenamePattern: "basic",
-            }),
-          });
-
-          if (cobaltResult.ok) {
-            const cobaltData = await cobaltResult.json();
-            if (cobaltData.url) {
-              videoUrl = cobaltData.url;
-              console.log("[Video Clipper] Got direct video URL from Cobalt");
-            }
-          }
-        } catch (cobaltError) {
-          console.error("[Video Clipper] Cobalt API error:", cobaltError);
-        }
-      }
-
-      // Set video title from YouTube URL metadata if available
-      videoTitle = job.name || "YouTube Video";
 
     } else if (job.sourceType === "upload" && job.uploadedVideoUrl) {
       // Handle uploaded video

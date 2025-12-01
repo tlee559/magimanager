@@ -6398,3 +6398,20 @@ function PlaceholderView({ title }: { title: string}) {
     </div>
   );
 }
+
+// ============================================================================
+// EXPORTS FOR INDIVIDUAL VIEWS (for URL-based routing)
+// ============================================================================
+
+export {
+  TeamView,
+  SystemView,
+  SettingsView,
+  MyAccountsView,
+  MyRequestsView,
+  AdminRequestsView,
+  IdentitiesListView,
+  CreateIdentityView,
+  IdentityDetailView,
+  EditIdentityView,
+};

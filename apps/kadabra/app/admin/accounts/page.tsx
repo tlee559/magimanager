@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { DashboardView, CardSkeleton, type AdAccount } from "@/lib/kadabra-ui";
-import { useKadabraLayout } from "./layout";
+import { MyAccountsView, CardSkeleton, type AdAccount } from "@/lib/kadabra-ui";
+import { useKadabraLayout } from "../layout";
 
-export default function DashboardPage() {
+export default function AccountsPage() {
   const router = useRouter();
   const { openChatForAccount } = useKadabraLayout();
   const [accounts, setAccounts] = useState<AdAccount[]>([]);
@@ -39,7 +39,7 @@ export default function DashboardPage() {
           ))}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {[1, 2, 3, 4].map((i) => (
+          {[1, 2].map((i) => (
             <div key={i} className="bg-slate-800/50 rounded-xl h-48 animate-pulse" />
           ))}
         </div>
@@ -48,7 +48,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <DashboardView
+    <MyAccountsView
       accounts={accounts}
       loading={loading}
       onAccountClick={(accountId) => {
