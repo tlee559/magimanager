@@ -369,57 +369,22 @@ async function processVideoJob(jobId: string) {
         data: { status: "DOWNLOADING", progress: 10 },
       });
 
-      // Use yt-whisper which downloads and transcribes YouTube in one step
-      // USING POLLING instead of webhooks for reliability
-      try {
-        console.log(`${LOG_PREFIX} Step 1: Running yt-whisper (transcription)...`);
-        console.log(`${LOG_PREFIX} Model: ${REPLICATE_MODELS.YT_WHISPER}`);
-        console.log(`${LOG_PREFIX} Max wait: 30 minutes, poll interval: 5 seconds`);
+      // Step 1: Get direct video URL from YouTube
+      // Try multiple download providers in cascade
+      console.log(`${LOG_PREFIX} Step 1: Getting direct video URL...`);
+      videoUrl = await downloadYouTubeVideoUrl(job.sourceUrl);
 
-        const ytWhisperOutput = await runReplicateWithPolling(
-          REPLICATE_MODELS.YT_WHISPER.split(":")[1], // Get version ID
-          {
-            url: job.sourceUrl,
-            model: "large-v3",
-            output_format: "txt",
-          },
-          {
-            maxWaitMs: 30 * 60 * 1000, // 30 minutes for long videos
-            pollIntervalMs: 5000, // Poll every 5 seconds
-          }
-        );
-
-        console.log(`${LOG_PREFIX} yt-whisper completed!`);
-        console.log(`${LOG_PREFIX} Output type: ${typeof ytWhisperOutput}`);
-        console.log(`${LOG_PREFIX} Output preview: ${JSON.stringify(ytWhisperOutput).slice(0, 500)}`);
-
-        // Parse the transcription output
-        if (ytWhisperOutput) {
-          transcript = parseYtWhisperOutput(ytWhisperOutput);
-          console.log(`${LOG_PREFIX} Parsed ${transcript.length} transcript segments from yt-whisper`);
-          if (transcript.length > 0) {
-            console.log(`${LOG_PREFIX} First segment: ${JSON.stringify(transcript[0])}`);
-            console.log(`${LOG_PREFIX} Last segment: ${JSON.stringify(transcript[transcript.length - 1])}`);
-          }
-        } else {
-          console.warn(`${LOG_PREFIX} WARNING: yt-whisper returned empty/null output`);
-        }
-      } catch (ytError) {
-        console.error(`${LOG_PREFIX} ERROR in yt-whisper:`, ytError);
-        console.error(`${LOG_PREFIX} Will try fallback transcription method...`);
+      if (!videoUrl) {
+        console.error(`${LOG_PREFIX} FATAL: Could not get YouTube video URL!`);
+        throw new Error(VIDEO_CLIPPER_ERRORS.YOUTUBE_DOWNLOAD_FAILED);
       }
 
-      // Update progress after transcription attempt
+      console.log(`${LOG_PREFIX} Video URL obtained: ${videoUrl.substring(0, 100)}...`);
+
       await prisma.videoClipJob.update({
         where: { id: jobId },
-        data: { progress: 35 },
+        data: { progress: 25 },
       });
-
-      // For video clipping, we need to get a direct video URL
-      // Try multiple providers in cascade
-      console.log(`${LOG_PREFIX} Step 2: Getting direct video URL for clipping...`);
-      videoUrl = await downloadYouTubeVideoUrl(job.sourceUrl);
-      console.log(`${LOG_PREFIX} Video URL result: ${videoUrl ? videoUrl.substring(0, 100) + '...' : 'NULL (FAILED!)'}`);
 
       // Set video title from YouTube URL metadata if available
       videoTitle = job.name || "YouTube Video";
@@ -445,10 +410,12 @@ async function processVideoJob(jobId: string) {
       },
     });
 
-    // Transcribe using Whisper if we don't have a transcript yet
-    if (transcript.length === 0 && videoUrl) {
-      console.log(`${LOG_PREFIX} Step 3: Fallback transcription with Whisper...`);
-      console.log(`${LOG_PREFIX} Using video URL: ${videoUrl.substring(0, 100)}`);
+    // Step 2: Transcribe video using Whisper
+    console.log(`${LOG_PREFIX} ========== TRANSCRIPTION ==========`);
+    if (videoUrl) {
+      console.log(`${LOG_PREFIX} Step 2: Transcribing with incredibly-fast-whisper...`);
+      console.log(`${LOG_PREFIX} Video URL: ${videoUrl.substring(0, 100)}...`);
+      console.log(`${LOG_PREFIX} Model: ${REPLICATE_MODELS.INCREDIBLY_FAST_WHISPER}`);
       try {
         const whisperOutput = await runReplicateWithPolling(
           REPLICATE_MODELS.INCREDIBLY_FAST_WHISPER.split(":")[1],
@@ -460,22 +427,27 @@ async function processVideoJob(jobId: string) {
             timestamp: "word",
           },
           {
-            maxWaitMs: 10 * 60 * 1000, // 10 minutes
+            maxWaitMs: 15 * 60 * 1000, // 15 minutes for long videos
             pollIntervalMs: 3000,
           }
         );
 
         console.log(`${LOG_PREFIX} Whisper completed!`);
-        console.log(`${LOG_PREFIX} Whisper output type: ${typeof whisperOutput}`);
-        console.log(`${LOG_PREFIX} Whisper output preview: ${JSON.stringify(whisperOutput).slice(0, 500)}`);
+        console.log(`${LOG_PREFIX} Output type: ${typeof whisperOutput}`);
+        console.log(`${LOG_PREFIX} Output preview: ${JSON.stringify(whisperOutput).slice(0, 500)}`);
         transcript = parseWhisperOutput(whisperOutput);
         console.log(`${LOG_PREFIX} Parsed ${transcript.length} transcript segments`);
+        if (transcript.length > 0) {
+          console.log(`${LOG_PREFIX} First segment: ${JSON.stringify(transcript[0])}`);
+          console.log(`${LOG_PREFIX} Last segment: ${JSON.stringify(transcript[transcript.length - 1])}`);
+        }
       } catch (error) {
         console.error(`${LOG_PREFIX} ERROR in Whisper transcription:`, error);
         throw new Error(VIDEO_CLIPPER_ERRORS.TRANSCRIPTION_FAILED);
       }
-    } else if (transcript.length === 0) {
-      console.log(`${LOG_PREFIX} WARNING: No video URL available for fallback transcription`);
+    } else {
+      console.error(`${LOG_PREFIX} ERROR: No video URL available for transcription!`);
+      throw new Error(VIDEO_CLIPPER_ERRORS.TRANSCRIPTION_FAILED);
     }
 
     // If still no transcript, fail explicitly (no more mock fallback)
@@ -737,10 +709,16 @@ async function downloadYouTubeVideoUrl(youtubeUrl: string): Promise<string | nul
   console.log("[YouTube Download] ========== STARTING ==========");
   console.log("[YouTube Download] URL:", youtubeUrl);
 
+  // Extract video ID for APIs that need it
+  const videoId = extractYouTubeVideoId(youtubeUrl);
+  console.log("[YouTube Download] Video ID:", videoId);
+
   // Try multiple providers in order
   const providers = [
-    { name: "Cobalt", fn: () => tryCobaltApi(youtubeUrl) },
-    { name: "Cobalt Alt", fn: () => tryCobaltApiAlt(youtubeUrl) },
+    { name: "Cobalt v7", fn: () => tryCobaltApiV7(youtubeUrl) },
+    { name: "Cobalt Legacy", fn: () => tryCobaltApi(youtubeUrl) },
+    { name: "Y2mate", fn: () => tryY2mateApi(videoId) },
+    { name: "SaveFrom", fn: () => trySaveFromApi(youtubeUrl) },
   ];
 
   for (let i = 0; i < providers.length; i++) {
@@ -764,6 +742,62 @@ async function downloadYouTubeVideoUrl(youtubeUrl: string): Promise<string | nul
   return null;
 }
 
+// Extract YouTube video ID from various URL formats
+function extractYouTubeVideoId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([^&\n?#]+)/,
+    /^([a-zA-Z0-9_-]{11})$/, // Just the ID
+  ];
+
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match && match[1]) {
+      return match[1];
+    }
+  }
+  return null;
+}
+
+// Cobalt API v7 (newer endpoint)
+async function tryCobaltApiV7(youtubeUrl: string): Promise<string | null> {
+  console.log("[Cobalt v7] Calling https://api.cobalt.tools/");
+
+  const response = await fetch("https://api.cobalt.tools/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
+    body: JSON.stringify({
+      url: youtubeUrl,
+      videoQuality: "720",
+      filenameStyle: "basic",
+      downloadMode: "auto",
+    }),
+    signal: AbortSignal.timeout(30000),
+  });
+
+  console.log(`[Cobalt v7] Response status: ${response.status}`);
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'Unable to read error');
+    console.error(`[Cobalt v7] Error response: ${errorText}`);
+    throw new Error(`Cobalt v7 API returned ${response.status}: ${errorText}`);
+  }
+
+  const data = await response.json();
+  console.log(`[Cobalt v7] Response data:`, JSON.stringify(data).slice(0, 300));
+
+  // Handle different response formats
+  if (data.url) return data.url;
+  if (data.status === "stream" && data.url) return data.url;
+  if (data.status === "redirect" && data.url) return data.url;
+  if (data.status === "tunnel" && data.url) return data.url;
+
+  return null;
+}
+
+// Cobalt Legacy API
 async function tryCobaltApi(youtubeUrl: string): Promise<string | null> {
   console.log("[Cobalt] Calling https://api.cobalt.tools/api/json");
   const response = await fetch("https://api.cobalt.tools/api/json", {
@@ -777,7 +811,7 @@ async function tryCobaltApi(youtubeUrl: string): Promise<string | null> {
       vQuality: "720",
       filenamePattern: "basic",
     }),
-    signal: AbortSignal.timeout(30000), // 30 second timeout
+    signal: AbortSignal.timeout(30000),
   });
 
   console.log(`[Cobalt] Response status: ${response.status}`);
@@ -793,33 +827,110 @@ async function tryCobaltApi(youtubeUrl: string): Promise<string | null> {
   return data.url || null;
 }
 
-async function tryCobaltApiAlt(youtubeUrl: string): Promise<string | null> {
-  console.log("[Cobalt Alt] Calling https://co.wuk.sh/api/json");
-  const response = await fetch("https://co.wuk.sh/api/json", {
+// Y2mate-style API (commonly used)
+async function tryY2mateApi(videoId: string | null): Promise<string | null> {
+  if (!videoId) {
+    throw new Error("No video ID provided");
+  }
+
+  console.log("[Y2mate] Analyzing video:", videoId);
+
+  // Step 1: Analyze the video
+  const analyzeResponse = await fetch("https://www.y2mate.com/mates/analyzeV2/ajax", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      "Accept": "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
     },
-    body: JSON.stringify({
-      url: youtubeUrl,
-      vQuality: "720",
-      filenamePattern: "basic",
-    }),
+    body: `k_query=https://www.youtube.com/watch?v=${videoId}&k_page=home&hl=en&q_auto=1`,
     signal: AbortSignal.timeout(30000),
   });
 
-  console.log(`[Cobalt Alt] Response status: ${response.status}`);
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Unable to read error');
-    console.error(`[Cobalt Alt] Error response: ${errorText}`);
-    throw new Error(`Cobalt Alt API returned ${response.status}: ${errorText}`);
+  if (!analyzeResponse.ok) {
+    throw new Error(`Y2mate analyze failed: ${analyzeResponse.status}`);
   }
 
-  const data = await response.json();
-  console.log(`[Cobalt Alt] Response data:`, JSON.stringify(data).slice(0, 300));
-  return data.url || null;
+  const analyzeData = await analyzeResponse.json();
+  console.log("[Y2mate] Analyze response status:", analyzeData.status);
+
+  if (analyzeData.status !== "ok" || !analyzeData.links?.mp4) {
+    throw new Error("Y2mate: No download links found");
+  }
+
+  // Find 720p or best available quality
+  const mp4Links = analyzeData.links.mp4;
+  const quality720 = Object.values(mp4Links).find((link: unknown) => {
+    const l = link as { q?: string };
+    return l.q === "720p" || l.q === "720";
+  }) as { k?: string; q?: string } | undefined;
+
+  const bestQuality = quality720 || Object.values(mp4Links)[0] as { k?: string } | undefined;
+
+  if (!bestQuality?.k) {
+    throw new Error("Y2mate: No suitable quality found");
+  }
+
+  console.log("[Y2mate] Converting with key:", bestQuality.k);
+
+  // Step 2: Convert/get download URL
+  const convertResponse = await fetch("https://www.y2mate.com/mates/convertV2/index", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: `vid=${videoId}&k=${bestQuality.k}`,
+    signal: AbortSignal.timeout(60000), // Longer timeout for conversion
+  });
+
+  if (!convertResponse.ok) {
+    throw new Error(`Y2mate convert failed: ${convertResponse.status}`);
+  }
+
+  const convertData = await convertResponse.json();
+  console.log("[Y2mate] Convert response status:", convertData.status);
+
+  if (convertData.status === "ok" && convertData.dlink) {
+    return convertData.dlink;
+  }
+
+  throw new Error("Y2mate: Conversion failed");
+}
+
+// SaveFrom-style API
+async function trySaveFromApi(youtubeUrl: string): Promise<string | null> {
+  console.log("[SaveFrom] Fetching download links...");
+
+  // Use a public SaveFrom-like API
+  const response = await fetch(`https://api.vevioz.com/api/button/videos?url=${encodeURIComponent(youtubeUrl)}`, {
+    headers: {
+      "Accept": "application/json",
+    },
+    signal: AbortSignal.timeout(30000),
+  });
+
+  console.log(`[SaveFrom] Response status: ${response.status}`);
+
+  if (!response.ok) {
+    throw new Error(`SaveFrom API returned ${response.status}`);
+  }
+
+  const html = await response.text();
+
+  // Parse the response for download links
+  // Look for MP4 download URLs in the response
+  const mp4Match = html.match(/href="(https:\/\/[^"]+\.mp4[^"]*)"/);
+  if (mp4Match && mp4Match[1]) {
+    console.log("[SaveFrom] Found MP4 URL");
+    return mp4Match[1];
+  }
+
+  // Try to find any video URL
+  const videoMatch = html.match(/(https:\/\/[^"'\s]+(?:googlevideo|videoplayback)[^"'\s]*)/);
+  if (videoMatch && videoMatch[1]) {
+    console.log("[SaveFrom] Found video URL");
+    return videoMatch[1].replace(/&amp;/g, "&");
+  }
+
+  throw new Error("SaveFrom: No download URL found in response");
 }
 
 // ============================================================================

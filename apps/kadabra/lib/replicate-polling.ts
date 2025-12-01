@@ -254,10 +254,8 @@ export async function cancelPrediction(predictionId: string): Promise<void> {
 
 // Model version IDs for video processing
 export const REPLICATE_MODELS = {
-  // YouTube transcription (downloads + transcribes)
-  YT_WHISPER: "zsxkib/yt-whisper:95fc0093e387a290b6ce58f544dd9fc86c40bfc9aef5cd8ed268c2fa8b5b17cc",
-
   // Fast transcription from audio/video file
+  // This model accepts audio OR video URLs directly and transcribes them
   INCREDIBLY_FAST_WHISPER: "vaibhavs10/incredibly-fast-whisper:3ab86df6c8f54c11309d4d1f930ac292bad43ace52d10c80d87eb258b3c9f79c",
 
   // Video trimming (FFmpeg-based)
