@@ -6,8 +6,9 @@ import { put } from "@vercel/blob";
 import { broadcastEvent, CHANNELS } from "@magimanager/realtime";
 
 // Configure route for long-running video processing
+// Note: Vercel Pro allows up to 300s (5 min), Enterprise up to 900s (15 min)
 export const runtime = "nodejs";
-export const maxDuration = 300; // 5 minutes for video processing
+export const maxDuration = 300; // Maximum allowed on Vercel Pro
 
 // GET /api/video-clipper/jobs - List all jobs for the current user
 export async function GET(req: NextRequest) {
@@ -160,6 +161,52 @@ interface ReplicatePrediction {
   error?: string;
 }
 
+// Start a Replicate prediction with webhook callback (non-blocking)
+async function startReplicateWithWebhook(
+  modelVersion: string,
+  input: Record<string, unknown>,
+  webhookParams: { jobId: string; step: string; clipId?: string }
+): Promise<string> {
+  const apiKey = process.env.REPLICATE_API_TOKEN;
+  if (!apiKey) {
+    throw new Error("REPLICATE_API_TOKEN not configured");
+  }
+
+  const baseUrl = process.env.NEXTAUTH_URL || process.env.VERCEL_URL;
+  const webhookUrl = new URL("/api/video-clipper/webhook", baseUrl);
+  webhookUrl.searchParams.set("jobId", webhookParams.jobId);
+  webhookUrl.searchParams.set("step", webhookParams.step);
+  if (webhookParams.clipId) {
+    webhookUrl.searchParams.set("clipId", webhookParams.clipId);
+  }
+
+  console.log(`[Video Clipper] Starting Replicate with webhook: ${webhookUrl.toString()}`);
+
+  const createResponse = await fetch(`${REPLICATE_API_URL}/predictions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Token ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      version: modelVersion,
+      input,
+      webhook: webhookUrl.toString(),
+      webhook_events_filter: ["completed"], // Only notify on completion
+    }),
+  });
+
+  if (!createResponse.ok) {
+    const error = await createResponse.text();
+    throw new Error(`Replicate API error: ${error}`);
+  }
+
+  const prediction = await createResponse.json();
+  console.log("[Video Clipper] Prediction started (webhook mode):", prediction.id);
+  return prediction.id;
+}
+
+// Original polling-based function (for short operations or when webhooks aren't suitable)
 async function callReplicate(
   modelVersion: string,
   input: Record<string, unknown>,
@@ -196,8 +243,8 @@ async function callReplicate(
   const prediction = await createResponse.json();
   console.log("[Video Clipper] Prediction created:", prediction.id);
 
-  // Poll for completion - allow up to 30 minutes for YouTube videos
-  const timeoutMinutes = options?.maxTimeoutMinutes || 30;
+  // Poll for completion - use shorter timeout for quick operations
+  const timeoutMinutes = options?.maxTimeoutMinutes || 5;
   const pollIntervalMs = 3000; // Poll every 3 seconds
   const maxPolls = Math.ceil((timeoutMinutes * 60 * 1000) / pollIntervalMs);
 
@@ -455,83 +502,62 @@ async function processVideoJob(jobId: string) {
       });
     }
 
-    // Now process each clip - extract video, generate thumbnail, optionally add captions
+    // Now process each clip - extract video, generate thumbnail
     // Use the videoUrl we determined earlier (which handles both upload and YouTube sources)
     const sourceVideoUrl = videoUrl || job.uploadedVideoUrl;
 
     if (sourceVideoUrl) {
-      console.log("[Video Clipper] Processing clips from source:", sourceVideoUrl.substring(0, 100));
+      console.log("[Video Clipper] Starting clip processing with webhooks:", sourceVideoUrl.substring(0, 100));
 
-      // Mark all clips as processing
-      await Promise.all(
-        createdClips.map((clipInfo) =>
-          prisma.videoClip.update({
-            where: { id: clipInfo.id },
-            data: { status: "PROCESSING", processingProgress: 10 },
-          })
-        )
-      );
+      // Mark all clips as processing and start Replicate jobs with webhooks
+      // This is non-blocking - we start all jobs and return immediately
+      // The webhook endpoint will handle completion
+      for (const clipInfo of createdClips) {
+        await prisma.videoClip.update({
+          where: { id: clipInfo.id },
+          data: { status: "PROCESSING", processingProgress: 10 },
+        });
 
-      // Process ALL clips in parallel for maximum speed
-      // Limit concurrency to 3 to avoid overwhelming Replicate API
-      const CONCURRENCY_LIMIT = 3;
-      let processedCount = 0;
-
-      const processClipWithTracking = async (clipInfo: typeof createdClips[0]) => {
+        // Start clip processing with webhook callback
         try {
-          // Process clip without captions - captions are added on-demand later
-          const clipResult = await processVideoClip(
-            sourceVideoUrl,
-            clipInfo.startTime,
-            clipInfo.endTime,
-            job.targetFormat,
-            job.userId,
-            clipInfo.id
-          );
-
-          await prisma.videoClip.update({
-            where: { id: clipInfo.id },
-            data: {
-              status: "COMPLETED",
-              processingProgress: 100,
-              clipUrl: clipResult.clipUrl,
-              clipWithCaptionsUrl: clipResult.clipWithCaptionsUrl,
-              thumbnailUrl: clipResult.thumbnailUrl,
-              fileSize: clipResult.fileSize,
-              resolution: clipResult.resolution,
+          await startReplicateWithWebhook(
+            "lucataco/trim-video:a58ed80215326cba0a80c77a11dd0d0968c567388228891b3c5c67de2a8d10cb",
+            {
+              video: sourceVideoUrl,
+              start_time: formatTimeForReplicate(clipInfo.startTime),
+              end_time: formatTimeForReplicate(clipInfo.endTime),
+              output_format: "mp4",
+              quality: "fast",
             },
-          });
-
-          processedCount++;
-          const overallProgress = 60 + Math.floor((processedCount / createdClips.length) * 35);
-          await prisma.videoClipJob.update({
-            where: { id: jobId },
-            data: { progress: overallProgress },
-          });
-
-          return { success: true, clipId: clipInfo.id };
-        } catch (clipError) {
-          console.error(`[Video Clipper] Error processing clip ${clipInfo.id}:`, clipError);
+            { jobId, step: "clip", clipId: clipInfo.id }
+          );
+        } catch (error) {
+          console.error(`[Video Clipper] Failed to start clip ${clipInfo.id}:`, error);
           await prisma.videoClip.update({
             where: { id: clipInfo.id },
             data: {
               status: "FAILED",
-              processingError: clipError instanceof Error ? clipError.message : "Failed to process clip",
+              processingError: error instanceof Error ? error.message : "Failed to start processing",
             },
           });
-          return { success: false, clipId: clipInfo.id };
         }
-      };
-
-      // Process clips in batches with concurrency limit
-      const results: Array<{ success: boolean; clipId: string }> = [];
-      for (let i = 0; i < createdClips.length; i += CONCURRENCY_LIMIT) {
-        const batch = createdClips.slice(i, i + CONCURRENCY_LIMIT);
-        const batchResults = await Promise.all(batch.map(processClipWithTracking));
-        results.push(...batchResults);
       }
 
-      console.log(`[Video Clipper] Processed ${results.filter(r => r.success).length}/${results.length} clips successfully`);
+      console.log(`[Video Clipper] Started ${createdClips.length} clip jobs with webhooks`);
+
+      // Update job status - clips are processing asynchronously
+      await prisma.videoClipJob.update({
+        where: { id: jobId },
+        data: {
+          status: "CLIPPING",
+          progress: 65,
+        },
+      });
+
+      // Return early - webhook will handle completion
+      // The job stays in CLIPPING status until all clips complete
+      console.log(`[Video Clipper] Job ${jobId} clips started, waiting for webhook callbacks`);
+      return;
     } else {
       // No direct video URL available (e.g., YouTube without Cobalt)
       // Mark clips as completed with analysis only (no actual video files)
@@ -667,7 +693,8 @@ async function processVideoClip(
         end_time: formatTimeForReplicate(endTime),
         output_format: "mp4",
         quality: "fast",
-      }
+      },
+      { maxTimeoutMinutes: 3 } // Short clips should process quickly
     );
 
     const outputVideoUrl = clipResult.output as string;
@@ -718,7 +745,8 @@ async function generateVideoThumbnail(
       {
         video: videoUrl,
         return_first_frame: true, // Get first frame for thumbnail
-      }
+      },
+      { maxTimeoutMinutes: 2 } // Frame extraction is fast
     );
 
     const thumbnailUrl = thumbnailResult.output as string;
