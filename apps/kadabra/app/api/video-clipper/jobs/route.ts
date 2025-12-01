@@ -4,6 +4,15 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@magimanager/database";
 import { put } from "@vercel/blob";
 import { broadcastEvent, CHANNELS } from "@magimanager/realtime";
+import {
+  validateVideoClipperConfig,
+  VIDEO_CLIPPER_ERRORS,
+} from "@/lib/video-clipper-config";
+import {
+  runReplicateWithPolling,
+  downloadWithRetry,
+  REPLICATE_MODELS,
+} from "@/lib/replicate-polling";
 
 // Configure route for long-running video processing
 // Note: Vercel Pro allows up to 300s (5 min), Enterprise up to 900s (15 min)
@@ -64,6 +73,22 @@ export async function GET(req: NextRequest) {
 // POST /api/video-clipper/jobs - Create a new video clip job
 export async function POST(req: NextRequest) {
   try {
+    // Validate environment configuration first (fail fast)
+    const configResult = validateVideoClipperConfig();
+    if (!configResult.valid) {
+      console.error("[Video Clipper] Configuration errors:", configResult.errors);
+      return NextResponse.json(
+        {
+          error: VIDEO_CLIPPER_ERRORS.CONFIG_INVALID,
+          details: configResult.errors,
+        },
+        { status: 503 }
+      );
+    }
+    if (configResult.warnings.length > 0) {
+      console.warn("[Video Clipper] Configuration warnings:", configResult.warnings);
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -292,7 +317,7 @@ async function callReplicate(
 }
 
 // ============================================================================
-// VIDEO PROCESSING
+// VIDEO PROCESSING (POLLING-BASED - NO WEBHOOKS)
 // ============================================================================
 
 async function processVideoJob(jobId: string) {
@@ -327,69 +352,43 @@ async function processVideoJob(jobId: string) {
       });
 
       // Use yt-whisper which downloads and transcribes YouTube in one step
+      // USING POLLING instead of webhooks for reliability
       try {
-        console.log("[Video Clipper] Using yt-whisper for YouTube transcription...");
-        const ytWhisperResult = await callReplicate(
-          "zsxkib/yt-whisper:95fc0093e387a290b6ce58f544dd9fc86c40bfc9aef5cd8ed268c2fa8b5b17cc",
+        console.log("[Video Clipper] Using yt-whisper for YouTube transcription (polling)...");
+        const ytWhisperOutput = await runReplicateWithPolling(
+          REPLICATE_MODELS.YT_WHISPER.split(":")[1], // Get version ID
           {
             url: job.sourceUrl,
             model: "large-v3",
-            output_format: "txt", // Get text output
+            output_format: "txt",
           },
           {
-            maxTimeoutMinutes: 30, // Allow up to 30 minutes for long videos
-            onProgress: async (pollCount, maxPolls) => {
-              // Update progress from 10% to 40% during transcription
-              const transcriptionProgress = 10 + Math.floor((pollCount / maxPolls) * 30);
-              await prisma.videoClipJob.update({
-                where: { id: jobId },
-                data: { progress: Math.min(transcriptionProgress, 40) },
-              });
-            },
+            maxWaitMs: 30 * 60 * 1000, // 30 minutes for long videos
+            pollIntervalMs: 5000, // Poll every 5 seconds
           }
         );
 
-        console.log("[Video Clipper] yt-whisper output:", JSON.stringify(ytWhisperResult.output).slice(0, 500));
+        console.log("[Video Clipper] yt-whisper output:", JSON.stringify(ytWhisperOutput).slice(0, 500));
 
         // Parse the transcription output
-        if (ytWhisperResult.output) {
-          transcript = parseYtWhisperOutput(ytWhisperResult.output);
+        if (ytWhisperOutput) {
+          transcript = parseYtWhisperOutput(ytWhisperOutput);
           console.log(`[Video Clipper] Parsed ${transcript.length} transcript segments from yt-whisper`);
         }
       } catch (ytError) {
         console.error("[Video Clipper] yt-whisper error:", ytError);
-        // Fall back to standard Whisper if yt-whisper fails
+        // Will try to get video URL and transcribe with Whisper as fallback
       }
+
+      // Update progress after transcription attempt
+      await prisma.videoClipJob.update({
+        where: { id: jobId },
+        data: { progress: 35 },
+      });
 
       // For video clipping, we need to get a direct video URL
-      // We'll use the Cobalt API as a fallback to get the video
-      if (!videoUrl) {
-        try {
-          console.log("[Video Clipper] Getting direct video URL for clipping...");
-          const cobaltResult = await fetch("https://api.cobalt.tools/api/json", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Accept": "application/json",
-            },
-            body: JSON.stringify({
-              url: job.sourceUrl,
-              vQuality: "720",
-              filenamePattern: "basic",
-            }),
-          });
-
-          if (cobaltResult.ok) {
-            const cobaltData = await cobaltResult.json();
-            if (cobaltData.url) {
-              videoUrl = cobaltData.url;
-              console.log("[Video Clipper] Got direct video URL from Cobalt");
-            }
-          }
-        } catch (cobaltError) {
-          console.error("[Video Clipper] Cobalt API error:", cobaltError);
-        }
-      }
+      // Try multiple providers in cascade
+      videoUrl = await downloadYouTubeVideoUrl(job.sourceUrl);
 
       // Set video title from YouTube URL metadata if available
       videoTitle = job.name || "YouTube Video";
@@ -400,7 +399,7 @@ async function processVideoJob(jobId: string) {
       videoTitle = job.name || "Uploaded Video";
       console.log("[Video Clipper] Processing uploaded video:", videoUrl);
     } else {
-      throw new Error("No video source found");
+      throw new Error(VIDEO_CLIPPER_ERRORS.INVALID_VIDEO_URL);
     }
 
     // Update progress
@@ -408,38 +407,43 @@ async function processVideoJob(jobId: string) {
       where: { id: jobId },
       data: {
         status: "ANALYZING",
-        progress: 15,
+        progress: 40,
         videoTitle,
       },
     });
 
-    // Transcribe using Whisper if we don't have a transcript yet (for uploads or if yt-whisper failed)
+    // Transcribe using Whisper if we don't have a transcript yet
     if (transcript.length === 0 && videoUrl) {
       try {
-        console.log("[Video Clipper] Transcribing video with Whisper...");
-        const whisperResult = await callReplicate(
-          "vaibhavs10/incredibly-fast-whisper:3ab86df6c8f54c11309d4d1f930ac292bad43ace52d10c80d87eb258b3c9f79c",
+        console.log("[Video Clipper] Transcribing video with Whisper (polling)...");
+        const whisperOutput = await runReplicateWithPolling(
+          REPLICATE_MODELS.INCREDIBLY_FAST_WHISPER.split(":")[1],
           {
             audio: videoUrl,
             task: "transcribe",
             language: "english",
             batch_size: 64,
             timestamp: "word",
+          },
+          {
+            maxWaitMs: 10 * 60 * 1000, // 10 minutes
+            pollIntervalMs: 3000,
           }
         );
 
-        console.log("[Video Clipper] Whisper output:", JSON.stringify(whisperResult.output).slice(0, 500));
-        transcript = parseWhisperOutput(whisperResult.output);
+        console.log("[Video Clipper] Whisper output:", JSON.stringify(whisperOutput).slice(0, 500));
+        transcript = parseWhisperOutput(whisperOutput);
         console.log(`[Video Clipper] Parsed ${transcript.length} transcript segments`);
       } catch (error) {
         console.error("[Video Clipper] Transcription error:", error);
+        // Don't use mock - fail with clear error
+        throw new Error(VIDEO_CLIPPER_ERRORS.TRANSCRIPTION_FAILED);
       }
     }
 
-    // Fallback to mock transcript if nothing else worked
+    // If still no transcript, fail explicitly (no more mock fallback)
     if (transcript.length === 0) {
-      console.log("[Video Clipper] Using mock transcript as fallback");
-      transcript = getMockTranscript();
+      throw new Error(VIDEO_CLIPPER_ERRORS.TRANSCRIPTION_FAILED);
     }
 
     // Estimate video duration from transcript
@@ -450,7 +454,7 @@ async function processVideoJob(jobId: string) {
     await prisma.videoClipJob.update({
       where: { id: jobId },
       data: {
-        progress: 40,
+        progress: 50,
         videoDuration,
       },
     });
@@ -458,6 +462,10 @@ async function processVideoJob(jobId: string) {
     // Analyze transcript for marketing moments using Gemini
     console.log("[Video Clipper] Analyzing for marketing moments...");
     const analysisResult = await analyzeTranscriptWithGemini(transcript, job);
+
+    if (!analysisResult.moments || analysisResult.moments.length === 0) {
+      throw new Error(VIDEO_CLIPPER_ERRORS.NO_MOMENTS_FOUND);
+    }
 
     await prisma.videoClipJob.update({
       where: { id: jobId },
@@ -502,21 +510,29 @@ async function processVideoJob(jobId: string) {
       });
     }
 
-    // Now process each clip - extract video, generate thumbnail
-    // Use the videoUrl we determined earlier (which handles both upload and YouTube sources)
+    // Process each clip SEQUENTIALLY with polling (not webhooks)
+    // This ensures we complete within timeout and don't lose results
     const sourceVideoUrl = videoUrl || job.uploadedVideoUrl;
 
     if (sourceVideoUrl) {
-      console.log("[Video Clipper] Starting clip processing with webhooks:", sourceVideoUrl.substring(0, 100));
+      console.log("[Video Clipper] Starting clip processing with POLLING:", sourceVideoUrl.substring(0, 100));
 
-      // Mark all clips as processing and start Replicate jobs with webhooks
-      // This is non-blocking - we start all jobs and return immediately
-      // The webhook endpoint will handle completion
+      let completedClips = 0;
+      const totalClips = createdClips.length;
+
       for (const clipInfo of createdClips) {
-        // Start clip processing with webhook callback
         try {
-          const predictionId = await startReplicateWithWebhook(
-            "lucataco/trim-video:a58ed80215326cba0a80c77a11dd0d0968c567388228891b3c5c67de2a8d10cb",
+          // Update clip to processing
+          await prisma.videoClip.update({
+            where: { id: clipInfo.id },
+            data: { status: "PROCESSING", processingProgress: 10 },
+          });
+
+          console.log(`[Video Clipper] Processing clip ${completedClips + 1}/${totalClips}: ${clipInfo.startTime}s - ${clipInfo.endTime}s`);
+
+          // Trim video using polling (not webhooks!)
+          const trimOutput = await runReplicateWithPolling<string>(
+            REPLICATE_MODELS.TRIM_VIDEO.split(":")[1],
             {
               video: sourceVideoUrl,
               start_time: formatTimeForReplicate(clipInfo.startTime),
@@ -524,59 +540,88 @@ async function processVideoJob(jobId: string) {
               output_format: "mp4",
               quality: "fast",
             },
-            { jobId, step: "clip", clipId: clipInfo.id }
+            {
+              maxWaitMs: 5 * 60 * 1000, // 5 minutes per clip
+              pollIntervalMs: 3000,
+            }
           );
 
-          // Store prediction ID for potential cancellation
-          await prisma.videoClip.update({
-            where: { id: clipInfo.id },
-            data: {
-              status: "PROCESSING",
-              processingProgress: 10,
-              replicatePredictionId: predictionId,
-            },
-          });
-        } catch (error) {
-          console.error(`[Video Clipper] Failed to start clip ${clipInfo.id}:`, error);
+          // IMMEDIATELY download and store (Replicate deletes after 1 hour)
+          if (trimOutput) {
+            console.log("[Video Clipper] Downloading trimmed clip...");
+            const clipBuffer = await downloadWithRetry(trimOutput, 3);
+
+            // Upload to Vercel Blob
+            const clipBlob = await put(
+              `video-clipper/${job.userId}/${clipInfo.id}/clip.mp4`,
+              clipBuffer,
+              { access: "public", addRandomSuffix: true }
+            );
+            console.log("[Video Clipper] Clip uploaded to:", clipBlob.url);
+
+            // Generate thumbnail
+            let thumbnailUrl = "";
+            try {
+              const thumbnailOutput = await runReplicateWithPolling<string>(
+                REPLICATE_MODELS.FRAME_EXTRACTOR.split(":")[1],
+                {
+                  video: clipBlob.url,
+                  return_first_frame: true,
+                },
+                { maxWaitMs: 2 * 60 * 1000, pollIntervalMs: 2000 }
+              );
+
+              if (thumbnailOutput) {
+                const thumbnailBuffer = await downloadWithRetry(thumbnailOutput, 2);
+                const thumbnailBlob = await put(
+                  `video-clipper/${job.userId}/${clipInfo.id}/thumbnail.jpg`,
+                  thumbnailBuffer,
+                  { access: "public", addRandomSuffix: true }
+                );
+                thumbnailUrl = thumbnailBlob.url;
+              }
+            } catch (thumbError) {
+              console.warn("[Video Clipper] Thumbnail generation failed:", thumbError);
+              // Non-fatal - continue without thumbnail
+            }
+
+            // Update clip as completed
+            await prisma.videoClip.update({
+              where: { id: clipInfo.id },
+              data: {
+                status: "COMPLETED",
+                processingProgress: 100,
+                clipUrl: clipBlob.url,
+                thumbnailUrl,
+                fileSize: clipBuffer.length,
+              },
+            });
+
+            completedClips++;
+          }
+        } catch (clipError) {
+          console.error(`[Video Clipper] Clip ${clipInfo.id} failed:`, clipError);
           await prisma.videoClip.update({
             where: { id: clipInfo.id },
             data: {
               status: "FAILED",
-              processingError: error instanceof Error ? error.message : "Failed to start processing",
+              processingError: clipError instanceof Error ? clipError.message : "Clip processing failed",
             },
           });
         }
-      }
 
-      console.log(`[Video Clipper] Started ${createdClips.length} clip jobs with webhooks`);
-
-      // Update job status - clips are processing asynchronously
-      await prisma.videoClipJob.update({
-        where: { id: jobId },
-        data: {
-          status: "CLIPPING",
-          progress: 65,
-        },
-      });
-
-      // Return early - webhook will handle completion
-      // The job stays in CLIPPING status until all clips complete
-      console.log(`[Video Clipper] Job ${jobId} clips started, waiting for webhook callbacks`);
-      return;
-    } else {
-      // No direct video URL available (e.g., YouTube without Cobalt)
-      // Mark clips as completed with analysis only (no actual video files)
-      console.log("[Video Clipper] No direct video URL available - completing with analysis only");
-      for (const clipInfo of createdClips) {
-        await prisma.videoClip.update({
-          where: { id: clipInfo.id },
-          data: {
-            status: "COMPLETED",
-            processingProgress: 100,
-            // No clip URLs - UI will show timestamps for manual clipping
-          },
+        // Update job progress
+        const clipProgress = 60 + Math.floor((completedClips / totalClips) * 35);
+        await prisma.videoClipJob.update({
+          where: { id: jobId },
+          data: { progress: clipProgress },
         });
       }
+
+      console.log(`[Video Clipper] Completed ${completedClips}/${totalClips} clips`);
+    } else {
+      // No direct video URL available - fail with clear error
+      throw new Error(VIDEO_CLIPPER_ERRORS.YOUTUBE_DOWNLOAD_FAILED);
     }
 
     // Mark job as completed
@@ -589,52 +634,8 @@ async function processVideoJob(jobId: string) {
       },
     });
 
-    // Get the completed job details for notification
-    const completedJob = await prisma.videoClipJob.findUnique({
-      where: { id: jobId },
-      include: { clips: true },
-    });
-
-    if (completedJob) {
-      const jobName = completedJob.name || completedJob.videoTitle || "your video";
-      const clipCount = completedJob.clips.length;
-
-      // Create notification in database
-      await prisma.notification.create({
-        data: {
-          userId: completedJob.userId,
-          type: "VIDEO_CLIP_COMPLETED",
-          title: "Video clips ready!",
-          message: `${clipCount} clip${clipCount !== 1 ? "s" : ""} generated from "${jobName}"`,
-          entityId: jobId,
-          entityType: "video-clip-job",
-          isRead: false,
-        },
-      });
-
-      // Increment unread notification count
-      await prisma.user.update({
-        where: { id: completedJob.userId },
-        data: {
-          unreadNotifications: { increment: 1 },
-        },
-      });
-
-      // Broadcast real-time notification via Pusher
-      await broadcastEvent(
-        CHANNELS.NOTIFICATIONS(completedJob.userId),
-        "notification:new",
-        {
-          title: "Video clips ready!",
-          message: `${clipCount} clip${clipCount !== 1 ? "s" : ""} generated from "${jobName}"`,
-          type: "VIDEO_CLIP_COMPLETED",
-          entityId: jobId,
-          entityType: "video-clip-job",
-        }
-      );
-
-      console.log("[Video Clipper] Notification sent for job:", jobId);
-    }
+    // Send notification
+    await sendJobCompletionNotification(jobId);
 
     console.log("[Video Clipper] Job completed successfully!");
   } catch (error) {
@@ -646,6 +647,139 @@ async function processVideoJob(jobId: string) {
         processingError: error instanceof Error ? error.message : "Processing failed",
       },
     });
+  }
+}
+
+// ============================================================================
+// YOUTUBE DOWNLOAD (MULTI-PROVIDER CASCADE)
+// ============================================================================
+
+async function downloadYouTubeVideoUrl(youtubeUrl: string): Promise<string | null> {
+  console.log("[Video Clipper] Getting direct video URL for:", youtubeUrl);
+
+  // Try multiple providers in order
+  const providers = [
+    { name: "Cobalt", fn: () => tryCobaltApi(youtubeUrl) },
+    { name: "Cobalt Alt", fn: () => tryCobaltApiAlt(youtubeUrl) },
+  ];
+
+  for (const provider of providers) {
+    try {
+      console.log(`[Video Clipper] Trying ${provider.name}...`);
+      const url = await provider.fn();
+      if (url) {
+        console.log(`[Video Clipper] Success with ${provider.name}`);
+        return url;
+      }
+    } catch (error) {
+      console.warn(`[Video Clipper] ${provider.name} failed:`, error);
+    }
+  }
+
+  console.error("[Video Clipper] All YouTube download providers failed");
+  return null;
+}
+
+async function tryCobaltApi(youtubeUrl: string): Promise<string | null> {
+  const response = await fetch("https://api.cobalt.tools/api/json", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
+    body: JSON.stringify({
+      url: youtubeUrl,
+      vQuality: "720",
+      filenamePattern: "basic",
+    }),
+    signal: AbortSignal.timeout(30000), // 30 second timeout
+  });
+
+  if (!response.ok) {
+    throw new Error(`Cobalt API returned ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.url || null;
+}
+
+async function tryCobaltApiAlt(youtubeUrl: string): Promise<string | null> {
+  // Alternative Cobalt instance
+  const response = await fetch("https://co.wuk.sh/api/json", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
+    body: JSON.stringify({
+      url: youtubeUrl,
+      vQuality: "720",
+      filenamePattern: "basic",
+    }),
+    signal: AbortSignal.timeout(30000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Cobalt Alt API returned ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.url || null;
+}
+
+// ============================================================================
+// JOB COMPLETION NOTIFICATION
+// ============================================================================
+
+async function sendJobCompletionNotification(jobId: string) {
+  try {
+    const completedJob = await prisma.videoClipJob.findUnique({
+      where: { id: jobId },
+      include: { clips: true },
+    });
+
+    if (!completedJob) return;
+
+    const jobName = completedJob.name || completedJob.videoTitle || "your video";
+    const clipCount = completedJob.clips.filter(c => c.status === "COMPLETED").length;
+
+    // Create notification in database
+    await prisma.notification.create({
+      data: {
+        userId: completedJob.userId,
+        type: "VIDEO_CLIP_COMPLETED",
+        title: "Video clips ready!",
+        message: `${clipCount} clip${clipCount !== 1 ? "s" : ""} generated from "${jobName}"`,
+        entityId: jobId,
+        entityType: "video-clip-job",
+        isRead: false,
+      },
+    });
+
+    // Increment unread notification count
+    await prisma.user.update({
+      where: { id: completedJob.userId },
+      data: {
+        unreadNotifications: { increment: 1 },
+      },
+    });
+
+    // Broadcast real-time notification via Pusher
+    await broadcastEvent(
+      CHANNELS.NOTIFICATIONS(completedJob.userId),
+      "notification:new",
+      {
+        title: "Video clips ready!",
+        message: `${clipCount} clip${clipCount !== 1 ? "s" : ""} generated from "${jobName}"`,
+        type: "VIDEO_CLIP_COMPLETED",
+        entityId: jobId,
+        entityType: "video-clip-job",
+      }
+    );
+
+    console.log("[Video Clipper] Notification sent for job:", jobId);
+  } catch (error) {
+    console.error("[Video Clipper] Failed to send notification:", error);
   }
 }
 
