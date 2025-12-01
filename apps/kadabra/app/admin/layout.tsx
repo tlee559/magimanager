@@ -59,6 +59,7 @@ const KadabraLayoutContext = createContext<KadabraLayoutContextType | null>(null
 
 export function useKadabraLayout() {
   const ctx = useContext(KadabraLayoutContext);
+  if (!ctx) throw new Error("useKadabraLayout must be used within KadabraLayout");
   return ctx;
 }
 
