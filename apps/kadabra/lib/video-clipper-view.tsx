@@ -2037,7 +2037,14 @@ export function VideoClipperView({
       fetchJobs(); // Refresh job list
     } catch (error) {
       console.error("[Video Clipper] Submit error:", error);
-      alert(error instanceof Error ? error.message : "Failed to create job. Please try again.");
+      // Show detailed error message
+      const errorMsg = error instanceof Error ? error.message : "Failed to create job. Please try again.";
+      console.error("[Video Clipper] Error details:", {
+        message: errorMsg,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      // Use alert for now, but log full details to console
+      alert(`Upload Error: ${errorMsg}\n\nPlease check the browser console (F12) for more details.`);
     } finally {
       setIsLoading(false);
       setIsUploading(false);
