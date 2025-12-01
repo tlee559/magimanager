@@ -1,23 +1,23 @@
 "use client";
 
-import { DashboardView } from "@/lib/kadabra-ui";
-import { useKadabraLayout } from "./kadabra-layout-provider";
+import { MyAccountsView } from "@/lib/kadabra-ui";
+import { useKadabraLayout } from "../kadabra-layout-provider";
 import { useRouter } from "next/navigation";
 
-export default function DashboardPage() {
+export default function AccountsPage() {
   const router = useRouter();
   const { accounts, loading, openChatForAccount } = useKadabraLayout();
 
   return (
     <>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-100">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-slate-100">My Accounts</h1>
         <p className="text-sm text-slate-500 mt-1">
-          Overview of your accounts and performance
+          Manage your assigned Google Ads accounts
         </p>
       </div>
 
-      <DashboardView
+      <MyAccountsView
         accounts={accounts}
         loading={loading}
         onAccountClick={(accountId) => {
