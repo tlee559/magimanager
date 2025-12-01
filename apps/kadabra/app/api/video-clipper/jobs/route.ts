@@ -714,11 +714,13 @@ async function downloadYouTubeVideoUrl(youtubeUrl: string): Promise<string | nul
   console.log("[YouTube Download] Video ID:", videoId);
 
   // Try multiple providers in order
+  // Note: Cobalt public API now requires auth (shut down Nov 2024)
+  // Using alternative free APIs
   const providers = [
-    { name: "Cobalt v7", fn: () => tryCobaltApiV7(youtubeUrl) },
-    { name: "Cobalt Legacy", fn: () => tryCobaltApi(youtubeUrl) },
+    { name: "Loader.to", fn: () => tryLoaderToApi(videoId) },
+    { name: "ssyoutube", fn: () => trySsYoutubeApi(youtubeUrl) },
     { name: "Y2mate", fn: () => tryY2mateApi(videoId) },
-    { name: "SaveFrom", fn: () => trySaveFromApi(youtubeUrl) },
+    { name: "yt1s", fn: () => tryYt1sApi(videoId) },
   ];
 
   for (let i = 0; i < providers.length; i++) {
@@ -758,73 +760,97 @@ function extractYouTubeVideoId(url: string): string | null {
   return null;
 }
 
-// Cobalt API v7 (newer endpoint)
-async function tryCobaltApiV7(youtubeUrl: string): Promise<string | null> {
-  console.log("[Cobalt v7] Calling https://api.cobalt.tools/");
+// Loader.to API - Free YouTube downloader
+async function tryLoaderToApi(videoId: string | null): Promise<string | null> {
+  if (!videoId) {
+    throw new Error("No video ID provided");
+  }
 
-  const response = await fetch("https://api.cobalt.tools/", {
+  console.log("[Loader.to] Getting download link for:", videoId);
+
+  // Step 1: Initialize download
+  const initResponse = await fetch("https://loader.to/api/button/", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      "Accept": "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
     },
-    body: JSON.stringify({
-      url: youtubeUrl,
-      videoQuality: "720",
-      filenameStyle: "basic",
-      downloadMode: "auto",
-    }),
+    body: `url=https://www.youtube.com/watch?v=${videoId}&format=720p`,
     signal: AbortSignal.timeout(30000),
   });
 
-  console.log(`[Cobalt v7] Response status: ${response.status}`);
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Unable to read error');
-    console.error(`[Cobalt v7] Error response: ${errorText}`);
-    throw new Error(`Cobalt v7 API returned ${response.status}: ${errorText}`);
+  if (!initResponse.ok) {
+    throw new Error(`Loader.to init failed: ${initResponse.status}`);
   }
 
-  const data = await response.json();
-  console.log(`[Cobalt v7] Response data:`, JSON.stringify(data).slice(0, 300));
+  const initData = await initResponse.json();
+  console.log("[Loader.to] Init response:", JSON.stringify(initData).slice(0, 200));
 
-  // Handle different response formats
-  if (data.url) return data.url;
-  if (data.status === "stream" && data.url) return data.url;
-  if (data.status === "redirect" && data.url) return data.url;
-  if (data.status === "tunnel" && data.url) return data.url;
+  if (initData.download_url) {
+    return initData.download_url;
+  }
 
-  return null;
+  // If there's a conversion ID, poll for completion
+  if (initData.id) {
+    const pollUrl = `https://loader.to/api/get-info?id=${initData.id}`;
+    let attempts = 0;
+    const maxAttempts = 30;
+
+    while (attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      attempts++;
+
+      const pollResponse = await fetch(pollUrl);
+      const pollData = await pollResponse.json();
+      console.log(`[Loader.to] Poll ${attempts}: ${pollData.status || 'unknown'}`);
+
+      if (pollData.download_url) {
+        return pollData.download_url;
+      }
+
+      if (pollData.status === "error" || pollData.error) {
+        throw new Error(`Loader.to conversion failed: ${pollData.error || 'Unknown error'}`);
+      }
+    }
+
+    throw new Error("Loader.to conversion timed out");
+  }
+
+  throw new Error("Loader.to: No download URL in response");
 }
 
-// Cobalt Legacy API
-async function tryCobaltApi(youtubeUrl: string): Promise<string | null> {
-  console.log("[Cobalt] Calling https://api.cobalt.tools/api/json");
-  const response = await fetch("https://api.cobalt.tools/api/json", {
+// ssyoutube API - Alternative YouTube downloader
+async function trySsYoutubeApi(youtubeUrl: string): Promise<string | null> {
+  console.log("[ssyoutube] Getting download link...");
+
+  const response = await fetch("https://ssyoutube.com/api/convert", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
       "Accept": "application/json",
     },
-    body: JSON.stringify({
-      url: youtubeUrl,
-      vQuality: "720",
-      filenamePattern: "basic",
-    }),
+    body: `url=${encodeURIComponent(youtubeUrl)}`,
     signal: AbortSignal.timeout(30000),
   });
 
-  console.log(`[Cobalt] Response status: ${response.status}`);
+  console.log(`[ssyoutube] Response status: ${response.status}`);
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Unable to read error');
-    console.error(`[Cobalt] Error response: ${errorText}`);
-    throw new Error(`Cobalt API returned ${response.status}: ${errorText}`);
+    throw new Error(`ssyoutube API returned ${response.status}`);
   }
 
   const data = await response.json();
-  console.log(`[Cobalt] Response data:`, JSON.stringify(data).slice(0, 300));
-  return data.url || null;
+  console.log("[ssyoutube] Response:", JSON.stringify(data).slice(0, 300));
+
+  // Look for MP4 download link
+  if (data.url) return data.url;
+  if (data.links) {
+    const mp4Link = data.links.find((l: { type?: string; url?: string }) =>
+      l.type?.includes("mp4") || l.url?.includes(".mp4")
+    );
+    if (mp4Link?.url) return mp4Link.url;
+  }
+
+  throw new Error("ssyoutube: No download URL found");
 }
 
 // Y2mate-style API (commonly used)
@@ -895,42 +921,74 @@ async function tryY2mateApi(videoId: string | null): Promise<string | null> {
   throw new Error("Y2mate: Conversion failed");
 }
 
-// SaveFrom-style API
-async function trySaveFromApi(youtubeUrl: string): Promise<string | null> {
-  console.log("[SaveFrom] Fetching download links...");
+// yt1s API - Popular YouTube downloader
+async function tryYt1sApi(videoId: string | null): Promise<string | null> {
+  if (!videoId) {
+    throw new Error("No video ID provided");
+  }
 
-  // Use a public SaveFrom-like API
-  const response = await fetch(`https://api.vevioz.com/api/button/videos?url=${encodeURIComponent(youtubeUrl)}`, {
+  console.log("[yt1s] Analyzing video:", videoId);
+
+  // Step 1: Analyze video
+  const analyzeResponse = await fetch("https://www.yt1s.com/api/ajaxSearch/index", {
+    method: "POST",
     headers: {
-      "Accept": "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Origin": "https://www.yt1s.com",
+      "Referer": "https://www.yt1s.com/",
     },
+    body: `q=https://www.youtube.com/watch?v=${videoId}&vt=home`,
     signal: AbortSignal.timeout(30000),
   });
 
-  console.log(`[SaveFrom] Response status: ${response.status}`);
-
-  if (!response.ok) {
-    throw new Error(`SaveFrom API returned ${response.status}`);
+  if (!analyzeResponse.ok) {
+    throw new Error(`yt1s analyze failed: ${analyzeResponse.status}`);
   }
 
-  const html = await response.text();
+  const analyzeData = await analyzeResponse.json();
+  console.log("[yt1s] Analyze response status:", analyzeData.status);
 
-  // Parse the response for download links
-  // Look for MP4 download URLs in the response
-  const mp4Match = html.match(/href="(https:\/\/[^"]+\.mp4[^"]*)"/);
-  if (mp4Match && mp4Match[1]) {
-    console.log("[SaveFrom] Found MP4 URL");
-    return mp4Match[1];
+  if (analyzeData.status !== "ok" || !analyzeData.links?.mp4) {
+    throw new Error("yt1s: No download links found");
   }
 
-  // Try to find any video URL
-  const videoMatch = html.match(/(https:\/\/[^"'\s]+(?:googlevideo|videoplayback)[^"'\s]*)/);
-  if (videoMatch && videoMatch[1]) {
-    console.log("[SaveFrom] Found video URL");
-    return videoMatch[1].replace(/&amp;/g, "&");
+  // Find 720p or best available
+  const mp4Links = analyzeData.links.mp4;
+  const linkKeys = Object.keys(mp4Links);
+  const quality720 = linkKeys.find(k => k.includes("720") || mp4Links[k]?.q === "720p");
+  const selectedKey = quality720 || linkKeys[0];
+  const selectedLink = mp4Links[selectedKey];
+
+  if (!selectedLink?.k) {
+    throw new Error("yt1s: No suitable quality found");
   }
 
-  throw new Error("SaveFrom: No download URL found in response");
+  console.log("[yt1s] Converting with key:", selectedLink.k);
+
+  // Step 2: Convert
+  const convertResponse = await fetch("https://www.yt1s.com/api/ajaxConvert/convert", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Origin": "https://www.yt1s.com",
+      "Referer": "https://www.yt1s.com/",
+    },
+    body: `vid=${videoId}&k=${encodeURIComponent(selectedLink.k)}`,
+    signal: AbortSignal.timeout(60000),
+  });
+
+  if (!convertResponse.ok) {
+    throw new Error(`yt1s convert failed: ${convertResponse.status}`);
+  }
+
+  const convertData = await convertResponse.json();
+  console.log("[yt1s] Convert response status:", convertData.status);
+
+  if (convertData.status === "ok" && convertData.dlink) {
+    return convertData.dlink;
+  }
+
+  throw new Error("yt1s: Conversion failed");
 }
 
 // ============================================================================
