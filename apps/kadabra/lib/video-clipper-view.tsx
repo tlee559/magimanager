@@ -1522,7 +1522,7 @@ function JobList({
 }: {
   jobs: VideoClipJob[];
   onSelectJob: (job: VideoClipJob) => void;
-  onDeleteJob: (jobId: string) => void;
+  onDeleteJob: (job: VideoClipJob) => void;
   isLoading: boolean;
 }) {
   if (isLoading) {
@@ -1593,7 +1593,7 @@ function JobList({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  onDeleteJob(job.id);
+                  onDeleteJob(job);
                 }}
                 className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-red-400 transition"
               >
@@ -1824,12 +1824,19 @@ export function VideoClipperView({
     }
   };
 
-  const handleDeleteJob = async (jobId: string) => {
-    if (!confirm("Delete this project?")) return;
+  const handleDeleteJob = async (job: VideoClipJob) => {
+    const isInProgress = !["COMPLETED", "FAILED"].includes(job.status);
+
+    const confirmMessage = isInProgress
+      ? `This job is still processing (${job.progress}% complete).\n\nDeleting will:\n• Stop all clip generation\n• Remove any completed clips\n• This cannot be undone\n\nAre you sure you want to delete?`
+      : "Delete this project and all its clips?";
+
+    if (!confirm(confirmMessage)) return;
+
     try {
-      await fetch(`/api/video-clipper/jobs/${jobId}`, { method: "DELETE" });
-      setJobs((prev) => prev.filter((j) => j.id !== jobId));
-      if (currentJob?.id === jobId) {
+      await fetch(`/api/video-clipper/jobs/${job.id}`, { method: "DELETE" });
+      setJobs((prev) => prev.filter((j) => j.id !== job.id));
+      if (currentJob?.id === job.id) {
         setCurrentJob(null);
         setView("input");
       }
