@@ -32,6 +32,7 @@ import {
   Link2,
   Unlink,
   BarChart3,
+  ImageIcon,
 } from "lucide-react";
 import { ProfileModal } from "@magimanager/features";
 import { formatCid } from "@magimanager/shared";
@@ -48,6 +49,7 @@ import {
 import type { ChatWindow } from "./chat-types";
 import { CampaignPlannerView } from "./campaign-planner-view";
 import { VideoClipperView } from "./video-clipper-view";
+import { AdsImageCreatorView } from "./ads-image-creator-view";
 import { ABRA_URL, APP_VERSION, BUILD_SHA } from "./constants";
 import toast from "react-hot-toast";
 
@@ -1473,6 +1475,25 @@ function ToolsView({ onNavigate }: { onNavigate?: (view: View) => void }) {
             </span>
           </button>
 
+          {/* Ads Image Creator AI */}
+          <button
+            onClick={() => onNavigate?.("ads-image-creator")}
+            className="bg-slate-800/50 rounded-xl p-5 border border-orange-500/30 hover:border-orange-500/50 transition text-left group"
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-gradient-to-br from-orange-500 to-pink-600 rounded-lg group-hover:scale-110 transition">
+                <ImageIcon className="w-5 h-5 text-white" />
+              </div>
+              <h3 className="text-sm font-medium text-slate-200">Ads Image Creator</h3>
+            </div>
+            <p className="text-xs text-slate-400 mb-3">
+              Generate high-converting ad creatives with AI. Analyze competitors, test marketing angles, and export to multiple formats.
+            </p>
+            <span className="text-xs text-orange-400 group-hover:text-orange-300 transition">
+              Create Ads →
+            </span>
+          </button>
+
           {/* Ad Spy - Coming Soon */}
           <div className="bg-slate-800/30 rounded-xl p-5 border border-slate-700/30 opacity-60">
             <div className="flex items-center gap-3 mb-3">
@@ -1779,7 +1800,7 @@ function RequestModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (j
 // MAIN KADABRA APP
 // ============================================================================
 
-type View = "dashboard" | "accounts" | "account-detail" | "automations" | "tools" | "campaign-planner" | "video-clipper" | "action-queue" | "requests" | "notifications";
+type View = "dashboard" | "accounts" | "account-detail" | "automations" | "tools" | "campaign-planner" | "video-clipper" | "ads-image-creator" | "action-queue" | "requests" | "notifications";
 
 // ============================================================================
 // SKELETON LOADERS
@@ -2309,10 +2330,19 @@ export function KadabraApp() {
                 const newWindow = createChatWindow(null, `Plan: ${planName}`, context);
                 setChatWindows([...chatWindows, newWindow]);
               }}
+              onCreateAds={(campaignPlanId) => {
+                // Navigate to ads image creator with the campaign plan ID
+                setView("ads-image-creator");
+                // Store the campaignPlanId in sessionStorage for the AdsImageCreatorView to pick up
+                sessionStorage.setItem("adsImageCreator_campaignPlanId", campaignPlanId);
+              }}
             />
           )}
           {view === "video-clipper" && (
             <VideoClipperView onBack={() => setView("tools")} />
+          )}
+          {view === "ads-image-creator" && (
+            <AdsImageCreatorView onBack={() => setView("tools")} />
           )}
           {view === "action-queue" && <ActionQueueView />}
           {view === "requests" && (

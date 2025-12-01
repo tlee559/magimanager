@@ -906,6 +906,9 @@ model CampaignPlan {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
+  // Relations
+  adImageProjects     AdImageProject[]
+
   @@index([userId])
   @@index([status])
   @@index([createdAt])
@@ -1116,4 +1119,154 @@ model VideoClip {
   @@index([jobId])
   @@index([marketingScore])
   @@index([status])
+}
+
+// ============================================================================
+// AI ADS IMAGE CREATOR
+// ============================================================================
+
+enum AdImageJobStatus {
+  PENDING           // Job created, waiting to start
+  SCRAPING          // Fetching competitor ads
+  ANALYZING         // AI analyzing reference/competitors
+  GENERATING        // Creating images with Replicate
+  COMPOSITING       // Adding text overlays
+  COMPLETED         // All images ready
+  FAILED            // Job failed
+}
+
+model AdImageProject {
+  id                  String              @id @default(cuid())
+  userId              String
+  name                String?
+
+  // Source context - link to Campaign Plan
+  campaignPlanId      String?
+
+  // Product/Offer details
+  productDescription  String?             @db.Text
+  productUrl          String?
+  productImageUrl     String?             // Uploaded product photo (Vercel Blob)
+  logoUrl             String?             // Brand logo (Vercel Blob)
+
+  // Creative inputs
+  headlines           String[]            // Headlines to test
+  ctaText             String?             // Call-to-action text
+
+  // Reference Image Analysis
+  referenceImageUrl   String?             // Uploaded reference ad (Vercel Blob)
+  referenceAnalysis   Json?               // AI analysis: {layout, colors, hook, ctaStyle, whyItConverts}
+
+  // Competitor Intelligence
+  competitorDomain    String?             // Domain to research
+  competitorAds       Json?               // Scraped ads: [{imageUrl, headline, platform, ...}]
+  competitorAnalysis  Json?               // AI analysis: {angles: {}, visualStyle, patterns, opportunities}
+
+  // Generation settings
+  goal                String?             // "ctr" | "conversions" | "awareness"
+  marketingAngles     String[]            // Selected angles to use
+  templateId          String?             // If using a template
+  targetFormats       String[]            // ["gdn", "meta", "linkedin"]
+  variationCount      Int                 @default(4)  // 1-4 variations
+
+  // Style preferences
+  colorScheme         Json?               // {primary, secondary, background, text}
+  fontPreferences     Json?               // {headline, body}
+
+  // Processing status
+  status              AdImageJobStatus    @default(PENDING)
+  progress            Int                 @default(0)  // 0-100 percentage
+  processingError     String?             @db.Text
+
+  // Timestamps
+  startedAt           DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  // Relations
+  images              AdImage[]
+  campaignPlan        CampaignPlan?       @relation(fields: [campaignPlanId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([campaignPlanId])
+  @@index([createdAt])
+}
+
+model AdImage {
+  id                  String   @id @default(cuid())
+  projectId           String
+
+  // Generation details
+  backgroundPrompt    String   @db.Text   // Prompt used for background generation
+  headlineUsed        String?             // Which headline was used
+  ctaUsed             String?             // Which CTA was used
+  angleUsed           String?             // Marketing angle used
+  templateUsed        String?             // Template ID if used
+
+  // Output layers
+  backgroundUrl       String?             // AI-generated background (Vercel Blob)
+  compositeUrl        String              // Final image with text overlay (Vercel Blob)
+  thumbnailUrl        String?             // Thumbnail preview
+
+  // Format variants (resized versions)
+  formatVariants      Json?               // {format: url} e.g., {"gdn_300x250": "...", "meta_1080x1080": "..."}
+
+  // AI reasoning
+  creativeRationale   String?  @db.Text   // Why this creative should convert
+
+  // AI-predicted scores
+  hookScore           Int?                // 1-100 attention grabbing
+  clarityScore        Int?                // 1-100 message clarity
+  ctaScore            Int?                // 1-100 CTA effectiveness
+  overallScore        Int?                // Weighted average
+
+  // User feedback
+  isFavorite          Boolean  @default(false)
+  userRating          Int?                // 1-5 stars
+
+  // A/B variation tracking
+  variationType       String?             // "headline" | "visual" | "angle"
+  variantGroup        String?             // Groups related variants
+
+  // Versioning (for "more like this")
+  parentId            String?             // If regenerated from another image
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relations
+  project             AdImageProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([isFavorite])
+  @@index([overallScore])
+}
+
+model AdTemplate {
+  id                  String   @id @default(cuid())
+  name                String
+  description         String?
+  category            String              // "testimonial" | "product" | "comparison" | "minimal" | "native" | "listicle"
+  thumbnailUrl        String?             // Preview image
+
+  // Layout specification (JSON)
+  // Defines positions for: headline, subheadline, cta, product, logo, background
+  layout              Json                // {headline: {x, y, width, height, align}, ...}
+
+  // Style defaults
+  defaultColors       Json?               // {primary, secondary, background, text}
+  defaultFonts        Json?               // {headline: "Inter Bold", body: "Inter"}
+
+  // Usage tracking
+  usageCount          Int      @default(0)
+
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([category])
+  @@index([isActive])
+  @@index([usageCount])
 }

@@ -26,6 +26,7 @@ import {
   BarChart3,
   MessageCircle,
   RotateCcw,
+  ImageIcon,
 } from "lucide-react";
 import { INDUSTRY_BENCHMARKS } from "./campaign-planner-agent";
 
@@ -430,12 +431,14 @@ function PlanDisplay({
   onDelete,
   onRetry,
   onChat,
+  onCreateAds,
 }: {
   plan: CampaignPlan;
   onBack: () => void;
   onDelete?: (planId: string) => void;
   onRetry?: (plan: CampaignPlan) => void;
   onChat?: (plan: CampaignPlan) => void;
+  onCreateAds?: (plan: CampaignPlan) => void;
 }) {
   const [expandedCampaigns, setExpandedCampaigns] = useState<Set<number>>(new Set([0]));
   const [expandedAdGroups, setExpandedAdGroups] = useState<Set<string>>(new Set(["0-0"]));
@@ -536,6 +539,16 @@ function PlanDisplay({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {onCreateAds && (
+            <button
+              onClick={() => onCreateAds(plan)}
+              className="px-3 py-2 bg-gradient-to-r from-orange-500/20 to-pink-500/20 hover:from-orange-500/30 hover:to-pink-500/30 border border-orange-500/30 rounded-lg text-sm text-orange-300 transition flex items-center gap-2"
+              title="Generate ad images from this plan"
+            >
+              <ImageIcon className="w-4 h-4" />
+              Create Ads
+            </button>
+          )}
           {onChat && (
             <button
               onClick={() => onChat(plan)}
@@ -1182,9 +1195,11 @@ function PlansListView({
 export function CampaignPlannerView({
   onBack,
   onOpenChat,
+  onCreateAds,
 }: {
   onBack: () => void;
   onOpenChat?: (planName: string, context: string) => void;
+  onCreateAds?: (campaignPlanId: string) => void;
 }) {
   const [view, setView] = useState<"list" | "create" | "processing" | "display">("list");
   const [plans, setPlans] = useState<CampaignPlan[]>([]);
@@ -1435,6 +1450,7 @@ Help me understand this plan, suggest optimizations, or answer questions about i
           onDelete={handleDeletePlan}
           onRetry={handleRetryPlan}
           onChat={handleChatAboutPlan}
+          onCreateAds={onCreateAds ? (plan) => onCreateAds(plan.id) : undefined}
         />
       )}
     </div>
