@@ -838,23 +838,43 @@ function AccountDetailView({
     );
   }
 
+  // Handle OAuth connect for accounts without connection
+  function handleConnectOAuthEarly() {
+    const width = 600;
+    const height = 700;
+    const left = window.screenX + (window.innerWidth - width) / 2;
+    const top = window.screenY + (window.innerHeight - height) / 2;
+
+    window.open(
+      `/api/oauth/google-ads/authorize?accountId=${account.id}`,
+      "google-oauth",
+      `width=${width},height=${height},left=${left},top=${top}`
+    );
+  }
+
   // Check if account is not OAuth connected
   if (!account.connection || account.connection.status !== "active") {
     return (
       <div className="bg-slate-800/30 rounded-xl border border-slate-700/50 p-12 text-center">
-        <Lock className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-slate-200 mb-2">OAuth Connection Required</h3>
-        <p className="text-sm text-slate-500 mb-4 max-w-md mx-auto">
-          This account needs to be connected via Google OAuth to view campaigns.
-          Connect the account to sync campaign data from Google Ads.
-        </p>
-        <div className="flex items-center justify-center gap-3">
-          <div className="text-xs text-slate-600">
-            CID: {account.googleCid}
-          </div>
+        <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Link2 className="w-8 h-8 text-blue-400" />
         </div>
-        <p className="text-xs text-slate-600 mt-4">
-          Contact an admin to connect this account via the Admin panel.
+        <h3 className="text-lg font-medium text-slate-200 mb-2">Connect Google Ads</h3>
+        <p className="text-sm text-slate-500 mb-4 max-w-md mx-auto">
+          This account needs to be connected to Google Ads to view campaigns and performance data.
+        </p>
+        <button
+          onClick={handleConnectOAuthEarly}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg inline-flex items-center gap-2 transition mb-3"
+        >
+          <Link2 className="w-4 h-4" />
+          Connect to Google Ads
+        </button>
+        <div className="text-xs text-slate-600">
+          CID: {account.googleCid}
+        </div>
+        <p className="text-xs text-slate-600 mt-3">
+          A popup will open to authenticate with Google
         </p>
       </div>
     );
