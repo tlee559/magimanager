@@ -883,6 +883,32 @@ function AccountDetailView({
   const customerId = account.googleCid.replace(/-/g, "");
   const accountName = `MM${String(account.internalId).padStart(3, "0")}`;
 
+  // Sync account with Google Ads (triggers full data refresh)
+  const syncAccount = async (): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/accounts/${account.id}/sync`, {
+        method: "POST",
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        // Check if account needs to be connected
+        if (data.error?.includes("not connected") || data.error?.includes("OAuth")) {
+          setNeedsConnection(true);
+          return false;
+        }
+        console.error("Sync failed:", data.error);
+        return false;
+      }
+
+      console.log("[Kadabra] Sync completed:", data.metrics);
+      return true;
+    } catch (err) {
+      console.error("Sync failed:", err);
+      return false;
+    }
+  };
+
   // Fetch campaigns for this account
   const fetchCampaigns = async () => {
     setLoadingCampaigns(true);
@@ -909,6 +935,19 @@ function AccountDetailView({
     } catch (err) {
       console.error("Failed to fetch campaigns:", err);
     } finally {
+      setLoadingCampaigns(false);
+    }
+  };
+
+  // Refresh: sync first, then fetch campaigns
+  const handleRefresh = async () => {
+    setLoadingCampaigns(true);
+    // First sync the account to get fresh data from Google Ads
+    const syncSuccess = await syncAccount();
+    if (syncSuccess) {
+      // Then fetch the campaigns
+      await fetchCampaigns();
+    } else {
       setLoadingCampaigns(false);
     }
   };
@@ -1149,9 +1188,10 @@ function AccountDetailView({
               <option value="LAST_30_DAYS">Last 30 Days</option>
             </select>
             <button
-              onClick={fetchCampaigns}
+              onClick={handleRefresh}
               disabled={loadingCampaigns}
               className="p-2 rounded-lg hover:bg-slate-700/50 text-slate-400 hover:text-slate-200 transition"
+              title="Sync with Google Ads"
             >
               <RefreshCw className={`w-4 h-4 ${loadingCampaigns ? "animate-spin" : ""}`} />
             </button>

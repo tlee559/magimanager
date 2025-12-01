@@ -635,11 +635,44 @@ export function CampaignsView({ accountId, customerId, accountName }: CampaignsV
     );
   }
 
-  // Handle sync
+  // Sync account with Google Ads (triggers full data refresh)
+  async function syncAccount(): Promise<boolean> {
+    try {
+      const res = await fetch(`/api/accounts/${accountId}/sync`, {
+        method: "POST",
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        // Check if account needs to be connected
+        if (data.error?.includes("not connected") || data.error?.includes("OAuth")) {
+          setNeedsConnection(true);
+          return false;
+        }
+        console.error("Sync failed:", data.error);
+        return false;
+      }
+
+      console.log("[CampaignsView] Sync completed:", data.metrics);
+      return true;
+    } catch (err) {
+      console.error("Sync failed:", err);
+      return false;
+    }
+  }
+
+  // Handle sync - syncs account first, then fetches campaigns
   async function handleSync() {
     setSyncing(true);
-    await fetchCampaigns();
+    setLoading(true);
+    // First sync the account to get fresh data from Google Ads
+    const syncSuccess = await syncAccount();
+    if (syncSuccess) {
+      // Then fetch the campaigns
+      await fetchCampaigns();
+    }
     setSyncing(false);
+    setLoading(false);
   }
 
   // Filter and sort campaigns
