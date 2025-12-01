@@ -110,6 +110,41 @@ const GOALS = [
 ];
 
 // ============================================================================
+// HELPER: Get status message for processing view
+// ============================================================================
+function getStatusMessage(status: string, progress: number): { title: string; subtitle: string } {
+  switch (status) {
+    case "PENDING":
+      return { title: "Queuing your request...", subtitle: "Setting up the creative generation pipeline" };
+    case "ANALYZING":
+      return {
+        title: "AI analyzing your inputs...",
+        subtitle: progress < 30
+          ? "Understanding your product and target audience"
+          : progress < 60
+          ? "Analyzing reference images and competitor styles"
+          : "Planning creative strategies and layouts"
+      };
+    case "GENERATING":
+      return {
+        title: "Generating ad images...",
+        subtitle: progress < 50
+          ? "Creating unique visual compositions with AI"
+          : "Refining images for maximum impact"
+      };
+    case "COMPOSITING":
+      return {
+        title: "Adding text overlays...",
+        subtitle: "Positioning headlines and CTAs for optimal engagement"
+      };
+    case "SCORING":
+      return { title: "Scoring creatives...", subtitle: "AI evaluating hook strength and conversion potential" };
+    default:
+      return { title: "Processing...", subtitle: "Please wait while we generate your ads" };
+  }
+}
+
+// ============================================================================
 // MAIN VIEW COMPONENT
 // ============================================================================
 
@@ -118,12 +153,13 @@ interface AdsImageCreatorViewProps {
 }
 
 export function AdsImageCreatorView({ onBack }: AdsImageCreatorViewProps) {
-  const [view, setView] = useState<"list" | "create" | "detail">("list");
+  const [view, setView] = useState<"list" | "create" | "processing" | "detail">("list");
   const [projects, setProjects] = useState<AdImageProject[]>([]);
   const [selectedProject, setSelectedProject] = useState<AdImageProject | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [initialCampaignPlanId, setInitialCampaignPlanId] = useState<string | null>(null);
+  const [showBackgroundModal, setShowBackgroundModal] = useState(false);
 
   // Check for campaign plan ID from sessionStorage (from Campaign Planner integration)
   useEffect(() => {
@@ -140,16 +176,56 @@ export function AdsImageCreatorView({ onBack }: AdsImageCreatorViewProps) {
   const fetchProjects = useCallback(async () => {
     try {
       setIsLoading(true);
+      console.log("[AdsImageCreator] Fetching projects...");
       const response = await fetch("/api/ai/ads-image-creator/projects");
       if (!response.ok) throw new Error("Failed to fetch projects");
       const data = await response.json();
+      console.log("[AdsImageCreator] Fetched", data.projects?.length || 0, "projects");
       setProjects(data.projects);
     } catch (err) {
+      console.error("[AdsImageCreator] Error fetching projects:", err);
       setError(err instanceof Error ? err.message : "Failed to load projects");
     } finally {
       setIsLoading(false);
     }
   }, []);
+
+  // Fetch single project status (for polling)
+  const fetchProjectStatus = useCallback(async (projectId: string): Promise<AdImageProject | null> => {
+    try {
+      console.log("[AdsImageCreator] Polling project status:", projectId);
+      const response = await fetch(`/api/ai/ads-image-creator/projects/${projectId}`);
+      if (!response.ok) throw new Error("Failed to fetch project");
+      const data = await response.json();
+      console.log("[AdsImageCreator] Project status:", data.project.status, "Progress:", data.project.progress);
+      return data.project;
+    } catch (err) {
+      console.error("[AdsImageCreator] Error polling project:", err);
+      return null;
+    }
+  }, []);
+
+  // Poll for updates when in processing view
+  useEffect(() => {
+    if (view === "processing" && selectedProject && !["COMPLETED", "FAILED"].includes(selectedProject.status)) {
+      console.log("[AdsImageCreator] Starting polling for project:", selectedProject.id);
+      const interval = setInterval(async () => {
+        const updated = await fetchProjectStatus(selectedProject.id);
+        if (updated) {
+          setSelectedProject(updated);
+          if (updated.status === "COMPLETED" || updated.status === "FAILED") {
+            console.log("[AdsImageCreator] Generation finished:", updated.status);
+            setView("detail");
+            fetchProjects();
+          }
+        }
+      }, 3000);
+      return () => {
+        console.log("[AdsImageCreator] Stopping polling");
+        clearInterval(interval);
+      };
+    }
+  }, [view, selectedProject?.id, selectedProject?.status, fetchProjectStatus, fetchProjects]);
 
   useEffect(() => {
     fetchProjects();
@@ -158,12 +234,21 @@ export function AdsImageCreatorView({ onBack }: AdsImageCreatorViewProps) {
   // Handle project selection
   const handleSelectProject = async (projectId: string) => {
     try {
+      console.log("[AdsImageCreator] Selecting project:", projectId);
       const response = await fetch(`/api/ai/ads-image-creator/projects/${projectId}`);
       if (!response.ok) throw new Error("Failed to fetch project");
       const data = await response.json();
       setSelectedProject(data.project);
-      setView("detail");
+
+      // If still processing, go to processing view, otherwise detail view
+      if (["PENDING", "ANALYZING", "GENERATING", "COMPOSITING", "SCORING"].includes(data.project.status)) {
+        console.log("[AdsImageCreator] Project still processing, showing processing view");
+        setView("processing");
+      } else {
+        setView("detail");
+      }
     } catch (err) {
+      console.error("[AdsImageCreator] Error selecting project:", err);
       setError(err instanceof Error ? err.message : "Failed to load project");
     }
   };
@@ -187,6 +272,15 @@ export function AdsImageCreatorView({ onBack }: AdsImageCreatorViewProps) {
     }
   };
 
+  // Handle project creation - show background modal
+  const handleProjectCreated = (project: AdImageProject) => {
+    console.log("[AdsImageCreator] Project created:", project.id);
+    setSelectedProject(project);
+    setShowBackgroundModal(true);
+    setInitialCampaignPlanId(null);
+    fetchProjects();
+  };
+
   // Render based on view
   if (view === "create") {
     return (
@@ -195,13 +289,20 @@ export function AdsImageCreatorView({ onBack }: AdsImageCreatorViewProps) {
           setView("list");
           setInitialCampaignPlanId(null);
         }}
-        onCreated={(project) => {
-          setSelectedProject(project);
-          setView("detail");
-          setInitialCampaignPlanId(null);
-          fetchProjects();
-        }}
+        onCreated={handleProjectCreated}
         initialCampaignPlanId={initialCampaignPlanId}
+      />
+    );
+  }
+
+  if (view === "processing" && selectedProject) {
+    return (
+      <ProcessingView
+        project={selectedProject}
+        onCancel={() => {
+          setView("list");
+          setSelectedProject(null);
+        }}
       />
     );
   }
@@ -216,7 +317,8 @@ export function AdsImageCreatorView({ onBack }: AdsImageCreatorViewProps) {
           fetchProjects();
         }}
         onRefresh={async () => {
-          await handleSelectProject(selectedProject.id);
+          const updated = await fetchProjectStatus(selectedProject.id);
+          if (updated) setSelectedProject(updated);
         }}
         onDelete={() => handleDeleteProject(selectedProject.id)}
       />
@@ -297,6 +399,47 @@ export function AdsImageCreatorView({ onBack }: AdsImageCreatorViewProps) {
               onDelete={() => handleDeleteProject(project.id)}
             />
           ))}
+        </div>
+      )}
+
+      {/* Background Processing Modal */}
+      {showBackgroundModal && selectedProject && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full">
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-500 to-pink-600 mb-4">
+                <ImageIcon className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="text-xl font-semibold text-slate-100 mb-2">
+                Generation Started
+              </h3>
+              <p className="text-sm text-slate-400">
+                Your ad images are being generated. This may take 1-2 minutes.
+                We&apos;ll notify you when it&apos;s ready.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  setShowBackgroundModal(false);
+                  setView("processing");
+                }}
+                className="w-full px-4 py-3 bg-gradient-to-r from-orange-500 to-pink-600 hover:opacity-90 text-white rounded-xl font-medium transition"
+              >
+                Watch Progress
+              </button>
+              <button
+                onClick={() => {
+                  setShowBackgroundModal(false);
+                  setSelectedProject(null);
+                }}
+                className="w-full px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-medium transition"
+              >
+                Continue Working
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -388,6 +531,116 @@ function ProjectCard({
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// PROCESSING VIEW
+// ============================================================================
+
+function ProcessingView({
+  project,
+  onCancel,
+}: {
+  project: AdImageProject;
+  onCancel: () => void;
+}) {
+  const status = getStatusMessage(project.status, project.progress);
+
+  // Calculate image progress
+  const totalExpected = project.variationCount;
+  const completedImages = project.images.filter(img => img.compositeUrl).length;
+
+  return (
+    <div className="max-w-lg mx-auto text-center py-12">
+      {/* Animated Processing Icon */}
+      <div className="relative inline-flex items-center justify-center w-24 h-24 mb-6">
+        <div className="absolute inset-0 rounded-full border-4 border-orange-500/20" />
+        <div
+          className="absolute inset-0 rounded-full border-4 border-transparent border-t-orange-500 animate-spin"
+          style={{ animationDuration: "1.5s" }}
+        />
+        <ImageIcon className="w-10 h-10 text-orange-400" />
+      </div>
+
+      {/* Status */}
+      <h3 className="text-xl font-semibold text-slate-100 mb-2">
+        {status.title}
+      </h3>
+      <p className="text-sm text-slate-400 mb-6">
+        {status.subtitle}
+      </p>
+
+      {/* Progress Bar */}
+      <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden mb-2">
+        <div
+          className="h-full bg-gradient-to-r from-orange-500 to-pink-600 transition-all duration-500"
+          style={{ width: `${project.progress}%` }}
+        />
+      </div>
+      <p className="text-xs text-slate-500 mb-4">{project.progress}% complete</p>
+
+      {/* Image Progress - show when generating */}
+      {project.status === "GENERATING" && totalExpected > 0 && (
+        <div className="mt-6 p-4 bg-slate-800/50 rounded-xl text-left">
+          <p className="text-xs text-slate-400 uppercase font-medium mb-3">Image Progress</p>
+          <div className="grid grid-cols-4 gap-2">
+            {Array.from({ length: totalExpected }).map((_, index) => {
+              const image = project.images[index];
+              const isComplete = image?.compositeUrl;
+              const isInProgress = index === completedImages;
+              return (
+                <div
+                  key={index}
+                  className={`aspect-square rounded-lg flex items-center justify-center ${
+                    isComplete
+                      ? "bg-emerald-500/20 border border-emerald-500/40"
+                      : isInProgress
+                      ? "bg-orange-500/20 border border-orange-500/40"
+                      : "bg-slate-700/50 border border-slate-600"
+                  }`}
+                >
+                  {isComplete ? (
+                    <Check className="w-4 h-4 text-emerald-400" />
+                  ) : isInProgress ? (
+                    <Loader2 className="w-4 h-4 text-orange-400 animate-spin" />
+                  ) : (
+                    <span className="text-xs text-slate-500">{index + 1}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-3 pt-3 border-t border-slate-700 text-xs text-slate-500">
+            {completedImages}/{totalExpected} images generated
+          </div>
+        </div>
+      )}
+
+      {/* Project Info */}
+      <div className="mt-6 p-4 bg-slate-800/50 rounded-xl text-left">
+        <p className="text-xs text-slate-400 uppercase font-medium mb-2">Project</p>
+        <p className="text-sm text-slate-200">{project.name || "Untitled Project"}</p>
+        {project.headlines && project.headlines.length > 0 && (
+          <p className="text-xs text-slate-500 mt-1 truncate">
+            Headlines: {project.headlines.join(", ")}
+          </p>
+        )}
+      </div>
+
+      {/* Info message about background processing */}
+      <p className="text-xs text-slate-500 mt-6 mb-4">
+        Processing continues in the background. You can navigate away and come back later.
+      </p>
+
+      {/* Cancel Button */}
+      <button
+        onClick={onCancel}
+        className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200 transition"
+      >
+        Continue Working
+      </button>
     </div>
   );
 }
@@ -536,6 +789,8 @@ function CreateProjectView({
       setIsLoading(true);
       setError(null);
 
+      console.log("[AdsImageCreator] Starting project creation...");
+
       // Validate
       if (!productDescription.trim()) {
         throw new Error("Product description is required");
@@ -545,6 +800,14 @@ function CreateProjectView({
       if (filteredHeadlines.length === 0) {
         throw new Error("At least one headline is required");
       }
+
+      console.log("[AdsImageCreator] Creating project with:", {
+        name: name.trim() || null,
+        headlines: filteredHeadlines.length,
+        angles: selectedAngles,
+        variations: variationCount,
+        hasReference: !!referenceImageUrl,
+      });
 
       // Create project
       const createResponse = await fetch("/api/ai/ads-image-creator/projects", {
@@ -567,12 +830,15 @@ function CreateProjectView({
 
       if (!createResponse.ok) {
         const err = await createResponse.json();
+        console.error("[AdsImageCreator] Failed to create project:", err);
         throw new Error(err.error || "Failed to create project");
       }
 
       const { project } = await createResponse.json();
+      console.log("[AdsImageCreator] Project created:", project.id);
 
       // Start generation
+      console.log("[AdsImageCreator] Starting generation...");
       const generateResponse = await fetch(
         `/api/ai/ads-image-creator/projects/${project.id}/generate`,
         { method: "POST" }
@@ -580,11 +846,14 @@ function CreateProjectView({
 
       if (!generateResponse.ok) {
         const err = await generateResponse.json();
+        console.error("[AdsImageCreator] Failed to start generation:", err);
         throw new Error(err.error || "Failed to start generation");
       }
 
+      console.log("[AdsImageCreator] Generation started successfully");
       onCreated(project);
     } catch (err) {
+      console.error("[AdsImageCreator] Error:", err);
       setError(err instanceof Error ? err.message : "Failed to create project");
     } finally {
       setIsLoading(false);
