@@ -32,7 +32,7 @@ export function ChatWindowBar({
   // If no windows, just show the floating button
   if (windows.length === 0) {
     return (
-      <div className="fixed bottom-6 right-6 z-50">
+      <div className="fixed bottom-6 right-6 z-[70]">
         <button
           onClick={onOpenGeneralChat}
           className="p-4 rounded-full shadow-lg shadow-black/30 transition-all bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-400 hover:to-purple-500 hover:scale-105"
@@ -45,7 +45,7 @@ export function ChatWindowBar({
   }
 
   return (
-    <div className="fixed bottom-0 right-6 flex items-end gap-2 z-50">
+    <div className="fixed bottom-0 right-6 flex items-end gap-2 z-[70]">
       {/* Hidden windows indicator */}
       {hiddenCount > 0 && (
         <button
