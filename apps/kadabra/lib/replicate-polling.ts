@@ -46,11 +46,16 @@ export async function runReplicateWithPolling<T = unknown>(
 
   const apiKey = process.env.REPLICATE_API_TOKEN;
   if (!apiKey) {
+    console.error("[Replicate] ERROR: REPLICATE_API_TOKEN not configured!");
     throw new Error("REPLICATE_API_TOKEN not configured");
   }
 
   // Start the prediction
-  console.log(`[Replicate] Starting prediction for model: ${model}`);
+  console.log(`[Replicate] ========== STARTING PREDICTION ==========`);
+  console.log(`[Replicate] Model version: ${model}`);
+  console.log(`[Replicate] Input keys: ${Object.keys(input).join(", ")}`);
+  console.log(`[Replicate] Max wait: ${maxWaitMs / 1000}s, Poll interval: ${pollIntervalMs / 1000}s`);
+
   const createResponse = await fetch(`${REPLICATE_API_URL}/predictions`, {
     method: "POST",
     headers: {
@@ -63,19 +68,30 @@ export async function runReplicateWithPolling<T = unknown>(
     }),
   });
 
+  console.log(`[Replicate] Create response status: ${createResponse.status}`);
+
   if (!createResponse.ok) {
     const errorText = await createResponse.text();
+    console.error(`[Replicate] Failed to create prediction: ${errorText}`);
     throw new Error(`Failed to start Replicate prediction: ${errorText}`);
   }
 
   const prediction: ReplicatePrediction = await createResponse.json();
-  console.log(`[Replicate] Prediction started: ${prediction.id}`);
+  console.log(`[Replicate] Prediction created!`);
+  console.log(`[Replicate] Prediction ID: ${prediction.id}`);
+  console.log(`[Replicate] Initial status: ${prediction.status}`);
 
   // Poll until completion
   const startTime = Date.now();
   let lastStatus = prediction.status;
+  let pollCount = 0;
+
+  console.log(`[Replicate] Starting polling loop...`);
 
   while (Date.now() - startTime < maxWaitMs) {
+    pollCount++;
+    const elapsedSec = Math.round((Date.now() - startTime) / 1000);
+
     const statusResponse = await fetch(
       `${REPLICATE_API_URL}/predictions/${prediction.id}`,
       {
@@ -86,14 +102,18 @@ export async function runReplicateWithPolling<T = unknown>(
     );
 
     if (!statusResponse.ok) {
+      console.error(`[Replicate] Poll ${pollCount} failed: ${statusResponse.statusText}`);
       throw new Error(`Failed to check prediction status: ${statusResponse.statusText}`);
     }
 
     const currentPrediction: ReplicatePrediction = await statusResponse.json();
 
-    // Log status changes
-    if (currentPrediction.status !== lastStatus) {
-      console.log(`[Replicate] ${prediction.id} status: ${lastStatus} -> ${currentPrediction.status}`);
+    // Log status changes OR every 10 polls
+    if (currentPrediction.status !== lastStatus || pollCount % 10 === 0) {
+      console.log(`[Replicate] Poll ${pollCount} (${elapsedSec}s): ${currentPrediction.status}`);
+      if (currentPrediction.status !== lastStatus) {
+        console.log(`[Replicate] Status changed: ${lastStatus} -> ${currentPrediction.status}`);
+      }
       lastStatus = currentPrediction.status;
     }
 
@@ -104,16 +124,26 @@ export async function runReplicateWithPolling<T = unknown>(
 
     // Check for completion
     if (currentPrediction.status === "succeeded") {
-      console.log(`[Replicate] Prediction completed successfully in ${Date.now() - startTime}ms`);
+      const durationSec = Math.round((Date.now() - startTime) / 1000);
+      console.log(`[Replicate] ✅ PREDICTION SUCCEEDED in ${durationSec}s (${pollCount} polls)`);
+      console.log(`[Replicate] Output type: ${typeof currentPrediction.output}`);
+      if (typeof currentPrediction.output === 'string') {
+        console.log(`[Replicate] Output (string): ${currentPrediction.output.substring(0, 200)}...`);
+      } else {
+        console.log(`[Replicate] Output (object): ${JSON.stringify(currentPrediction.output).substring(0, 200)}...`);
+      }
       return currentPrediction.output as T;
     }
 
     if (currentPrediction.status === "failed") {
-      console.error(`[Replicate] Prediction failed: ${currentPrediction.error}`);
+      console.error(`[Replicate] ❌ PREDICTION FAILED!`);
+      console.error(`[Replicate] Error: ${currentPrediction.error}`);
+      console.error(`[Replicate] Logs: ${currentPrediction.logs?.slice(-500) || 'No logs'}`);
       throw new Error(`Replicate prediction failed: ${currentPrediction.error || "Unknown error"}`);
     }
 
     if (currentPrediction.status === "canceled") {
+      console.error(`[Replicate] ⚠️ PREDICTION CANCELED`);
       throw new Error("Replicate prediction was canceled");
     }
 
@@ -122,17 +152,19 @@ export async function runReplicateWithPolling<T = unknown>(
   }
 
   // Timeout - try to cancel the prediction
-  console.error(`[Replicate] Prediction ${prediction.id} timed out after ${maxWaitMs}ms`);
+  const timeoutSec = Math.round(maxWaitMs / 1000);
+  console.error(`[Replicate] ⏰ PREDICTION TIMED OUT after ${timeoutSec}s (${pollCount} polls)`);
   try {
     await fetch(`${REPLICATE_API_URL}/predictions/${prediction.id}/cancel`, {
       method: "POST",
       headers: { Authorization: `Token ${apiKey}` },
     });
+    console.log(`[Replicate] Prediction canceled after timeout`);
   } catch {
     // Ignore cancel errors
   }
 
-  throw new Error(`Replicate prediction timed out after ${maxWaitMs / 1000} seconds`);
+  throw new Error(`Replicate prediction timed out after ${timeoutSec} seconds`);
 }
 
 /**

@@ -321,6 +321,12 @@ async function callReplicate(
 // ============================================================================
 
 async function processVideoJob(jobId: string) {
+  const LOG_PREFIX = `[VideoClipper:${jobId.slice(0, 8)}]`;
+
+  console.log(`${LOG_PREFIX} ========== STARTING JOB ==========`);
+  console.log(`${LOG_PREFIX} Job ID: ${jobId}`);
+  console.log(`${LOG_PREFIX} Timestamp: ${new Date().toISOString()}`);
+
   try {
     // Update status to downloading
     await prisma.videoClipJob.update({
@@ -331,12 +337,23 @@ async function processVideoJob(jobId: string) {
         startedAt: new Date(),
       },
     });
+    console.log(`${LOG_PREFIX} Status updated to DOWNLOADING`);
 
     const job = await prisma.videoClipJob.findUnique({
       where: { id: jobId },
     });
 
-    if (!job) return;
+    if (!job) {
+      console.error(`${LOG_PREFIX} ERROR: Job not found in database!`);
+      return;
+    }
+
+    console.log(`${LOG_PREFIX} Job loaded from DB:`);
+    console.log(`${LOG_PREFIX}   - sourceType: ${job.sourceType}`);
+    console.log(`${LOG_PREFIX}   - sourceUrl: ${job.sourceUrl?.substring(0, 80) || 'null'}`);
+    console.log(`${LOG_PREFIX}   - uploadedVideoUrl: ${job.uploadedVideoUrl?.substring(0, 80) || 'null'}`);
+    console.log(`${LOG_PREFIX}   - maxClips: ${job.maxClips}`);
+    console.log(`${LOG_PREFIX}   - targetDuration: ${job.targetDuration}`);
 
     let videoUrl: string | null = null;
     let videoTitle = job.name || "Video";
@@ -344,7 +361,8 @@ async function processVideoJob(jobId: string) {
 
     // Handle YouTube source
     if (job.sourceType === "youtube" && job.sourceUrl) {
-      console.log("[Video Clipper] Processing YouTube video:", job.sourceUrl);
+      console.log(`${LOG_PREFIX} ========== YOUTUBE MODE ==========`);
+      console.log(`${LOG_PREFIX} YouTube URL: ${job.sourceUrl}`);
 
       await prisma.videoClipJob.update({
         where: { id: jobId },
@@ -354,7 +372,10 @@ async function processVideoJob(jobId: string) {
       // Use yt-whisper which downloads and transcribes YouTube in one step
       // USING POLLING instead of webhooks for reliability
       try {
-        console.log("[Video Clipper] Using yt-whisper for YouTube transcription (polling)...");
+        console.log(`${LOG_PREFIX} Step 1: Running yt-whisper (transcription)...`);
+        console.log(`${LOG_PREFIX} Model: ${REPLICATE_MODELS.YT_WHISPER}`);
+        console.log(`${LOG_PREFIX} Max wait: 30 minutes, poll interval: 5 seconds`);
+
         const ytWhisperOutput = await runReplicateWithPolling(
           REPLICATE_MODELS.YT_WHISPER.split(":")[1], // Get version ID
           {
@@ -368,16 +389,24 @@ async function processVideoJob(jobId: string) {
           }
         );
 
-        console.log("[Video Clipper] yt-whisper output:", JSON.stringify(ytWhisperOutput).slice(0, 500));
+        console.log(`${LOG_PREFIX} yt-whisper completed!`);
+        console.log(`${LOG_PREFIX} Output type: ${typeof ytWhisperOutput}`);
+        console.log(`${LOG_PREFIX} Output preview: ${JSON.stringify(ytWhisperOutput).slice(0, 500)}`);
 
         // Parse the transcription output
         if (ytWhisperOutput) {
           transcript = parseYtWhisperOutput(ytWhisperOutput);
-          console.log(`[Video Clipper] Parsed ${transcript.length} transcript segments from yt-whisper`);
+          console.log(`${LOG_PREFIX} Parsed ${transcript.length} transcript segments from yt-whisper`);
+          if (transcript.length > 0) {
+            console.log(`${LOG_PREFIX} First segment: ${JSON.stringify(transcript[0])}`);
+            console.log(`${LOG_PREFIX} Last segment: ${JSON.stringify(transcript[transcript.length - 1])}`);
+          }
+        } else {
+          console.warn(`${LOG_PREFIX} WARNING: yt-whisper returned empty/null output`);
         }
       } catch (ytError) {
-        console.error("[Video Clipper] yt-whisper error:", ytError);
-        // Will try to get video URL and transcribe with Whisper as fallback
+        console.error(`${LOG_PREFIX} ERROR in yt-whisper:`, ytError);
+        console.error(`${LOG_PREFIX} Will try fallback transcription method...`);
       }
 
       // Update progress after transcription attempt
@@ -388,17 +417,21 @@ async function processVideoJob(jobId: string) {
 
       // For video clipping, we need to get a direct video URL
       // Try multiple providers in cascade
+      console.log(`${LOG_PREFIX} Step 2: Getting direct video URL for clipping...`);
       videoUrl = await downloadYouTubeVideoUrl(job.sourceUrl);
+      console.log(`${LOG_PREFIX} Video URL result: ${videoUrl ? videoUrl.substring(0, 100) + '...' : 'NULL (FAILED!)'}`);
 
       // Set video title from YouTube URL metadata if available
       videoTitle = job.name || "YouTube Video";
 
     } else if (job.sourceType === "upload" && job.uploadedVideoUrl) {
       // Handle uploaded video
+      console.log(`${LOG_PREFIX} ========== UPLOAD MODE ==========`);
       videoUrl = job.uploadedVideoUrl;
       videoTitle = job.name || "Uploaded Video";
-      console.log("[Video Clipper] Processing uploaded video:", videoUrl);
+      console.log(`${LOG_PREFIX} Uploaded video URL: ${videoUrl}`);
     } else {
+      console.error(`${LOG_PREFIX} ERROR: Invalid source - sourceType: ${job.sourceType}, sourceUrl: ${job.sourceUrl}, uploadedVideoUrl: ${job.uploadedVideoUrl}`);
       throw new Error(VIDEO_CLIPPER_ERRORS.INVALID_VIDEO_URL);
     }
 
@@ -414,8 +447,9 @@ async function processVideoJob(jobId: string) {
 
     // Transcribe using Whisper if we don't have a transcript yet
     if (transcript.length === 0 && videoUrl) {
+      console.log(`${LOG_PREFIX} Step 3: Fallback transcription with Whisper...`);
+      console.log(`${LOG_PREFIX} Using video URL: ${videoUrl.substring(0, 100)}`);
       try {
-        console.log("[Video Clipper] Transcribing video with Whisper (polling)...");
         const whisperOutput = await runReplicateWithPolling(
           REPLICATE_MODELS.INCREDIBLY_FAST_WHISPER.split(":")[1],
           {
@@ -431,20 +465,27 @@ async function processVideoJob(jobId: string) {
           }
         );
 
-        console.log("[Video Clipper] Whisper output:", JSON.stringify(whisperOutput).slice(0, 500));
+        console.log(`${LOG_PREFIX} Whisper completed!`);
+        console.log(`${LOG_PREFIX} Whisper output type: ${typeof whisperOutput}`);
+        console.log(`${LOG_PREFIX} Whisper output preview: ${JSON.stringify(whisperOutput).slice(0, 500)}`);
         transcript = parseWhisperOutput(whisperOutput);
-        console.log(`[Video Clipper] Parsed ${transcript.length} transcript segments`);
+        console.log(`${LOG_PREFIX} Parsed ${transcript.length} transcript segments`);
       } catch (error) {
-        console.error("[Video Clipper] Transcription error:", error);
-        // Don't use mock - fail with clear error
+        console.error(`${LOG_PREFIX} ERROR in Whisper transcription:`, error);
         throw new Error(VIDEO_CLIPPER_ERRORS.TRANSCRIPTION_FAILED);
       }
+    } else if (transcript.length === 0) {
+      console.log(`${LOG_PREFIX} WARNING: No video URL available for fallback transcription`);
     }
 
     // If still no transcript, fail explicitly (no more mock fallback)
     if (transcript.length === 0) {
+      console.error(`${LOG_PREFIX} FATAL: No transcript segments parsed!`);
       throw new Error(VIDEO_CLIPPER_ERRORS.TRANSCRIPTION_FAILED);
     }
+
+    console.log(`${LOG_PREFIX} ========== TRANSCRIPT READY ==========`);
+    console.log(`${LOG_PREFIX} Total segments: ${transcript.length}`);
 
     // Estimate video duration from transcript
     const videoDuration = transcript.length > 0
@@ -460,12 +501,24 @@ async function processVideoJob(jobId: string) {
     });
 
     // Analyze transcript for marketing moments using Gemini
-    console.log("[Video Clipper] Analyzing for marketing moments...");
+    console.log(`${LOG_PREFIX} ========== GEMINI ANALYSIS ==========`);
+    console.log(`${LOG_PREFIX} Analyzing ${transcript.length} segments for marketing moments...`);
+    console.log(`${LOG_PREFIX} GOOGLE_API_KEY present: ${!!process.env.GOOGLE_API_KEY}`);
+
     const analysisResult = await analyzeTranscriptWithGemini(transcript, job);
 
+    console.log(`${LOG_PREFIX} Analysis complete!`);
+    console.log(`${LOG_PREFIX} Moments found: ${analysisResult.moments?.length || 0}`);
+
     if (!analysisResult.moments || analysisResult.moments.length === 0) {
+      console.error(`${LOG_PREFIX} FATAL: No marketing moments found in video!`);
       throw new Error(VIDEO_CLIPPER_ERRORS.NO_MOMENTS_FOUND);
     }
+
+    // Log all found moments
+    analysisResult.moments.forEach((m, i) => {
+      console.log(`${LOG_PREFIX} Moment ${i + 1}: ${m.startTime}s-${m.endTime}s (${m.type}, score: ${m.marketingScore})`);
+    });
 
     await prisma.videoClipJob.update({
       where: { id: jobId },
@@ -478,7 +531,8 @@ async function processVideoJob(jobId: string) {
 
     // Create clip records first (as PENDING)
     const clips = analysisResult.moments.slice(0, job.maxClips);
-    console.log(`[Video Clipper] Creating ${clips.length} clip records`);
+    console.log(`${LOG_PREFIX} ========== CLIP CREATION ==========`);
+    console.log(`${LOG_PREFIX} Creating ${clips.length} clip records (max: ${job.maxClips})`);
 
     const createdClips: Array<{ id: string; startTime: number; endTime: number; transcript: string; suggestedCaption: string }> = [];
 
@@ -514,13 +568,20 @@ async function processVideoJob(jobId: string) {
     // This ensures we complete within timeout and don't lose results
     const sourceVideoUrl = videoUrl || job.uploadedVideoUrl;
 
-    if (sourceVideoUrl) {
-      console.log("[Video Clipper] Starting clip processing with POLLING:", sourceVideoUrl.substring(0, 100));
+    console.log(`${LOG_PREFIX} ========== CLIP PROCESSING ==========`);
+    console.log(`${LOG_PREFIX} Source video URL: ${sourceVideoUrl ? sourceVideoUrl.substring(0, 100) + '...' : 'NULL!'}`);
 
+    if (sourceVideoUrl) {
       let completedClips = 0;
       const totalClips = createdClips.length;
+      console.log(`${LOG_PREFIX} Processing ${totalClips} clips sequentially with polling...`);
 
       for (const clipInfo of createdClips) {
+        const clipNum = completedClips + 1;
+        console.log(`${LOG_PREFIX} ---------- CLIP ${clipNum}/${totalClips} ----------`);
+        console.log(`${LOG_PREFIX} Clip ID: ${clipInfo.id}`);
+        console.log(`${LOG_PREFIX} Time range: ${clipInfo.startTime}s - ${clipInfo.endTime}s`);
+
         try {
           // Update clip to processing
           await prisma.videoClip.update({
@@ -528,9 +589,11 @@ async function processVideoJob(jobId: string) {
             data: { status: "PROCESSING", processingProgress: 10 },
           });
 
-          console.log(`[Video Clipper] Processing clip ${completedClips + 1}/${totalClips}: ${clipInfo.startTime}s - ${clipInfo.endTime}s`);
-
           // Trim video using polling (not webhooks!)
+          console.log(`${LOG_PREFIX} Running trim-video model...`);
+          console.log(`${LOG_PREFIX} Model: ${REPLICATE_MODELS.TRIM_VIDEO}`);
+          console.log(`${LOG_PREFIX} Input: video=${sourceVideoUrl.substring(0, 50)}..., start=${formatTimeForReplicate(clipInfo.startTime)}, end=${formatTimeForReplicate(clipInfo.endTime)}`);
+
           const trimOutput = await runReplicateWithPolling<string>(
             REPLICATE_MODELS.TRIM_VIDEO.split(":")[1],
             {
@@ -546,22 +609,27 @@ async function processVideoJob(jobId: string) {
             }
           );
 
+          console.log(`${LOG_PREFIX} Trim output: ${trimOutput ? trimOutput.substring(0, 100) + '...' : 'NULL!'}`);
+
           // IMMEDIATELY download and store (Replicate deletes after 1 hour)
           if (trimOutput) {
-            console.log("[Video Clipper] Downloading trimmed clip...");
+            console.log(`${LOG_PREFIX} Downloading trimmed clip to buffer...`);
             const clipBuffer = await downloadWithRetry(trimOutput, 3);
+            console.log(`${LOG_PREFIX} Downloaded ${clipBuffer.length} bytes`);
 
             // Upload to Vercel Blob
+            console.log(`${LOG_PREFIX} Uploading to Vercel Blob...`);
             const clipBlob = await put(
               `video-clipper/${job.userId}/${clipInfo.id}/clip.mp4`,
               clipBuffer,
               { access: "public", addRandomSuffix: true }
             );
-            console.log("[Video Clipper] Clip uploaded to:", clipBlob.url);
+            console.log(`${LOG_PREFIX} Clip uploaded to: ${clipBlob.url}`);
 
             // Generate thumbnail
             let thumbnailUrl = "";
             try {
+              console.log(`${LOG_PREFIX} Generating thumbnail...`);
               const thumbnailOutput = await runReplicateWithPolling<string>(
                 REPLICATE_MODELS.FRAME_EXTRACTOR.split(":")[1],
                 {
@@ -579,10 +647,10 @@ async function processVideoJob(jobId: string) {
                   { access: "public", addRandomSuffix: true }
                 );
                 thumbnailUrl = thumbnailBlob.url;
+                console.log(`${LOG_PREFIX} Thumbnail: ${thumbnailUrl}`);
               }
             } catch (thumbError) {
-              console.warn("[Video Clipper] Thumbnail generation failed:", thumbError);
-              // Non-fatal - continue without thumbnail
+              console.warn(`${LOG_PREFIX} Thumbnail failed (non-fatal):`, thumbError);
             }
 
             // Update clip as completed
@@ -598,9 +666,12 @@ async function processVideoJob(jobId: string) {
             });
 
             completedClips++;
+            console.log(`${LOG_PREFIX} ✅ Clip ${clipNum} COMPLETED`);
+          } else {
+            console.error(`${LOG_PREFIX} ❌ Clip ${clipNum} - trim returned null output!`);
           }
         } catch (clipError) {
-          console.error(`[Video Clipper] Clip ${clipInfo.id} failed:`, clipError);
+          console.error(`${LOG_PREFIX} ❌ Clip ${clipNum} FAILED:`, clipError);
           await prisma.videoClip.update({
             where: { id: clipInfo.id },
             data: {
@@ -618,9 +689,11 @@ async function processVideoJob(jobId: string) {
         });
       }
 
-      console.log(`[Video Clipper] Completed ${completedClips}/${totalClips} clips`);
+      console.log(`${LOG_PREFIX} ========== CLIP PROCESSING DONE ==========`);
+      console.log(`${LOG_PREFIX} Completed: ${completedClips}/${totalClips} clips`);
     } else {
       // No direct video URL available - fail with clear error
+      console.error(`${LOG_PREFIX} FATAL: No source video URL available for clipping!`);
       throw new Error(VIDEO_CLIPPER_ERRORS.YOUTUBE_DOWNLOAD_FAILED);
     }
 
@@ -637,9 +710,15 @@ async function processVideoJob(jobId: string) {
     // Send notification
     await sendJobCompletionNotification(jobId);
 
-    console.log("[Video Clipper] Job completed successfully!");
+    console.log(`${LOG_PREFIX} ========================================`);
+    console.log(`${LOG_PREFIX} ✅ JOB COMPLETED SUCCESSFULLY!`);
+    console.log(`${LOG_PREFIX} ========================================`);
   } catch (error) {
-    console.error("[Video Clipper] Processing error:", error);
+    console.error(`${LOG_PREFIX} ========================================`);
+    console.error(`${LOG_PREFIX} ❌ JOB FAILED!`);
+    console.error(`${LOG_PREFIX} Error:`, error);
+    console.error(`${LOG_PREFIX} ========================================`);
+
     await prisma.videoClipJob.update({
       where: { id: jobId },
       data: {
@@ -655,7 +734,8 @@ async function processVideoJob(jobId: string) {
 // ============================================================================
 
 async function downloadYouTubeVideoUrl(youtubeUrl: string): Promise<string | null> {
-  console.log("[Video Clipper] Getting direct video URL for:", youtubeUrl);
+  console.log("[YouTube Download] ========== STARTING ==========");
+  console.log("[YouTube Download] URL:", youtubeUrl);
 
   // Try multiple providers in order
   const providers = [
@@ -663,24 +743,29 @@ async function downloadYouTubeVideoUrl(youtubeUrl: string): Promise<string | nul
     { name: "Cobalt Alt", fn: () => tryCobaltApiAlt(youtubeUrl) },
   ];
 
-  for (const provider of providers) {
+  for (let i = 0; i < providers.length; i++) {
+    const provider = providers[i];
+    console.log(`[YouTube Download] Attempt ${i + 1}/${providers.length}: ${provider.name}`);
     try {
-      console.log(`[Video Clipper] Trying ${provider.name}...`);
       const url = await provider.fn();
       if (url) {
-        console.log(`[Video Clipper] Success with ${provider.name}`);
+        console.log(`[YouTube Download] ✅ SUCCESS with ${provider.name}`);
+        console.log(`[YouTube Download] Direct URL: ${url.substring(0, 100)}...`);
         return url;
+      } else {
+        console.warn(`[YouTube Download] ${provider.name} returned null/empty`);
       }
     } catch (error) {
-      console.warn(`[Video Clipper] ${provider.name} failed:`, error);
+      console.error(`[YouTube Download] ❌ ${provider.name} FAILED:`, error);
     }
   }
 
-  console.error("[Video Clipper] All YouTube download providers failed");
+  console.error("[YouTube Download] ========== ALL PROVIDERS FAILED ==========");
   return null;
 }
 
 async function tryCobaltApi(youtubeUrl: string): Promise<string | null> {
+  console.log("[Cobalt] Calling https://api.cobalt.tools/api/json");
   const response = await fetch("https://api.cobalt.tools/api/json", {
     method: "POST",
     headers: {
@@ -695,16 +780,21 @@ async function tryCobaltApi(youtubeUrl: string): Promise<string | null> {
     signal: AbortSignal.timeout(30000), // 30 second timeout
   });
 
+  console.log(`[Cobalt] Response status: ${response.status}`);
+
   if (!response.ok) {
-    throw new Error(`Cobalt API returned ${response.status}`);
+    const errorText = await response.text().catch(() => 'Unable to read error');
+    console.error(`[Cobalt] Error response: ${errorText}`);
+    throw new Error(`Cobalt API returned ${response.status}: ${errorText}`);
   }
 
   const data = await response.json();
+  console.log(`[Cobalt] Response data:`, JSON.stringify(data).slice(0, 300));
   return data.url || null;
 }
 
 async function tryCobaltApiAlt(youtubeUrl: string): Promise<string | null> {
-  // Alternative Cobalt instance
+  console.log("[Cobalt Alt] Calling https://co.wuk.sh/api/json");
   const response = await fetch("https://co.wuk.sh/api/json", {
     method: "POST",
     headers: {
@@ -719,11 +809,16 @@ async function tryCobaltApiAlt(youtubeUrl: string): Promise<string | null> {
     signal: AbortSignal.timeout(30000),
   });
 
+  console.log(`[Cobalt Alt] Response status: ${response.status}`);
+
   if (!response.ok) {
-    throw new Error(`Cobalt Alt API returned ${response.status}`);
+    const errorText = await response.text().catch(() => 'Unable to read error');
+    console.error(`[Cobalt Alt] Error response: ${errorText}`);
+    throw new Error(`Cobalt Alt API returned ${response.status}: ${errorText}`);
   }
 
   const data = await response.json();
+  console.log(`[Cobalt Alt] Response data:`, JSON.stringify(data).slice(0, 300));
   return data.url || null;
 }
 
