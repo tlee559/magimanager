@@ -5658,7 +5658,7 @@ function MyAccountsView() {
                     {account.status}
                   </span>
                 </td>
-                <td className="py-4 text-slate-300">${account.currentSpendTotal}</td>
+                <td className="py-4 text-slate-300">${(account.currentSpendTotal / 100).toFixed(2)}</td>
                 <td className="py-4 text-slate-300">{account.adsCount}</td>
                 <td className="py-4 text-slate-400 text-xs">
                   {account.handoffDate ? formatDateForDisplay(account.handoffDate) : "—"}

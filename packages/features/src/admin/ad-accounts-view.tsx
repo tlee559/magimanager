@@ -3133,18 +3133,14 @@ export function AdAccountsView({ onDataChange, onNavigate }: AdAccountsViewProps
 
   // Summary stats - redesigned for operational visibility
   const stats = useMemo(() => {
-    // Pipeline stats (what's the health of our pipeline?)
+    // Pipeline stats based on account status field (matches what's displayed in cards)
     const warmingUp = accounts.filter(a =>
-      a.accountHealth === "active" &&
-      a.handoffStatus === "available" &&
-      a.currentSpendTotal < a.warmupTargetSpend
+      a.status === "warming-up" &&
+      a.handoffStatus !== "handed-off"
     );
     const readyToHandoff = accounts.filter(a =>
-      a.accountHealth === "active" &&
-      a.billingStatus === "verified" &&
-      a.handoffStatus === "available" &&
-      a.currentSpendTotal >= a.warmupTargetSpend &&
-      a.warmupTargetSpend > 0
+      a.status === "ready" &&
+      a.handoffStatus !== "handed-off"
     );
     const handedOff = accounts.filter(a => a.handoffStatus === "handed-off");
 
