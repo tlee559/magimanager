@@ -200,7 +200,7 @@ type Notification = {
   createdAt: Date;
 };
 
-type View = "dashboard" | "identities" | "create-identity" | "identity-detail" | "edit-identity" | "ad-accounts" | "team" | "settings" | "my-accounts" | "requests" | "admin-requests" | "system" | "sms-dashboard";
+export type View = "dashboard" | "identities" | "create-identity" | "identity-detail" | "edit-identity" | "ad-accounts" | "team" | "settings" | "my-accounts" | "requests" | "admin-requests" | "system" | "sms-dashboard";
 
 // ============================================================================
 // LOGO COMPONENT
@@ -225,22 +225,108 @@ function SquareMLogoIcon({ size = 40 }: { size?: number }) {
 }
 
 // ============================================================================
+// URL ROUTING HELPERS
+// ============================================================================
+
+const VIEW_TO_PATH: Record<View, string> = {
+  "dashboard": "/admin",
+  "identities": "/admin/identities",
+  "create-identity": "/admin/identities/new",
+  "identity-detail": "/admin/identities/detail",
+  "edit-identity": "/admin/identities/edit",
+  "ad-accounts": "/admin/accounts",
+  "team": "/admin/team",
+  "settings": "/admin/settings",
+  "my-accounts": "/admin/my-accounts",
+  "requests": "/admin/my-requests",
+  "admin-requests": "/admin/requests",
+  "system": "/admin/system",
+  "sms-dashboard": "/admin/sms",
+};
+
+const PATH_TO_VIEW: Record<string, View> = {
+  "/admin": "dashboard",
+  "/admin/": "dashboard",
+  "/admin/identities": "identities",
+  "/admin/identities/new": "create-identity",
+  "/admin/identities/detail": "identity-detail",
+  "/admin/identities/edit": "edit-identity",
+  "/admin/accounts": "ad-accounts",
+  "/admin/team": "team",
+  "/admin/settings": "settings",
+  "/admin/my-accounts": "my-accounts",
+  "/admin/my-requests": "requests",
+  "/admin/requests": "admin-requests",
+  "/admin/system": "system",
+  "/admin/sms": "sms-dashboard",
+};
+
+function getViewFromPath(pathname: string): View {
+  // Exact match first
+  if (PATH_TO_VIEW[pathname]) return PATH_TO_VIEW[pathname];
+  // Check for prefix matches (e.g., /admin/identities/123 -> identities)
+  if (pathname.startsWith("/admin/identities/")) return "identities";
+  if (pathname.startsWith("/admin/accounts/")) return "ad-accounts";
+  return "dashboard";
+}
+
+// ============================================================================
 // MAIN ADMIN COMPONENT
+// ============================================================================
+//
+// IMPORTANT: This is the CANONICAL AdminApp component for ABRA.
+// DO NOT create a separate layout.tsx or page routes that bypass this component.
+// URL routing is handled internally via VIEW_TO_PATH/PATH_TO_VIEW mappings.
+// If you need to add a new view, add it to the View type and the mappings above.
+//
 // ============================================================================
 
 interface AdminAppProps {
   appVersion?: string;
   buildSha?: string;
   kadabraUrl?: string;
+  /** Initial view from URL - parsed by the page component */
+  initialView?: View;
 }
 
 export function AdminApp({
   appVersion = "0.1.0",
   buildSha = "local",
-  kadabraUrl = "https://magimanager.com"
+  kadabraUrl = "https://magimanager.com",
+  initialView,
 }: AdminAppProps) {
   const { data: session } = useSession();
-  const [view, setView] = useState<View>("dashboard");
+
+  // Initialize view from URL or prop
+  const [view, setViewState] = useState<View>(() => {
+    if (initialView) return initialView;
+    if (typeof window !== "undefined") {
+      return getViewFromPath(window.location.pathname);
+    }
+    return "dashboard";
+  });
+
+  // Sync URL when view changes
+  const setView = (newView: View) => {
+    setViewState(newView);
+    const newPath = VIEW_TO_PATH[newView] || "/admin";
+    if (typeof window !== "undefined" && window.location.pathname !== newPath) {
+      window.history.pushState({ view: newView }, "", newPath);
+    }
+  };
+
+  // Handle browser back/forward
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state?.view) {
+        setViewState(event.state.view);
+      } else if (typeof window !== "undefined") {
+        setViewState(getViewFromPath(window.location.pathname));
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
   const [identities, setIdentities] = useState<Identity[]>([]);
   const [accounts, setAccounts] = useState<AdAccount[]>([]);
   const [selectedIdentity, setSelectedIdentity] = useState<Identity | null>(null);
