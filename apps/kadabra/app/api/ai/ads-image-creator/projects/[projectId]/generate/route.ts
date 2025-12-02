@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@magimanager/database";
 import { put } from "@vercel/blob";
 import { generateAdCreatives } from "@/lib/ads-image-creator-agent";
+import { compositeAdImage } from "@/lib/ads-image-compositor";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // 5 minutes max for image generation
@@ -139,13 +140,14 @@ async function generateImagesAsync(
     console.log(`${LOG_PREFIX} Angles: ${angles.join(", ")}`);
     console.log(`${LOG_PREFIX} Variations: ${project.variationCount}`);
 
-    // Update progress
+    // Update progress - Starting AI generation
     await prisma.adImageProject.update({
       where: { id: projectId },
-      data: { progress: 20 },
+      data: { progress: 15, status: "ANALYZING" },
     });
 
-    // Generate ad creatives using the AI agent
+    // Generate ad creatives using the AI agent (this generates background images)
+    console.log(`${LOG_PREFIX} Step 1: Generating creative specs with Gemini...`);
     const creatives = await generateAdCreatives({
       productDescription,
       productUrl: project.productUrl,
@@ -162,22 +164,69 @@ async function generateImagesAsync(
       colorScheme: project.colorScheme as Record<string, string> | null,
     });
 
-    console.log(`${LOG_PREFIX} Generated ${creatives.length} creative specs`);
+    console.log(`${LOG_PREFIX} Generated ${creatives.length} creative specs with background images`);
 
-    // Update progress
+    if (creatives.length === 0) {
+      throw new Error("No creatives were generated. Check API keys and try again.");
+    }
+
+    // Update progress - Starting compositing
     await prisma.adImageProject.update({
       where: { id: projectId },
-      data: { progress: 50 },
+      data: { progress: 50, status: "COMPOSITING" },
     });
 
-    // Create image records
+    // Create image records with composited text
     const createdImages = [];
     for (let i = 0; i < creatives.length; i++) {
       const creative = creatives[i];
+      const imageId = `${Date.now()}-${i}`;
 
-      console.log(`${LOG_PREFIX} Processing creative ${i + 1}/${creatives.length}`);
+      console.log(`${LOG_PREFIX} Step 2: Compositing text on image ${i + 1}/${creatives.length}...`);
+      console.log(`${LOG_PREFIX}   Headline: "${creative.headline}"`);
+      console.log(`${LOG_PREFIX}   CTA: "${creative.cta}"`);
+      console.log(`${LOG_PREFIX}   Background URL: ${creative.imageUrl?.substring(0, 50)}...`);
 
-      // Create image record
+      let compositeUrl = creative.imageUrl; // Fallback to background if compositing fails
+      let backgroundUrl = creative.imageUrl;
+
+      // Only composite if we have a real image URL (not placeholder)
+      if (creative.imageUrl && !creative.imageUrl.includes("placehold")) {
+        try {
+          // Composite headline + CTA onto the background image
+          console.log(`${LOG_PREFIX}   Running Sharp compositor...`);
+          const compositeResult = await compositeAdImage({
+            backgroundUrl: creative.imageUrl,
+            headline: creative.headline,
+            ctaText: creative.cta,
+            colorScheme: project.colorScheme as Record<string, string> | undefined,
+            outputFormat: "webp",
+            outputWidth: 1080,
+            outputHeight: 1080,
+          });
+
+          console.log(`${LOG_PREFIX}   Compositor returned ${compositeResult.buffer.length} bytes`);
+
+          // Upload composited image to Vercel Blob
+          console.log(`${LOG_PREFIX}   Uploading composited image to Vercel Blob...`);
+          const compositeBlob = await put(
+            `ads-image-creator/${userId}/${imageId}/composite.webp`,
+            compositeResult.buffer,
+            { access: "public", addRandomSuffix: true }
+          );
+
+          compositeUrl = compositeBlob.url;
+          console.log(`${LOG_PREFIX}   Composite uploaded: ${compositeUrl}`);
+        } catch (compositeError) {
+          console.error(`${LOG_PREFIX}   Compositing failed, using background only:`, compositeError);
+          // Fall back to background-only image
+          compositeUrl = creative.imageUrl;
+        }
+      } else {
+        console.log(`${LOG_PREFIX}   Skipping composite - placeholder or missing image`);
+      }
+
+      // Create image record in database
       const image = await prisma.adImage.create({
         data: {
           projectId,
@@ -186,8 +235,8 @@ async function generateImagesAsync(
           ctaUsed: creative.cta,
           angleUsed: creative.angle,
           templateUsed: project.templateId,
-          compositeUrl: creative.imageUrl, // For now, just the generated image
-          backgroundUrl: creative.imageUrl,
+          compositeUrl: compositeUrl,
+          backgroundUrl: backgroundUrl,
           creativeRationale: creative.rationale,
           hookScore: creative.scores?.hook || null,
           clarityScore: creative.scores?.clarity || null,
@@ -197,6 +246,7 @@ async function generateImagesAsync(
       });
 
       createdImages.push(image);
+      console.log(`${LOG_PREFIX}   Created AdImage record: ${image.id}`);
 
       // Update progress
       const progressPercent = 50 + Math.floor((i + 1) / creatives.length * 45);
@@ -217,7 +267,7 @@ async function generateImagesAsync(
     });
 
     console.log(`${LOG_PREFIX} ========== GENERATION COMPLETE ==========`);
-    console.log(`${LOG_PREFIX} Created ${createdImages.length} images`);
+    console.log(`${LOG_PREFIX} Created ${createdImages.length} images with text composited`);
 
   } catch (error) {
     console.error(`${LOG_PREFIX} ========== GENERATION FAILED ==========`);

@@ -9,7 +9,6 @@ import {
   Zap,
   TrendingUp,
   Eye,
-  Heart,
   Download,
   RefreshCw,
   ChevronLeft,
@@ -20,10 +19,12 @@ import {
   AlertCircle,
   Loader2,
   X,
-  ArrowRight,
   Lightbulb,
   BarChart3,
   Star,
+  Wand2,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 
@@ -102,11 +103,16 @@ const MARKETING_ANGLES = [
   { id: "authority", name: "Authority", description: "Expert endorsement", icon: Target },
 ];
 
-// Goals
-const GOALS = [
-  { id: "ctr", name: "Click-Through Rate", description: "Maximize clicks" },
-  { id: "conversions", name: "Conversions", description: "Drive actions" },
-  { id: "awareness", name: "Brand Awareness", description: "Build recognition" },
+// CTA presets
+const CTA_PRESETS = [
+  "Learn More",
+  "Shop Now",
+  "Get Started",
+  "Try Free",
+  "Claim Offer",
+  "Sign Up",
+  "Book Now",
+  "Download",
 ];
 
 // ============================================================================
@@ -122,8 +128,8 @@ function getStatusMessage(status: string, progress: number): { title: string; su
         subtitle: progress < 30
           ? "Understanding your product and target audience"
           : progress < 60
-          ? "Analyzing reference images and competitor styles"
-          : "Planning creative strategies and layouts"
+          ? "Planning creative strategies"
+          : "Generating image prompts"
       };
     case "GENERATING":
       return {
@@ -137,8 +143,6 @@ function getStatusMessage(status: string, progress: number): { title: string; su
         title: "Adding text overlays...",
         subtitle: "Positioning headlines and CTAs for optimal engagement"
       };
-    case "SCORING":
-      return { title: "Scoring creatives...", subtitle: "AI evaluating hook strength and conversion potential" };
     default:
       return { title: "Processing...", subtitle: "Please wait while we generate your ads" };
   }
@@ -158,32 +162,17 @@ export function AdsImageCreatorView({ onBack }: AdsImageCreatorViewProps) {
   const [selectedProject, setSelectedProject] = useState<AdImageProject | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [initialCampaignPlanId, setInitialCampaignPlanId] = useState<string | null>(null);
   const [showBackgroundModal, setShowBackgroundModal] = useState(false);
-
-  // Check for campaign plan ID from sessionStorage (from Campaign Planner integration)
-  useEffect(() => {
-    const storedPlanId = sessionStorage.getItem("adsImageCreator_campaignPlanId");
-    if (storedPlanId) {
-      setInitialCampaignPlanId(storedPlanId);
-      sessionStorage.removeItem("adsImageCreator_campaignPlanId");
-      // Automatically go to create view with campaign plan pre-selected
-      setView("create");
-    }
-  }, []);
 
   // Fetch projects
   const fetchProjects = useCallback(async () => {
     try {
       setIsLoading(true);
-      console.log("[AdsImageCreator] Fetching projects...");
       const response = await fetch("/api/ai/ads-image-creator/projects");
       if (!response.ok) throw new Error("Failed to fetch projects");
       const data = await response.json();
-      console.log("[AdsImageCreator] Fetched", data.projects?.length || 0, "projects");
       setProjects(data.projects);
     } catch (err) {
-      console.error("[AdsImageCreator] Error fetching projects:", err);
       setError(err instanceof Error ? err.message : "Failed to load projects");
     } finally {
       setIsLoading(false);
@@ -193,14 +182,12 @@ export function AdsImageCreatorView({ onBack }: AdsImageCreatorViewProps) {
   // Fetch single project status (for polling)
   const fetchProjectStatus = useCallback(async (projectId: string): Promise<AdImageProject | null> => {
     try {
-      console.log("[AdsImageCreator] Polling project status:", projectId);
       const response = await fetch(`/api/ai/ads-image-creator/projects/${projectId}`);
       if (!response.ok) throw new Error("Failed to fetch project");
       const data = await response.json();
-      console.log("[AdsImageCreator] Project status:", data.project.status, "Progress:", data.project.progress);
       return data.project;
     } catch (err) {
-      console.error("[AdsImageCreator] Error polling project:", err);
+      console.error("Error polling project:", err);
       return null;
     }
   }, []);
@@ -208,22 +195,17 @@ export function AdsImageCreatorView({ onBack }: AdsImageCreatorViewProps) {
   // Poll for updates when in processing view
   useEffect(() => {
     if (view === "processing" && selectedProject && !["COMPLETED", "FAILED"].includes(selectedProject.status)) {
-      console.log("[AdsImageCreator] Starting polling for project:", selectedProject.id);
       const interval = setInterval(async () => {
         const updated = await fetchProjectStatus(selectedProject.id);
         if (updated) {
           setSelectedProject(updated);
           if (updated.status === "COMPLETED" || updated.status === "FAILED") {
-            console.log("[AdsImageCreator] Generation finished:", updated.status);
             setView("detail");
             fetchProjects();
           }
         }
       }, 3000);
-      return () => {
-        console.log("[AdsImageCreator] Stopping polling");
-        clearInterval(interval);
-      };
+      return () => clearInterval(interval);
     }
   }, [view, selectedProject?.id, selectedProject?.status, fetchProjectStatus, fetchProjects]);
 
@@ -234,21 +216,17 @@ export function AdsImageCreatorView({ onBack }: AdsImageCreatorViewProps) {
   // Handle project selection
   const handleSelectProject = async (projectId: string) => {
     try {
-      console.log("[AdsImageCreator] Selecting project:", projectId);
       const response = await fetch(`/api/ai/ads-image-creator/projects/${projectId}`);
       if (!response.ok) throw new Error("Failed to fetch project");
       const data = await response.json();
       setSelectedProject(data.project);
 
-      // If still processing, go to processing view, otherwise detail view
-      if (["PENDING", "ANALYZING", "GENERATING", "COMPOSITING", "SCORING"].includes(data.project.status)) {
-        console.log("[AdsImageCreator] Project still processing, showing processing view");
+      if (["PENDING", "ANALYZING", "GENERATING", "COMPOSITING"].includes(data.project.status)) {
         setView("processing");
       } else {
         setView("detail");
       }
     } catch (err) {
-      console.error("[AdsImageCreator] Error selecting project:", err);
       setError(err instanceof Error ? err.message : "Failed to load project");
     }
   };
@@ -272,12 +250,10 @@ export function AdsImageCreatorView({ onBack }: AdsImageCreatorViewProps) {
     }
   };
 
-  // Handle project creation - show background modal
+  // Handle project creation
   const handleProjectCreated = (project: AdImageProject) => {
-    console.log("[AdsImageCreator] Project created:", project.id);
     setSelectedProject(project);
     setShowBackgroundModal(true);
-    setInitialCampaignPlanId(null);
     fetchProjects();
   };
 
@@ -285,12 +261,8 @@ export function AdsImageCreatorView({ onBack }: AdsImageCreatorViewProps) {
   if (view === "create") {
     return (
       <CreateProjectView
-        onBack={() => {
-          setView("list");
-          setInitialCampaignPlanId(null);
-        }}
+        onBack={() => setView("list")}
         onCreated={handleProjectCreated}
-        initialCampaignPlanId={initialCampaignPlanId}
       />
     );
   }
@@ -415,7 +387,6 @@ export function AdsImageCreatorView({ onBack }: AdsImageCreatorViewProps) {
               </h3>
               <p className="text-sm text-slate-400">
                 Your ad images are being generated. This may take 1-2 minutes.
-                We&apos;ll notify you when it&apos;s ready.
               </p>
             </div>
 
@@ -525,11 +496,6 @@ function ProjectCard({
         <p className="text-xs text-slate-500 mt-1">
           {new Date(project.createdAt).toLocaleDateString()}
         </p>
-        {project.campaignPlan && (
-          <p className="text-xs text-orange-400 mt-1 truncate">
-            From: {project.campaignPlan.name}
-          </p>
-        )}
       </div>
     </div>
   );
@@ -547,8 +513,6 @@ function ProcessingView({
   onCancel: () => void;
 }) {
   const status = getStatusMessage(project.status, project.progress);
-
-  // Calculate image progress
   const totalExpected = project.variationCount;
   const completedImages = project.images.filter(img => img.compositeUrl).length;
 
@@ -565,12 +529,8 @@ function ProcessingView({
       </div>
 
       {/* Status */}
-      <h3 className="text-xl font-semibold text-slate-100 mb-2">
-        {status.title}
-      </h3>
-      <p className="text-sm text-slate-400 mb-6">
-        {status.subtitle}
-      </p>
+      <h3 className="text-xl font-semibold text-slate-100 mb-2">{status.title}</h3>
+      <p className="text-sm text-slate-400 mb-6">{status.subtitle}</p>
 
       {/* Progress Bar */}
       <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden mb-2">
@@ -581,7 +541,7 @@ function ProcessingView({
       </div>
       <p className="text-xs text-slate-500 mb-4">{project.progress}% complete</p>
 
-      {/* Image Progress - show when generating */}
+      {/* Image Progress */}
       {project.status === "GENERATING" && totalExpected > 0 && (
         <div className="mt-6 p-4 bg-slate-800/50 rounded-xl text-left">
           <p className="text-xs text-slate-400 uppercase font-medium mb-3">Image Progress</p>
@@ -612,32 +572,13 @@ function ProcessingView({
               );
             })}
           </div>
-          <div className="mt-3 pt-3 border-t border-slate-700 text-xs text-slate-500">
-            {completedImages}/{totalExpected} images generated
-          </div>
         </div>
       )}
-
-      {/* Project Info */}
-      <div className="mt-6 p-4 bg-slate-800/50 rounded-xl text-left">
-        <p className="text-xs text-slate-400 uppercase font-medium mb-2">Project</p>
-        <p className="text-sm text-slate-200">{project.name || "Untitled Project"}</p>
-        {project.headlines && project.headlines.length > 0 && (
-          <p className="text-xs text-slate-500 mt-1 truncate">
-            Headlines: {project.headlines.join(", ")}
-          </p>
-        )}
-      </div>
-
-      {/* Info message about background processing */}
-      <p className="text-xs text-slate-500 mt-6 mb-4">
-        Processing continues in the background. You can navigate away and come back later.
-      </p>
 
       {/* Cancel Button */}
       <button
         onClick={onCancel}
-        className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200 transition"
+        className="mt-6 px-4 py-2 text-sm text-slate-400 hover:text-slate-200 transition"
       >
         Continue Working
       </button>
@@ -646,79 +587,122 @@ function ProcessingView({
 }
 
 // ============================================================================
-// CREATE PROJECT VIEW
+// CREATE PROJECT VIEW - SIMPLIFIED SINGLE PAGE WITH AI SUGGESTIONS
 // ============================================================================
 
 function CreateProjectView({
   onBack,
   onCreated,
-  initialCampaignPlanId,
 }: {
   onBack: () => void;
   onCreated: (project: AdImageProject) => void;
-  initialCampaignPlanId?: string | null;
 }) {
-  const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Form state
-  const [name, setName] = useState("");
   const [productDescription, setProductDescription] = useState("");
-  const [productUrl, setProductUrl] = useState("");
   const [headlines, setHeadlines] = useState<string[]>([""]);
-  const [ctaText, setCtaText] = useState("");
-  const [goal, setGoal] = useState("ctr");
-  const [selectedAngles, setSelectedAngles] = useState<string[]>(["benefit_focused"]);
-  const [variationCount, setVariationCount] = useState(4);
-  const [campaignPlanId, setCampaignPlanId] = useState<string | null>(initialCampaignPlanId || null);
-  const [campaignPlanData, setCampaignPlanData] = useState<{
-    name: string;
-    productDescription: string | null;
-    targetAudience: string | null;
-    plan: { headlines?: string[]; uniqueSellingPoints?: string[] } | null;
-  } | null>(null);
+  const [ctaText, setCtaText] = useState("Learn More");
+  const [selectedAngle, setSelectedAngle] = useState("benefit_focused");
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // Fetch campaign plan data if initialCampaignPlanId is provided
-  useEffect(() => {
-    if (initialCampaignPlanId) {
-      fetchCampaignPlanData(initialCampaignPlanId);
+  // AI suggestion states
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [isSuggestingHeadlines, setIsSuggestingHeadlines] = useState(false);
+  const [headlineSuggestions, setHeadlineSuggestions] = useState<string[]>([]);
+
+  // Reference image
+  const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null);
+  const [referenceAnalysis, setReferenceAnalysis] = useState<ReferenceAnalysis | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // AI Enhance Description
+  const handleEnhanceDescription = async () => {
+    if (!productDescription.trim() || productDescription.length < 10) {
+      setError("Please enter at least 10 characters to enhance");
+      return;
     }
-  }, [initialCampaignPlanId]);
 
-  const fetchCampaignPlanData = async (planId: string) => {
     try {
-      const response = await fetch(`/api/ai/campaign-planner/${planId}`);
-      if (!response.ok) return;
-      const data = await response.json();
-      const plan = data.plan;
+      setIsEnhancing(true);
+      setError(null);
 
-      setCampaignPlanData({
-        name: plan.name,
-        productDescription: plan.productDescription,
-        targetAudience: plan.targetAudience,
-        plan: plan.plan,
+      const response = await fetch("/api/ai/ads-image-creator/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "enhance_description",
+          productDescription,
+        }),
       });
 
-      // Pre-fill form fields from campaign plan
-      if (plan.name) setName(`Ads for ${plan.name}`);
-      if (plan.productDescription) setProductDescription(plan.productDescription);
-      if (plan.productUrl) setProductUrl(plan.productUrl);
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to enhance description");
+      }
 
-      // Extract headlines from the plan if available
-      if (plan.plan?.headlines?.length > 0) {
-        setHeadlines(plan.plan.headlines.slice(0, 5));
+      const data = await response.json();
+      if (data.suggestions && data.suggestions[0]) {
+        setProductDescription(data.suggestions[0]);
       }
     } catch (err) {
-      console.error("Failed to fetch campaign plan:", err);
+      setError(err instanceof Error ? err.message : "Failed to enhance description");
+    } finally {
+      setIsEnhancing(false);
     }
   };
 
-  // Reference image state
-  const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null);
-  const [referenceAnalysis, setReferenceAnalysis] = useState<ReferenceAnalysis | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  // AI Suggest Headlines
+  const handleSuggestHeadlines = async () => {
+    if (!productDescription.trim() || productDescription.length < 10) {
+      setError("Please enter a product description first");
+      return;
+    }
+
+    try {
+      setIsSuggestingHeadlines(true);
+      setError(null);
+
+      const response = await fetch("/api/ai/ads-image-creator/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "headlines",
+          productDescription,
+          angle: selectedAngle,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to suggest headlines");
+      }
+
+      const data = await response.json();
+      if (data.suggestions && Array.isArray(data.suggestions)) {
+        setHeadlineSuggestions(data.suggestions);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to suggest headlines");
+    } finally {
+      setIsSuggestingHeadlines(false);
+    }
+  };
+
+  // Add suggestion to headlines
+  const addSuggestion = (suggestion: string) => {
+    const emptyIndex = headlines.findIndex(h => !h.trim());
+    if (emptyIndex >= 0) {
+      const newHeadlines = [...headlines];
+      newHeadlines[emptyIndex] = suggestion;
+      setHeadlines(newHeadlines);
+    } else if (headlines.length < 5) {
+      setHeadlines([...headlines, suggestion]);
+    }
+    setHeadlineSuggestions(headlineSuggestions.filter(s => s !== suggestion));
+  };
 
   // Handle reference image upload
   const handleReferenceUpload = async (file: File) => {
@@ -772,24 +756,11 @@ function CreateProjectView({
     setHeadlines(newHeadlines);
   };
 
-  // Toggle angle selection
-  const toggleAngle = (angleId: string) => {
-    if (selectedAngles.includes(angleId)) {
-      if (selectedAngles.length > 1) {
-        setSelectedAngles(selectedAngles.filter((a) => a !== angleId));
-      }
-    } else {
-      setSelectedAngles([...selectedAngles, angleId]);
-    }
-  };
-
   // Create and generate
   const handleCreate = async () => {
     try {
       setIsLoading(true);
       setError(null);
-
-      console.log("[AdsImageCreator] Starting project creation...");
 
       // Validate
       if (!productDescription.trim()) {
@@ -801,44 +772,32 @@ function CreateProjectView({
         throw new Error("At least one headline is required");
       }
 
-      console.log("[AdsImageCreator] Creating project with:", {
-        name: name.trim() || null,
-        headlines: filteredHeadlines.length,
-        angles: selectedAngles,
-        variations: variationCount,
-        hasReference: !!referenceImageUrl,
-      });
-
       // Create project
       const createResponse = await fetch("/api/ai/ads-image-creator/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: name.trim() || null,
+          name: null,
           productDescription: productDescription.trim(),
-          productUrl: productUrl.trim() || null,
+          productUrl: null,
           headlines: filteredHeadlines,
-          ctaText: ctaText.trim() || null,
-          goal,
-          marketingAngles: selectedAngles,
-          variationCount,
+          ctaText: ctaText.trim() || "Learn More",
+          goal: "ctr",
+          marketingAngles: [selectedAngle],
+          variationCount: 1, // Start with 1 for quick proof
           referenceImageUrl,
           referenceAnalysis,
-          campaignPlanId: campaignPlanId || undefined,
         }),
       });
 
       if (!createResponse.ok) {
         const err = await createResponse.json();
-        console.error("[AdsImageCreator] Failed to create project:", err);
         throw new Error(err.error || "Failed to create project");
       }
 
       const { project } = await createResponse.json();
-      console.log("[AdsImageCreator] Project created:", project.id);
 
       // Start generation
-      console.log("[AdsImageCreator] Starting generation...");
       const generateResponse = await fetch(
         `/api/ai/ads-image-creator/projects/${project.id}/generate`,
         { method: "POST" }
@@ -846,14 +805,11 @@ function CreateProjectView({
 
       if (!generateResponse.ok) {
         const err = await generateResponse.json();
-        console.error("[AdsImageCreator] Failed to start generation:", err);
         throw new Error(err.error || "Failed to start generation");
       }
 
-      console.log("[AdsImageCreator] Generation started successfully");
       onCreated(project);
     } catch (err) {
-      console.error("[AdsImageCreator] Error:", err);
       setError(err instanceof Error ? err.message : "Failed to create project");
     } finally {
       setIsLoading(false);
@@ -861,7 +817,7 @@ function CreateProjectView({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-2xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
         <button
@@ -871,15 +827,15 @@ function CreateProjectView({
           <ChevronLeft className="w-5 h-5 text-slate-400" />
         </button>
         <div>
-          <h2 className="text-lg font-semibold text-slate-100">Create New Project</h2>
-          <p className="text-sm text-slate-400">Step {step} of 3</p>
+          <h2 className="text-lg font-semibold text-slate-100">Create Ad Creative</h2>
+          <p className="text-sm text-slate-400">AI will generate a high-converting ad image</p>
         </div>
       </div>
 
       {/* Error display */}
       {error && (
         <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-red-400" />
+          <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
           <p className="text-sm text-red-400">{error}</p>
           <button onClick={() => setError(null)} className="ml-auto">
             <X className="w-4 h-4 text-red-400" />
@@ -887,328 +843,271 @@ function CreateProjectView({
         </div>
       )}
 
-      {/* Campaign Plan Badge */}
-      {campaignPlanData && (
-        <div className="bg-gradient-to-r from-violet-500/10 to-purple-500/10 border border-violet-500/30 rounded-lg px-4 py-3 flex items-center gap-3">
-          <Target className="w-5 h-5 text-violet-400" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-violet-300">Linked to Campaign Plan</p>
-            <p className="text-xs text-slate-400">{campaignPlanData.name}</p>
-          </div>
-          <button
-            onClick={() => {
-              setCampaignPlanId(null);
-              setCampaignPlanData(null);
-            }}
-            className="text-xs text-slate-500 hover:text-slate-300"
-          >
-            Unlink
-          </button>
-        </div>
-      )}
+      {/* Main Form */}
+      <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6 space-y-6">
 
-      {/* Step 1: Product Details */}
-      {step === 1 && (
-        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6 space-y-6">
-          <h3 className="text-sm font-semibold text-slate-200">Product Details</h3>
-
-          <div className="space-y-4">
-            {/* Project name */}
-            <div>
-              <label className="block text-xs text-slate-400 mb-2">Project Name (optional)</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="My Ad Campaign"
-                className="w-full px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-slate-200 text-sm placeholder-slate-500 focus:outline-none focus:border-orange-500/50"
-              />
-            </div>
-
-            {/* Product description */}
-            <div>
-              <label className="block text-xs text-slate-400 mb-2">
-                Product/Offer Description <span className="text-red-400">*</span>
-              </label>
-              <textarea
-                value={productDescription}
-                onChange={(e) => setProductDescription(e.target.value)}
-                placeholder="Describe your product or offer. What problem does it solve? What makes it unique?"
-                rows={4}
-                className="w-full px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-slate-200 text-sm placeholder-slate-500 focus:outline-none focus:border-orange-500/50"
-              />
-            </div>
-
-            {/* Product URL */}
-            <div>
-              <label className="block text-xs text-slate-400 mb-2">Product URL (optional)</label>
-              <input
-                type="url"
-                value={productUrl}
-                onChange={(e) => setProductUrl(e.target.value)}
-                placeholder="https://example.com/product"
-                className="w-full px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-slate-200 text-sm placeholder-slate-500 focus:outline-none focus:border-orange-500/50"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end">
+        {/* Product Description */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-sm font-medium text-slate-200">
+              What are you advertising? <span className="text-red-400">*</span>
+            </label>
             <button
-              onClick={() => setStep(2)}
-              disabled={!productDescription.trim()}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={handleEnhanceDescription}
+              disabled={isEnhancing || !productDescription.trim()}
+              className="flex items-center gap-1.5 px-2 py-1 text-xs text-orange-400 hover:text-orange-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
-              Next
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Step 2: Headlines & Reference */}
-      {step === 2 && (
-        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6 space-y-6">
-          <h3 className="text-sm font-semibold text-slate-200">Headlines & Reference</h3>
-
-          <div className="space-y-4">
-            {/* Headlines */}
-            <div>
-              <label className="block text-xs text-slate-400 mb-2">
-                Headlines to Test <span className="text-red-400">*</span>
-              </label>
-              {headlines.map((headline, index) => (
-                <div key={index} className="flex gap-2 mb-2">
-                  <input
-                    type="text"
-                    value={headline}
-                    onChange={(e) => updateHeadline(index, e.target.value)}
-                    placeholder={`Headline ${index + 1}`}
-                    className="flex-1 px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-slate-200 text-sm placeholder-slate-500 focus:outline-none focus:border-orange-500/50"
-                  />
-                  {headlines.length > 1 && (
-                    <button
-                      onClick={() => removeHeadline(index)}
-                      className="p-2 text-slate-500 hover:text-red-400 transition"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              ))}
-              {headlines.length < 5 && (
-                <button
-                  onClick={addHeadline}
-                  className="text-xs text-orange-400 hover:text-orange-300 transition"
-                >
-                  + Add another headline
-                </button>
-              )}
-            </div>
-
-            {/* CTA */}
-            <div>
-              <label className="block text-xs text-slate-400 mb-2">Call to Action</label>
-              <input
-                type="text"
-                value={ctaText}
-                onChange={(e) => setCtaText(e.target.value)}
-                placeholder="Learn More"
-                className="w-full px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-slate-200 text-sm placeholder-slate-500 focus:outline-none focus:border-orange-500/50"
-              />
-            </div>
-
-            {/* Reference image */}
-            <div>
-              <label className="block text-xs text-slate-400 mb-2">Reference Image (optional)</label>
-              <p className="text-xs text-slate-500 mb-3">
-                Upload an ad that inspires you. AI will analyze it and create variations.
-              </p>
-
-              {referenceImageUrl ? (
-                <div className="relative">
-                  <img
-                    src={referenceImageUrl}
-                    alt="Reference"
-                    className="w-full max-w-sm rounded-lg border border-slate-700"
-                  />
-                  <button
-                    onClick={() => {
-                      setReferenceImageUrl(null);
-                      setReferenceAnalysis(null);
-                    }}
-                    className="absolute top-2 right-2 p-1.5 bg-red-500 rounded hover:bg-red-600 transition"
-                  >
-                    <X className="w-3 h-3 text-white" />
-                  </button>
-
-                  {/* Analysis results */}
-                  {isAnalyzing && (
-                    <div className="mt-3 flex items-center gap-2 text-sm text-slate-400">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Analyzing reference...
-                    </div>
-                  )}
-                  {referenceAnalysis && !referenceAnalysis.error && (
-                    <div className="mt-3 bg-slate-900/50 rounded-lg p-4 space-y-2">
-                      <h4 className="text-xs font-semibold text-orange-400">AI Analysis</h4>
-                      {referenceAnalysis.hookMechanism && (
-                        <p className="text-xs text-slate-400">
-                          <span className="text-slate-300">Hook:</span> {referenceAnalysis.hookMechanism}
-                        </p>
-                      )}
-                      {referenceAnalysis.whyItConverts && (
-                        <p className="text-xs text-slate-400">
-                          <span className="text-slate-300">Why it works:</span> {referenceAnalysis.whyItConverts}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
+              {isEnhancing ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
               ) : (
-                <label className="block">
-                  <div className="border-2 border-dashed border-slate-700 rounded-lg p-8 text-center hover:border-orange-500/50 transition cursor-pointer">
-                    {isUploading ? (
-                      <Loader2 className="w-8 h-8 text-slate-500 mx-auto animate-spin" />
-                    ) : (
-                      <>
-                        <Upload className="w-8 h-8 text-slate-500 mx-auto mb-2" />
-                        <p className="text-sm text-slate-400">Drop an image or click to upload</p>
-                      </>
-                    )}
-                  </div>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleReferenceUpload(file);
-                    }}
-                  />
-                </label>
+                <Wand2 className="w-3 h-3" />
               )}
-            </div>
-          </div>
-
-          <div className="flex justify-between">
-            <button
-              onClick={() => setStep(1)}
-              className="px-4 py-2 text-slate-400 hover:text-slate-200 transition"
-            >
-              Back
-            </button>
-            <button
-              onClick={() => setStep(3)}
-              disabled={headlines.filter((h) => h.trim()).length === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Next
-              <ArrowRight className="w-4 h-4" />
+              Enhance with AI
             </button>
           </div>
+          <textarea
+            value={productDescription}
+            onChange={(e) => setProductDescription(e.target.value)}
+            placeholder="Describe your product or offer. What problem does it solve? Who is it for?"
+            rows={3}
+            className="w-full px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-slate-200 text-sm placeholder-slate-500 focus:outline-none focus:border-orange-500/50 resize-none"
+          />
+          <p className="text-xs text-slate-500 mt-1">{productDescription.length} characters</p>
         </div>
-      )}
 
-      {/* Step 3: Strategy & Generate */}
-      {step === 3 && (
-        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6 space-y-6">
-          <h3 className="text-sm font-semibold text-slate-200">Strategy & Generation</h3>
+        {/* Headlines */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-sm font-medium text-slate-200">
+              Headlines <span className="text-red-400">*</span>
+            </label>
+            <button
+              onClick={handleSuggestHeadlines}
+              disabled={isSuggestingHeadlines || !productDescription.trim()}
+              className="flex items-center gap-1.5 px-2 py-1 text-xs text-orange-400 hover:text-orange-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            >
+              {isSuggestingHeadlines ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Sparkles className="w-3 h-3" />
+              )}
+              Suggest Headlines
+            </button>
+          </div>
 
-          <div className="space-y-6">
-            {/* Goal selection */}
-            <div>
-              <label className="block text-xs text-slate-400 mb-3">Campaign Goal</label>
-              <div className="grid grid-cols-3 gap-3">
-                {GOALS.map((g) => (
+          {/* AI Suggestions */}
+          {headlineSuggestions.length > 0 && (
+            <div className="mb-3 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+              <p className="text-xs text-orange-400 font-medium mb-2">AI Suggestions (click to add)</p>
+              <div className="flex flex-wrap gap-2">
+                {headlineSuggestions.map((suggestion, i) => (
                   <button
-                    key={g.id}
-                    onClick={() => setGoal(g.id)}
-                    className={`p-3 rounded-lg border text-left transition ${
-                      goal === g.id
-                        ? "border-orange-500 bg-orange-500/10"
-                        : "border-slate-700 hover:border-slate-600"
-                    }`}
+                    key={i}
+                    onClick={() => addSuggestion(suggestion)}
+                    className="px-2 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 rounded transition"
                   >
-                    <h4 className="text-sm font-medium text-slate-200">{g.name}</h4>
-                    <p className="text-xs text-slate-500">{g.description}</p>
+                    {suggestion}
                   </button>
                 ))}
               </div>
             </div>
+          )}
 
-            {/* Marketing angles */}
-            <div>
-              <label className="block text-xs text-slate-400 mb-3">Marketing Angles</label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {MARKETING_ANGLES.map((angle) => {
-                  const Icon = angle.icon;
-                  const isSelected = selectedAngles.includes(angle.id);
-                  return (
-                    <button
-                      key={angle.id}
-                      onClick={() => toggleAngle(angle.id)}
-                      className={`p-3 rounded-lg border text-left transition ${
-                        isSelected
-                          ? "border-orange-500 bg-orange-500/10"
-                          : "border-slate-700 hover:border-slate-600"
-                      }`}
-                    >
-                      <Icon className={`w-4 h-4 mb-2 ${isSelected ? "text-orange-400" : "text-slate-500"}`} />
-                      <h4 className="text-xs font-medium text-slate-200">{angle.name}</h4>
-                      <p className="text-xs text-slate-500 truncate">{angle.description}</p>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Variation count */}
-            <div>
-              <label className="block text-xs text-slate-400 mb-3">
-                Number of Variations: {variationCount}
-              </label>
+          {/* Headline inputs */}
+          {headlines.map((headline, index) => (
+            <div key={index} className="flex gap-2 mb-2">
               <input
-                type="range"
-                min={1}
-                max={4}
-                value={variationCount}
-                onChange={(e) => setVariationCount(parseInt(e.target.value))}
-                className="w-full accent-orange-500"
+                type="text"
+                value={headline}
+                onChange={(e) => updateHeadline(index, e.target.value)}
+                placeholder={`Headline ${index + 1}`}
+                className="flex-1 px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-slate-200 text-sm placeholder-slate-500 focus:outline-none focus:border-orange-500/50"
               />
-              <div className="flex justify-between text-xs text-slate-500 mt-1">
-                <span>1</span>
-                <span>4</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-between">
-            <button
-              onClick={() => setStep(2)}
-              className="px-4 py-2 text-slate-400 hover:text-slate-200 transition"
-            >
-              Back
-            </button>
-            <button
-              onClick={handleCreate}
-              disabled={isLoading}
-              className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-orange-500 to-pink-600 text-white rounded-lg hover:opacity-90 transition disabled:opacity-50"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  Generate Ads
-                </>
+              {headlines.length > 1 && (
+                <button
+                  onClick={() => removeHeadline(index)}
+                  className="p-2 text-slate-500 hover:text-red-400 transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               )}
+            </div>
+          ))}
+          {headlines.length < 5 && (
+            <button
+              onClick={addHeadline}
+              className="text-xs text-orange-400 hover:text-orange-300 transition"
+            >
+              + Add another headline
             </button>
+          )}
+        </div>
+
+        {/* CTA */}
+        <div>
+          <label className="text-sm font-medium text-slate-200 block mb-2">
+            Call to Action
+          </label>
+          <div className="flex gap-2">
+            <select
+              value={ctaText}
+              onChange={(e) => setCtaText(e.target.value)}
+              className="flex-1 px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-slate-200 text-sm focus:outline-none focus:border-orange-500/50"
+            >
+              {CTA_PRESETS.map((cta) => (
+                <option key={cta} value={cta}>{cta}</option>
+              ))}
+            </select>
+            <input
+              type="text"
+              value={ctaText}
+              onChange={(e) => setCtaText(e.target.value)}
+              placeholder="Or type custom..."
+              className="flex-1 px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-slate-200 text-sm placeholder-slate-500 focus:outline-none focus:border-orange-500/50"
+            />
           </div>
         </div>
-      )}
+
+        {/* Marketing Angle */}
+        <div>
+          <label className="text-sm font-medium text-slate-200 block mb-2">
+            Marketing Angle
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {MARKETING_ANGLES.slice(0, 4).map((angle) => {
+              const Icon = angle.icon;
+              const isSelected = selectedAngle === angle.id;
+              return (
+                <button
+                  key={angle.id}
+                  onClick={() => setSelectedAngle(angle.id)}
+                  className={`p-2 rounded-lg border text-left transition ${
+                    isSelected
+                      ? "border-orange-500 bg-orange-500/10"
+                      : "border-slate-700 hover:border-slate-600"
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 mb-1 ${isSelected ? "text-orange-400" : "text-slate-500"}`} />
+                  <p className="text-xs font-medium text-slate-200">{angle.name}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Advanced Options */}
+        <div>
+          <button
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition"
+          >
+            {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            Advanced Options
+          </button>
+
+          {showAdvanced && (
+            <div className="mt-4 pt-4 border-t border-slate-700 space-y-4">
+              {/* Reference image */}
+              <div>
+                <label className="text-xs text-slate-400 block mb-2">Reference Image (optional)</label>
+                <p className="text-xs text-slate-500 mb-2">
+                  Upload an ad that inspires you. AI will analyze its style.
+                </p>
+
+                {referenceImageUrl ? (
+                  <div className="relative inline-block">
+                    <img
+                      src={referenceImageUrl}
+                      alt="Reference"
+                      className="w-32 h-32 object-cover rounded-lg border border-slate-700"
+                    />
+                    <button
+                      onClick={() => {
+                        setReferenceImageUrl(null);
+                        setReferenceAnalysis(null);
+                      }}
+                      className="absolute -top-2 -right-2 p-1 bg-red-500 rounded-full hover:bg-red-600 transition"
+                    >
+                      <X className="w-3 h-3 text-white" />
+                    </button>
+                    {isAnalyzing && (
+                      <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
+                        <Loader2 className="w-5 h-5 text-white animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <label className="block">
+                    <div className="w-32 h-32 border-2 border-dashed border-slate-700 rounded-lg flex flex-col items-center justify-center hover:border-orange-500/50 transition cursor-pointer">
+                      {isUploading ? (
+                        <Loader2 className="w-5 h-5 text-slate-500 animate-spin" />
+                      ) : (
+                        <>
+                          <Upload className="w-5 h-5 text-slate-500 mb-1" />
+                          <span className="text-xs text-slate-500">Upload</span>
+                        </>
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleReferenceUpload(file);
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+
+              {/* More angles */}
+              <div>
+                <label className="text-xs text-slate-400 block mb-2">More Angles</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {MARKETING_ANGLES.slice(4).map((angle) => {
+                    const Icon = angle.icon;
+                    const isSelected = selectedAngle === angle.id;
+                    return (
+                      <button
+                        key={angle.id}
+                        onClick={() => setSelectedAngle(angle.id)}
+                        className={`p-2 rounded-lg border text-left transition ${
+                          isSelected
+                            ? "border-orange-500 bg-orange-500/10"
+                            : "border-slate-700 hover:border-slate-600"
+                        }`}
+                      >
+                        <Icon className={`w-3 h-3 mb-1 ${isSelected ? "text-orange-400" : "text-slate-500"}`} />
+                        <p className="text-xs font-medium text-slate-200">{angle.name}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Generate Button */}
+        <button
+          onClick={handleCreate}
+          disabled={isLoading || !productDescription.trim() || headlines.filter(h => h.trim()).length === 0}
+          className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-pink-600 text-white rounded-xl hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Creating...
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-5 h-5" />
+              Generate Ad Image
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
@@ -1248,7 +1147,6 @@ function ProjectDetailView({
         throw new Error(err.error || "Export failed");
       }
 
-      // Download the ZIP file
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -1260,7 +1158,6 @@ function ProjectDetailView({
       URL.revokeObjectURL(url);
       setShowExportModal(false);
     } catch (err) {
-      console.error("Export error:", err);
       alert(err instanceof Error ? err.message : "Export failed");
     } finally {
       setIsExporting(false);
@@ -1269,7 +1166,7 @@ function ProjectDetailView({
 
   // Poll for updates while generating
   useEffect(() => {
-    if (project.status === "GENERATING" || project.status === "ANALYZING" || project.status === "COMPOSITING") {
+    if (["GENERATING", "ANALYZING", "COMPOSITING"].includes(project.status)) {
       setIsPolling(true);
       const interval = setInterval(onRefresh, 3000);
       return () => {
@@ -1295,58 +1192,35 @@ function ProjectDetailView({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <button
-            onClick={onBack}
-            className="p-2 hover:bg-slate-800 rounded-lg transition"
-          >
+          <button onClick={onBack} className="p-2 hover:bg-slate-800 rounded-lg transition">
             <ChevronLeft className="w-5 h-5 text-slate-400" />
           </button>
           <div>
             <h2 className="text-lg font-semibold text-slate-100">
               {project.name || "Untitled Project"}
             </h2>
-            <div className="flex items-center gap-3 mt-1">
-              <span className={`px-2 py-0.5 rounded text-xs font-medium ${status.bg} ${status.text}`}>
-                {project.status}
-                {(project.status === "GENERATING" || project.status === "ANALYZING") && (
-                  <span className="ml-1">{project.progress}%</span>
-                )}
-              </span>
-              {project.campaignPlan && (
-                <span className="text-xs text-slate-500">
-                  From: {project.campaignPlan.name}
-                </span>
-              )}
-            </div>
+            <span className={`px-2 py-0.5 rounded text-xs font-medium ${status.bg} ${status.text}`}>
+              {project.status}
+              {["GENERATING", "ANALYZING"].includes(project.status) && ` ${project.progress}%`}
+            </span>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {project.status === "COMPLETED" && project.images && project.images.length > 0 && (
+          {project.status === "COMPLETED" && project.images.length > 0 && (
             <button
               onClick={() => setShowExportModal(true)}
-              className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-orange-500/20 to-pink-500/20 hover:from-orange-500/30 hover:to-pink-500/30 border border-orange-500/30 rounded-lg text-sm text-orange-300 transition"
+              className="flex items-center gap-2 px-3 py-2 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/30 rounded-lg text-sm text-orange-300 transition"
               disabled={isExporting}
             >
-              {isExporting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Download className="w-4 h-4" />
-              )}
+              {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
               Export
             </button>
           )}
-          <button
-            onClick={onRefresh}
-            className="p-2 hover:bg-slate-800 rounded-lg transition"
-            disabled={isPolling}
-          >
+          <button onClick={onRefresh} className="p-2 hover:bg-slate-800 rounded-lg transition" disabled={isPolling}>
             <RefreshCw className={`w-4 h-4 text-slate-400 ${isPolling ? "animate-spin" : ""}`} />
           </button>
-          <button
-            onClick={onDelete}
-            className="p-2 hover:bg-red-500/10 rounded-lg transition text-red-400"
-          >
+          <button onClick={onDelete} className="p-2 hover:bg-red-500/10 rounded-lg transition text-red-400">
             <Trash2 className="w-4 h-4" />
           </button>
         </div>
@@ -1360,14 +1234,14 @@ function ProjectDetailView({
         </div>
       )}
 
-      {/* Progress bar for generating */}
-      {(project.status === "GENERATING" || project.status === "ANALYZING" || project.status === "COMPOSITING") && (
+      {/* Progress bar */}
+      {["GENERATING", "ANALYZING", "COMPOSITING"].includes(project.status) && (
         <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6">
           <div className="flex items-center gap-3 mb-4">
             <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />
             <span className="text-sm text-slate-300">
-              {project.status === "ANALYZING" && "Analyzing reference and planning creatives..."}
-              {project.status === "GENERATING" && "Generating ad images..."}
+              {project.status === "ANALYZING" && "Analyzing and planning..."}
+              {project.status === "GENERATING" && "Generating images..."}
               {project.status === "COMPOSITING" && "Adding text overlays..."}
             </span>
           </div>
@@ -1393,13 +1267,8 @@ function ProjectDetailView({
                 onClick={() => setSelectedImage(image)}
                 className="relative aspect-square bg-slate-900/50 rounded-lg overflow-hidden cursor-pointer group hover:ring-2 hover:ring-orange-500/50 transition"
               >
-                <img
-                  src={image.compositeUrl}
-                  alt="Generated ad"
-                  className="w-full h-full object-cover"
-                />
+                <img src={image.compositeUrl} alt="Generated ad" className="w-full h-full object-cover" />
 
-                {/* Score badge */}
                 {image.overallScore && (
                   <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs text-white flex items-center gap-1">
                     <Star className="w-3 h-3 text-yellow-400" />
@@ -1407,14 +1276,6 @@ function ProjectDetailView({
                   </div>
                 )}
 
-                {/* Favorite */}
-                {image.isFavorite && (
-                  <div className="absolute top-2 right-2">
-                    <Heart className="w-4 h-4 text-red-400 fill-red-400" />
-                  </div>
-                )}
-
-                {/* Hover overlay */}
                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                   <span className="text-white text-sm">View Details</span>
                 </div>
@@ -1426,18 +1287,13 @@ function ProjectDetailView({
         <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-12 text-center">
           <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-slate-300 mb-2">No images generated</h3>
-          <p className="text-sm text-slate-500">
-            Something went wrong during generation. Please try again.
-          </p>
+          <p className="text-sm text-slate-500">Something went wrong. Please try again.</p>
         </div>
       ) : null}
 
       {/* Image detail modal */}
       {selectedImage && (
-        <ImageDetailModal
-          image={selectedImage}
-          onClose={() => setSelectedImage(null)}
-        />
+        <ImageDetailModal image={selectedImage} onClose={() => setSelectedImage(null)} />
       )}
 
       {/* Export modal */}
@@ -1465,37 +1321,20 @@ function ExportModal({
   onExport: (formats: string[]) => void;
   isExporting: boolean;
 }) {
-  const [selectedFormats, setSelectedFormats] = useState<string[]>([
-    "facebook-feed",
-    "instagram-square",
-    "gdn-medium-rectangle",
-  ]);
+  const [selectedFormats, setSelectedFormats] = useState<string[]>(["facebook-feed", "instagram-square"]);
 
   const formatGroups = {
-    "Google Display Network": [
-      { key: "gdn-medium-rectangle", name: "Medium Rectangle", dimensions: "300×250" },
-      { key: "gdn-large-rectangle", name: "Large Rectangle", dimensions: "336×280" },
-      { key: "gdn-leaderboard", name: "Leaderboard", dimensions: "728×90" },
-      { key: "gdn-half-page", name: "Half Page", dimensions: "300×600" },
-      { key: "gdn-large-mobile-banner", name: "Mobile Banner", dimensions: "320×100" },
-    ],
     "Facebook / Meta": [
       { key: "facebook-feed", name: "Feed", dimensions: "1200×628" },
       { key: "facebook-story", name: "Story", dimensions: "1080×1920" },
-      { key: "facebook-carousel", name: "Carousel", dimensions: "1080×1080" },
     ],
     "Instagram": [
       { key: "instagram-square", name: "Square", dimensions: "1080×1080" },
-      { key: "instagram-portrait", name: "Portrait", dimensions: "1080×1350" },
       { key: "instagram-story", name: "Story", dimensions: "1080×1920" },
     ],
-    "LinkedIn": [
-      { key: "linkedin-single", name: "Single Image", dimensions: "1200×627" },
-      { key: "linkedin-square", name: "Square", dimensions: "1200×1200" },
-    ],
-    "Twitter / X": [
-      { key: "twitter-single", name: "Single Image", dimensions: "1200×675" },
-      { key: "twitter-card", name: "Card", dimensions: "800×418" },
+    "Google Display": [
+      { key: "gdn-medium-rectangle", name: "Medium Rect", dimensions: "300×250" },
+      { key: "gdn-leaderboard", name: "Leaderboard", dimensions: "728×90" },
     ],
   };
 
@@ -1509,8 +1348,7 @@ function ExportModal({
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-800 rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
-        {/* Header */}
+      <div className="bg-slate-800 rounded-xl max-w-md w-full overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b border-slate-700">
           <h3 className="text-sm font-semibold text-slate-200">Export Images</h3>
           <button onClick={onClose} className="p-1 hover:bg-slate-700 rounded transition">
@@ -1518,16 +1356,11 @@ function ExportModal({
           </button>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          <p className="text-sm text-slate-400">
-            Select the ad formats you want to export. Images will be resized and packaged into a ZIP file.
-          </p>
-
+        <div className="p-4 space-y-4">
           {Object.entries(formatGroups).map(([groupName, formats]) => (
             <div key={groupName}>
               <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2">{groupName}</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {formats.map((format) => (
                   <button
                     key={format.key}
@@ -1547,36 +1380,16 @@ function ExportModal({
           ))}
         </div>
 
-        {/* Footer */}
         <div className="flex items-center justify-between p-4 border-t border-slate-700 bg-slate-800/50">
-          <p className="text-sm text-slate-400">
-            {selectedFormats.length} format{selectedFormats.length !== 1 ? "s" : ""} selected
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-slate-400 hover:text-slate-200 transition"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => onExport(selectedFormats)}
-              disabled={selectedFormats.length === 0 || isExporting}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-pink-600 text-white rounded-lg hover:opacity-90 transition disabled:opacity-50"
-            >
-              {isExporting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Exporting...
-                </>
-              ) : (
-                <>
-                  <Download className="w-4 h-4" />
-                  Export ZIP
-                </>
-              )}
-            </button>
-          </div>
+          <p className="text-sm text-slate-400">{selectedFormats.length} selected</p>
+          <button
+            onClick={() => onExport(selectedFormats)}
+            disabled={selectedFormats.length === 0 || isExporting}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-pink-600 text-white rounded-lg hover:opacity-90 transition disabled:opacity-50"
+          >
+            {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            Export ZIP
+          </button>
         </div>
       </div>
     </div>
@@ -1587,13 +1400,7 @@ function ExportModal({
 // IMAGE DETAIL MODAL
 // ============================================================================
 
-function ImageDetailModal({
-  image,
-  onClose,
-}: {
-  image: AdImage;
-  onClose: () => void;
-}) {
+function ImageDetailModal({ image, onClose }: { image: AdImage; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
 
   const handleDownload = async () => {
@@ -1617,10 +1424,16 @@ function ImageDetailModal({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const getScoreColor = (s: number) => {
+    if (s >= 90) return "text-emerald-400";
+    if (s >= 80) return "text-orange-400";
+    if (s >= 70) return "text-yellow-400";
+    return "text-slate-400";
+  };
+
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-slate-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-700">
           <h3 className="text-sm font-semibold text-slate-200">Image Details</h3>
           <button onClick={onClose} className="p-1 hover:bg-slate-700 rounded transition">
@@ -1631,13 +1444,7 @@ function ImageDetailModal({
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Image */}
           <div>
-            <img
-              src={image.compositeUrl}
-              alt="Generated ad"
-              className="w-full rounded-lg"
-            />
-
-            {/* Actions */}
+            <img src={image.compositeUrl} alt="Generated ad" className="w-full rounded-lg" />
             <div className="flex gap-2 mt-4">
               <button
                 onClick={handleDownload}
@@ -1661,10 +1468,30 @@ function ImageDetailModal({
             <div className="bg-slate-900/50 rounded-lg p-4">
               <h4 className="text-xs font-semibold text-slate-400 mb-3">AI Scores</h4>
               <div className="grid grid-cols-2 gap-3">
-                <ScoreItem label="Hook" score={image.hookScore} />
-                <ScoreItem label="Clarity" score={image.clarityScore} />
-                <ScoreItem label="CTA" score={image.ctaScore} />
-                <ScoreItem label="Overall" score={image.overallScore} highlight />
+                {image.hookScore && (
+                  <div className="p-2 rounded bg-slate-800/50">
+                    <label className="text-xs text-slate-500">Hook</label>
+                    <p className={`text-lg font-semibold ${getScoreColor(image.hookScore)}`}>{image.hookScore}</p>
+                  </div>
+                )}
+                {image.clarityScore && (
+                  <div className="p-2 rounded bg-slate-800/50">
+                    <label className="text-xs text-slate-500">Clarity</label>
+                    <p className={`text-lg font-semibold ${getScoreColor(image.clarityScore)}`}>{image.clarityScore}</p>
+                  </div>
+                )}
+                {image.ctaScore && (
+                  <div className="p-2 rounded bg-slate-800/50">
+                    <label className="text-xs text-slate-500">CTA</label>
+                    <p className={`text-lg font-semibold ${getScoreColor(image.ctaScore)}`}>{image.ctaScore}</p>
+                  </div>
+                )}
+                {image.overallScore && (
+                  <div className="p-2 rounded bg-orange-500/10">
+                    <label className="text-xs text-slate-500">Overall</label>
+                    <p className={`text-lg font-semibold ${getScoreColor(image.overallScore)}`}>{image.overallScore}</p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1703,36 +1530,6 @@ function ImageDetailModal({
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// HELPER COMPONENTS
-// ============================================================================
-
-function ScoreItem({
-  label,
-  score,
-  highlight = false,
-}: {
-  label: string;
-  score: number | null;
-  highlight?: boolean;
-}) {
-  if (score === null) return null;
-
-  const getScoreColor = (s: number) => {
-    if (s >= 90) return "text-emerald-400";
-    if (s >= 80) return "text-orange-400";
-    if (s >= 70) return "text-yellow-400";
-    return "text-slate-400";
-  };
-
-  return (
-    <div className={`p-2 rounded ${highlight ? "bg-orange-500/10" : "bg-slate-800/50"}`}>
-      <label className="text-xs text-slate-500">{label}</label>
-      <p className={`text-lg font-semibold ${getScoreColor(score)}`}>{score}</p>
     </div>
   );
 }
