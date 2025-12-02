@@ -205,6 +205,10 @@ IMPORTANT:
 - Focus on scroll-stopping visuals that work at small sizes`;
 
   try {
+    console.log("[Ads Image Creator] Calling Gemini API...");
+    console.log("[Ads Image Creator] Model:", GEMINI_MODEL);
+    console.log("[Ads Image Creator] API Key present:", !!apiKey);
+
     const response = await fetch(
       `${GEMINI_API_URL}?key=${apiKey}`,
       {
@@ -220,23 +224,34 @@ IMPORTANT:
       }
     );
 
+    console.log("[Ads Image Creator] Gemini response status:", response.status);
+
     if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status}`);
+      const errorText = await response.text();
+      console.error("[Ads Image Creator] Gemini API error response:", errorText);
+      throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
+    console.log("[Ads Image Creator] Gemini response length:", text.length);
+    console.log("[Ads Image Creator] Gemini response preview:", text.substring(0, 200));
+
     // Extract JSON from response
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
+      console.log("[Ads Image Creator] Parsed", parsed.length, "creative specs from Gemini");
       return parsed;
     }
 
+    console.error("[Ads Image Creator] No valid JSON found in Gemini response");
+    console.error("[Ads Image Creator] Full response:", text);
     throw new Error("No valid JSON in Gemini response");
   } catch (error) {
     console.error("[Ads Image Creator] Gemini error:", error);
+    console.log("[Ads Image Creator] Falling back to default specs...");
     return generateFallbackSpecs(input);
   }
 }
@@ -311,39 +326,46 @@ function generateFallbackSpecs(input: GenerateCreativesInput): Array<{
 async function generateImage(prompt: string, userId: string, imageId: string): Promise<string> {
   const apiKey = process.env.REPLICATE_API_TOKEN;
 
+  console.log("[Ads Image Creator] generateImage called");
+  console.log("[Ads Image Creator] REPLICATE_API_TOKEN present:", !!apiKey);
+  console.log("[Ads Image Creator] Prompt preview:", prompt.substring(0, 100));
+
   if (!apiKey) {
     console.log("[Ads Image Creator] No REPLICATE_API_TOKEN, returning placeholder");
     return "https://placehold.co/1080x1080/1a1a2e/ffffff?text=Ad+Creative";
   }
 
-  console.log("[Ads Image Creator] Generating image with Replicate...");
+  console.log("[Ads Image Creator] Generating image with Replicate Flux...");
 
-  // Use Flux Schnell for fast generation
-  const response = await fetch("https://api.replicate.com/v1/predictions", {
+  // Use Flux Schnell for fast generation - correct API format
+  const response = await fetch("https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions", {
     method: "POST",
     headers: {
-      Authorization: `Token ${apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      version: "black-forest-labs/flux-schnell",
       input: {
         prompt: prompt,
         num_outputs: 1,
-        aspect_ratio: "1:1", // Square for versatility
+        aspect_ratio: "1:1",
         output_format: "webp",
         output_quality: 90,
       },
     }),
   });
 
+  console.log("[Ads Image Creator] Replicate response status:", response.status);
+
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Replicate API error: ${error}`);
+    console.error("[Ads Image Creator] Replicate API error:", error);
+    throw new Error(`Replicate API error: ${response.status} - ${error}`);
   }
 
   const prediction = await response.json();
   console.log("[Ads Image Creator] Prediction started:", prediction.id);
+  console.log("[Ads Image Creator] Prediction status:", prediction.status);
 
   // Poll for completion
   const pollIntervalMs = 2000;
@@ -374,21 +396,36 @@ async function generateImage(prompt: string, userId: string, imageId: string): P
   }
 
   if (result.status !== "succeeded") {
+    console.error("[Ads Image Creator] Image generation timed out. Final status:", result.status);
     throw new Error("Image generation timed out");
   }
+
+  console.log("[Ads Image Creator] Image generation succeeded!");
+  console.log("[Ads Image Creator] Result output:", JSON.stringify(result.output).substring(0, 200));
 
   // Get the output URL
   const outputUrl = Array.isArray(result.output) ? result.output[0] : result.output;
 
   if (!outputUrl) {
+    console.error("[Ads Image Creator] No output URL. Full result:", JSON.stringify(result));
     throw new Error("No output URL from Replicate");
   }
+
+  console.log("[Ads Image Creator] Output URL:", outputUrl);
 
   // Download and upload to Vercel Blob for persistence
   console.log("[Ads Image Creator] Downloading generated image...");
   const imageResponse = await fetch(outputUrl);
-  const imageBuffer = await imageResponse.arrayBuffer();
 
+  if (!imageResponse.ok) {
+    console.error("[Ads Image Creator] Failed to download image:", imageResponse.status);
+    throw new Error(`Failed to download generated image: ${imageResponse.status}`);
+  }
+
+  const imageBuffer = await imageResponse.arrayBuffer();
+  console.log("[Ads Image Creator] Downloaded image size:", imageBuffer.byteLength, "bytes");
+
+  console.log("[Ads Image Creator] Uploading to Vercel Blob...");
   const blob = await put(
     `ads-image-creator/${userId}/${imageId}/image.webp`,
     Buffer.from(imageBuffer),
@@ -405,13 +442,37 @@ async function generateImage(prompt: string, userId: string, imageId: string): P
 export async function generateAdCreatives(
   input: GenerateCreativesInput
 ): Promise<GeneratedCreative[]> {
-  console.log("[Ads Image Creator] Generating creative specs...");
+  console.log("[Ads Image Creator] ========== generateAdCreatives START ==========");
+  console.log("[Ads Image Creator] Input:", JSON.stringify({
+    productDescription: input.productDescription?.substring(0, 50),
+    headlines: input.headlines,
+    angles: input.angles,
+    variationCount: input.variationCount,
+    goal: input.goal,
+  }));
 
   // Step 1: Generate creative specifications using Gemini
+  console.log("[Ads Image Creator] Step 1: Calling generateCreativeSpecs...");
   const specs = await generateCreativeSpecs(input);
-  console.log(`[Ads Image Creator] Generated ${specs.length} specs`);
+  console.log(`[Ads Image Creator] Step 1 complete: Got ${specs.length} specs`);
+
+  if (specs.length === 0) {
+    console.error("[Ads Image Creator] No specs generated! Returning empty array.");
+    return [];
+  }
+
+  // Log each spec
+  specs.forEach((spec, i) => {
+    console.log(`[Ads Image Creator] Spec ${i + 1}:`, {
+      headline: spec.headline,
+      cta: spec.cta,
+      angle: spec.angle,
+      promptPreview: spec.backgroundPrompt?.substring(0, 80),
+    });
+  });
 
   // Step 2: Generate images for each spec using Replicate
+  console.log("[Ads Image Creator] Step 2: Generating images with Replicate...");
   const creatives: GeneratedCreative[] = [];
 
   for (let i = 0; i < specs.length; i++) {
@@ -425,6 +486,8 @@ export async function generateAdCreatives(
         "system", // Will be replaced with actual userId
         imageId
       );
+
+      console.log(`[Ads Image Creator] Image ${i + 1} generated successfully:`, imageUrl?.substring(0, 60));
 
       creatives.push({
         backgroundPrompt: spec.backgroundPrompt,
@@ -441,6 +504,8 @@ export async function generateAdCreatives(
     }
   }
 
+  console.log(`[Ads Image Creator] ========== generateAdCreatives COMPLETE ==========`);
+  console.log(`[Ads Image Creator] Returning ${creatives.length} creatives`);
   return creatives;
 }
 
