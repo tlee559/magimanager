@@ -250,10 +250,11 @@ export function AdsImageCreatorView({ onBack }: AdsImageCreatorViewProps) {
     }
   };
 
-  // Handle project creation
+  // Handle project creation - immediately go to processing view
   const handleProjectCreated = (project: AdImageProject) => {
+    console.log("[AdsImageCreator] Project created, transitioning to processing view:", project.id);
     setSelectedProject(project);
-    setShowBackgroundModal(true);
+    setView("processing"); // Immediately show processing view
     fetchProjects();
   };
 

@@ -4,7 +4,7 @@
  * This agent thinks like a media buyer + creative director.
  * It generates high-converting ad creatives using:
  * - Gemini for creative strategy and prompt generation
- * - Replicate for image generation (Flux/SDXL)
+ * - Gemini Imagen 3 for image generation
  */
 
 import { put } from "@vercel/blob";
@@ -321,114 +321,82 @@ function generateFallbackSpecs(input: GenerateCreativesInput): Array<{
 }
 
 /**
- * Generate image using Replicate (Flux model)
+ * Generate image using Gemini Imagen 3
+ * Uses the same GOOGLE_API_KEY as the text generation
  */
 async function generateImage(prompt: string, userId: string, imageId: string): Promise<string> {
-  const apiKey = process.env.REPLICATE_API_TOKEN;
+  const apiKey = process.env.GOOGLE_API_KEY;
 
   console.log("[Ads Image Creator] generateImage called");
-  console.log("[Ads Image Creator] REPLICATE_API_TOKEN present:", !!apiKey);
+  console.log("[Ads Image Creator] GOOGLE_API_KEY present:", !!apiKey);
   console.log("[Ads Image Creator] Prompt preview:", prompt.substring(0, 100));
 
   if (!apiKey) {
-    console.log("[Ads Image Creator] No REPLICATE_API_TOKEN, returning placeholder");
+    console.log("[Ads Image Creator] No GOOGLE_API_KEY, returning placeholder");
     return "https://placehold.co/1080x1080/1a1a2e/ffffff?text=Ad+Creative";
   }
 
-  console.log("[Ads Image Creator] Generating image with Replicate Flux...");
+  console.log("[Ads Image Creator] Generating image with Gemini Imagen 3...");
 
-  // Use Flux Schnell for fast generation - correct API format
-  const response = await fetch("https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions", {
+  // Use Imagen 3 for image generation
+  // API endpoint: https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict
+  const imagenApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+
+  const response = await fetch(imagenApiUrl, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      input: {
-        prompt: prompt,
-        num_outputs: 1,
-        aspect_ratio: "1:1",
-        output_format: "webp",
-        output_quality: 90,
+      instances: [
+        {
+          prompt: prompt,
+        },
+      ],
+      parameters: {
+        sampleCount: 1,
+        aspectRatio: "1:1",
+        personGeneration: "allow_adult",
+        safetyFilterLevel: "block_only_high",
       },
     }),
   });
 
-  console.log("[Ads Image Creator] Replicate response status:", response.status);
+  console.log("[Ads Image Creator] Imagen API response status:", response.status);
 
   if (!response.ok) {
     const error = await response.text();
-    console.error("[Ads Image Creator] Replicate API error:", error);
-    throw new Error(`Replicate API error: ${response.status} - ${error}`);
+    console.error("[Ads Image Creator] Imagen API error:", error);
+    throw new Error(`Imagen API error: ${response.status} - ${error}`);
   }
 
-  const prediction = await response.json();
-  console.log("[Ads Image Creator] Prediction started:", prediction.id);
-  console.log("[Ads Image Creator] Prediction status:", prediction.status);
+  const data = await response.json();
+  console.log("[Ads Image Creator] Imagen response:", JSON.stringify(data).substring(0, 300));
 
-  // Poll for completion
-  const pollIntervalMs = 2000;
-  const maxPolls = 60; // 2 minutes max
-  let result = prediction;
-
-  for (let i = 0; i < maxPolls; i++) {
-    if (result.status === "succeeded") {
-      break;
-    }
-    if (result.status === "failed") {
-      throw new Error(`Image generation failed: ${result.error}`);
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-
-    const statusResponse = await fetch(
-      `https://api.replicate.com/v1/predictions/${prediction.id}`,
-      {
-        headers: { Authorization: `Token ${apiKey}` },
-      }
-    );
-    result = await statusResponse.json();
-
-    if (i % 5 === 0) {
-      console.log(`[Ads Image Creator] Poll ${i + 1}/${maxPolls}: ${result.status}`);
-    }
+  // Extract base64 image from response
+  const predictions = data.predictions;
+  if (!predictions || predictions.length === 0) {
+    console.error("[Ads Image Creator] No predictions in response:", JSON.stringify(data));
+    throw new Error("No image generated from Imagen API");
   }
 
-  if (result.status !== "succeeded") {
-    console.error("[Ads Image Creator] Image generation timed out. Final status:", result.status);
-    throw new Error("Image generation timed out");
+  const base64Image = predictions[0].bytesBase64Encoded;
+  if (!base64Image) {
+    console.error("[Ads Image Creator] No base64 image in prediction:", JSON.stringify(predictions[0]));
+    throw new Error("No image data in Imagen response");
   }
 
-  console.log("[Ads Image Creator] Image generation succeeded!");
-  console.log("[Ads Image Creator] Result output:", JSON.stringify(result.output).substring(0, 200));
+  console.log("[Ads Image Creator] Got base64 image, length:", base64Image.length);
 
-  // Get the output URL
-  const outputUrl = Array.isArray(result.output) ? result.output[0] : result.output;
+  // Convert base64 to buffer
+  const imageBuffer = Buffer.from(base64Image, "base64");
+  console.log("[Ads Image Creator] Image buffer size:", imageBuffer.byteLength, "bytes");
 
-  if (!outputUrl) {
-    console.error("[Ads Image Creator] No output URL. Full result:", JSON.stringify(result));
-    throw new Error("No output URL from Replicate");
-  }
-
-  console.log("[Ads Image Creator] Output URL:", outputUrl);
-
-  // Download and upload to Vercel Blob for persistence
-  console.log("[Ads Image Creator] Downloading generated image...");
-  const imageResponse = await fetch(outputUrl);
-
-  if (!imageResponse.ok) {
-    console.error("[Ads Image Creator] Failed to download image:", imageResponse.status);
-    throw new Error(`Failed to download generated image: ${imageResponse.status}`);
-  }
-
-  const imageBuffer = await imageResponse.arrayBuffer();
-  console.log("[Ads Image Creator] Downloaded image size:", imageBuffer.byteLength, "bytes");
-
+  // Upload to Vercel Blob for persistence
   console.log("[Ads Image Creator] Uploading to Vercel Blob...");
   const blob = await put(
-    `ads-image-creator/${userId}/${imageId}/image.webp`,
-    Buffer.from(imageBuffer),
+    `ads-image-creator/${userId}/${imageId}/image.png`,
+    imageBuffer,
     { access: "public", addRandomSuffix: true }
   );
 
@@ -471,8 +439,8 @@ export async function generateAdCreatives(
     });
   });
 
-  // Step 2: Generate images for each spec using Replicate
-  console.log("[Ads Image Creator] Step 2: Generating images with Replicate...");
+  // Step 2: Generate images for each spec using Gemini Imagen 3
+  console.log("[Ads Image Creator] Step 2: Generating images with Gemini Imagen 3...");
   const creatives: GeneratedCreative[] = [];
 
   for (let i = 0; i < specs.length; i++) {
