@@ -6,6 +6,31 @@ import { fetchAdGroups, refreshAccessToken } from "@/lib/google-ads-api";
 import { isFeatureEnabled } from "@magimanager/shared";
 import { decrypt, encrypt } from "@/lib/encryption";
 
+// Helper to return cached ad groups
+function returnCachedAdGroups(account: { cachedAdGroups: string | null; adGroupsCachedAt: Date | null }, campaignId: string, reason: string) {
+  if (account.cachedAdGroups && account.adGroupsCachedAt) {
+    try {
+      const allAdGroups = JSON.parse(account.cachedAdGroups);
+      // Filter by campaign if campaignId provided
+      const adGroups = campaignId
+        ? allAdGroups.filter((ag: { campaignId: string }) => ag.campaignId === campaignId)
+        : allAdGroups;
+      const cacheAge = Date.now() - new Date(account.adGroupsCachedAt).getTime();
+      console.log(`[API/ad-groups] Returning cached data (${reason}): ${adGroups.length} ad groups`);
+      return NextResponse.json({
+        adGroups,
+        syncedAt: account.adGroupsCachedAt,
+        fromCache: true,
+        cacheAge,
+        cacheReason: reason,
+      });
+    } catch (parseError) {
+      console.error("[API/ad-groups] Failed to parse cached ad groups:", parseError);
+    }
+  }
+  return null;
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ campaignId: string }> }
@@ -41,18 +66,36 @@ export async function GET(
       return NextResponse.json({ error: "Account not found" }, { status: 404 });
     }
 
+    // No connection - return cached data
     if (!account.connection) {
+      const cached = returnCachedAdGroups(account, campaignId, "no_connection");
+      if (cached) return cached;
       return NextResponse.json(
         { error: "Account is not connected to Google Ads" },
         { status: 400 }
       );
     }
 
-    let accessToken = decrypt(account.connection.accessToken);
-    const refreshToken = decrypt(account.connection.refreshToken);
-    const now = new Date();
+    // Decrypt tokens
+    let accessToken: string;
+    let refreshToken: string;
+    try {
+      accessToken = decrypt(account.connection.accessToken);
+      refreshToken = decrypt(account.connection.refreshToken);
+    } catch (decryptError) {
+      const cached = returnCachedAdGroups(account, campaignId, "token_decrypt_failed");
+      if (cached) return cached;
+      return NextResponse.json(
+        { error: "Token decryption failed", needsReauth: true },
+        { status: 401 }
+      );
+    }
 
-    if (account.connection.tokenExpiresAt <= now) {
+    // Check if token needs refresh
+    const now = new Date();
+    const needsRefresh = account.connection.tokenExpiresAt <= now || account.connection.status === 'expired';
+
+    if (needsRefresh) {
       try {
         const refreshed = await refreshAccessToken(refreshToken);
         accessToken = refreshed.accessToken;
@@ -62,23 +105,58 @@ export async function GET(
           data: {
             accessToken: encrypt(refreshed.accessToken),
             tokenExpiresAt: refreshed.expiresAt,
+            status: 'active',
+            lastSyncError: null,
           },
         });
       } catch (refreshError) {
         console.error("Failed to refresh token:", refreshError);
+        await prisma.googleAdsConnection.update({
+          where: { id: account.connection.id },
+          data: {
+            status: 'expired',
+            lastSyncError: refreshError instanceof Error ? refreshError.message : 'Token refresh failed',
+          },
+        });
+        const cached = returnCachedAdGroups(account, campaignId, "token_refresh_failed");
+        if (cached) return cached;
         return NextResponse.json(
-          { error: "Failed to refresh OAuth token" },
+          { error: "Failed to refresh OAuth token", needsReauth: true },
           { status: 401 }
         );
       }
     }
 
-    const adGroups = await fetchAdGroups(accessToken, customerId, { campaignId });
+    // Fetch live data
+    try {
+      const adGroups = await fetchAdGroups(accessToken, customerId, { campaignId });
 
-    return NextResponse.json({
-      adGroups,
-      syncedAt: new Date().toISOString(),
-    });
+      // Update cache with fresh data (store ALL ad groups, not just filtered)
+      if (!campaignId) {
+        try {
+          await prisma.adAccount.update({
+            where: { id: accountId },
+            data: {
+              cachedAdGroups: JSON.stringify(adGroups),
+              adGroupsCachedAt: new Date(),
+            },
+          });
+        } catch (cacheError) {
+          console.error("[API/ad-groups] Failed to update cache:", cacheError);
+        }
+      }
+
+      return NextResponse.json({
+        adGroups,
+        syncedAt: new Date().toISOString(),
+        fromCache: false,
+      });
+    } catch (fetchError) {
+      console.error("Error fetching ad groups:", fetchError);
+      const cached = returnCachedAdGroups(account, campaignId, "api_fetch_failed");
+      if (cached) return cached;
+      throw fetchError;
+    }
   } catch (error) {
     console.error("Error fetching ad groups:", error);
     return NextResponse.json(

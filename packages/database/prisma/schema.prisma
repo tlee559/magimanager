@@ -103,9 +103,20 @@ model AdAccount {
   googleSyncError       String?
   googleCidVerified     Boolean  @default(false)
 
-  // Campaign cache (for offline viewing when OAuth expires)
-  cachedCampaigns       String?   @db.Text  // JSON array of campaign objects
-  campaignsCachedAt     DateTime?           // When cache was last updated
+  // Google Ads data cache (for offline viewing when OAuth expires)
+  cachedCampaigns         String?   @db.Text  // JSON array of campaign objects
+  campaignsCachedAt       DateTime?           // When cache was last updated
+  cachedAdGroups          String?   @db.Text  // JSON array of ad groups with metrics
+  adGroupsCachedAt        DateTime?
+  cachedAds               String?   @db.Text  // JSON array of ads with metrics
+  adsCachedAt             DateTime?
+  cachedKeywords          String?   @db.Text  // JSON array of keywords with quality scores
+  keywordsCachedAt        DateTime?
+  cachedSearchTerms       String?   @db.Text  // JSON array of search terms
+  searchTermsCachedAt     DateTime?
+  cachedRecommendations   String?   @db.Text  // JSON array of Google recommendations
+  recommendationsCachedAt DateTime?
+  lastFullCacheAt         DateTime?           // When all data was last fully synced
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

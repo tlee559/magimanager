@@ -513,14 +513,16 @@ export async function syncSingleAccount(
       },
     });
 
-    // Cache campaigns for offline viewing
+    // Cache ALL Google Ads data for offline viewing
+    const customerId = googleCid.replace(/-/g, '');
+
+    // Cache campaigns (with metrics for last 7 days)
     try {
-      const campaigns = await fetchCampaigns(accessToken, googleCid.replace(/-/g, ''), {
+      const campaigns = await fetchCampaigns(accessToken, customerId, {
         includeMetrics: true,
-        dateRangeStart: getDateString(-6), // Last 7 days
+        dateRangeStart: getDateString(-6),
         dateRangeEnd: getDateString(0),
       });
-
       await prismaClient.adAccount.update({
         where: { id: accountId },
         data: {
@@ -528,11 +530,88 @@ export async function syncSingleAccount(
           campaignsCachedAt: new Date(),
         },
       });
-
       console.log(`[Sync] Cached ${campaigns.length} campaigns for account ${accountId}`);
     } catch (cacheError) {
-      // Don't fail the sync if campaign caching fails
       console.error('[Sync] Campaign caching failed:', cacheError);
+    }
+
+    // Cache ad groups
+    try {
+      const adGroups = await fetchAdGroups(accessToken, customerId, { includeMetrics: true });
+      await prismaClient.adAccount.update({
+        where: { id: accountId },
+        data: {
+          cachedAdGroups: JSON.stringify(adGroups),
+          adGroupsCachedAt: new Date(),
+        },
+      });
+      console.log(`[Sync] Cached ${adGroups.length} ad groups for account ${accountId}`);
+    } catch (cacheError) {
+      console.error('[Sync] Ad groups caching failed:', cacheError);
+    }
+
+    // Cache ads
+    try {
+      const ads = await fetchAds(accessToken, customerId, { includeMetrics: true });
+      await prismaClient.adAccount.update({
+        where: { id: accountId },
+        data: {
+          cachedAds: JSON.stringify(ads),
+          adsCachedAt: new Date(),
+        },
+      });
+      console.log(`[Sync] Cached ${ads.length} ads for account ${accountId}`);
+    } catch (cacheError) {
+      console.error('[Sync] Ads caching failed:', cacheError);
+    }
+
+    // Cache keywords
+    try {
+      const keywords = await fetchKeywords(accessToken, customerId, { includeMetrics: true });
+      await prismaClient.adAccount.update({
+        where: { id: accountId },
+        data: {
+          cachedKeywords: JSON.stringify(keywords),
+          keywordsCachedAt: new Date(),
+        },
+      });
+      console.log(`[Sync] Cached ${keywords.length} keywords for account ${accountId}`);
+    } catch (cacheError) {
+      console.error('[Sync] Keywords caching failed:', cacheError);
+    }
+
+    // Cache search terms (last 30 days for better analysis)
+    try {
+      const searchTerms = await fetchSearchTerms(accessToken, customerId, {
+        startDate: getDateString(-29),
+        endDate: getDateString(0),
+      });
+      await prismaClient.adAccount.update({
+        where: { id: accountId },
+        data: {
+          cachedSearchTerms: JSON.stringify(searchTerms),
+          searchTermsCachedAt: new Date(),
+        },
+      });
+      console.log(`[Sync] Cached ${searchTerms.length} search terms for account ${accountId}`);
+    } catch (cacheError) {
+      console.error('[Sync] Search terms caching failed:', cacheError);
+    }
+
+    // Cache recommendations
+    try {
+      const recommendations = await fetchRecommendations(accessToken, customerId);
+      await prismaClient.adAccount.update({
+        where: { id: accountId },
+        data: {
+          cachedRecommendations: JSON.stringify(recommendations),
+          recommendationsCachedAt: new Date(),
+          lastFullCacheAt: new Date(), // Mark full cache complete
+        },
+      });
+      console.log(`[Sync] Cached ${recommendations.length} recommendations for account ${accountId}`);
+    } catch (cacheError) {
+      console.error('[Sync] Recommendations caching failed:', cacheError);
     }
 
     return metrics;
