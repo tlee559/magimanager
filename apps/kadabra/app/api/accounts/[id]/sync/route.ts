@@ -50,34 +50,32 @@ export async function POST(
       );
     }
 
-    if (account.connection.status !== 'active') {
-      return NextResponse.json(
-        { error: 'OAuth connection is not active - reconnection required' },
-        { status: 400 }
-      );
-    }
-
-    // Check if token needs refresh (with 5 min buffer)
-    let accessToken = decrypt(account.connection.accessToken);
+    // Try to refresh token - even if status is 'expired', we attempt recovery
+    // The refresh token might still be valid even if access token expired
+    let accessToken: string;
     const tokenExpiresAt = new Date(account.connection.tokenExpiresAt);
     const bufferMs = 5 * 60 * 1000; // 5 minutes
+    const needsRefresh = tokenExpiresAt.getTime() - Date.now() < bufferMs || account.connection.status === 'expired';
 
-    if (tokenExpiresAt.getTime() - Date.now() < bufferMs) {
-      console.log(`[Manual Sync] Refreshing token for account ${id}`);
+    if (needsRefresh) {
+      console.log(`[Manual Sync] Refreshing token for account ${id} (status: ${account.connection.status})`);
       try {
         const refreshToken = decrypt(account.connection.refreshToken);
         const newTokens = await refreshAccessToken(refreshToken);
 
-        // Update stored tokens
+        // Update stored tokens AND reset status to active
         await prisma.googleAdsConnection.update({
           where: { id: account.connection.id },
           data: {
             accessToken: encrypt(newTokens.accessToken),
             tokenExpiresAt: newTokens.expiresAt,
+            status: 'active', // Reset to active on successful refresh
+            lastSyncError: null,
           },
         });
 
         accessToken = newTokens.accessToken;
+        console.log(`[Manual Sync] Token refreshed successfully, connection restored to active`);
       } catch (error) {
         console.error(`[Manual Sync] Token refresh failed:`, error);
 
@@ -95,6 +93,8 @@ export async function POST(
           { status: 401 }
         );
       }
+    } else {
+      accessToken = decrypt(account.connection.accessToken);
     }
 
     // Perform the sync

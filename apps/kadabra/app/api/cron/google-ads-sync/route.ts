@@ -43,13 +43,10 @@ export async function GET(request: NextRequest) {
   };
 
   try {
-    // Get all accounts with active OAuth connections
+    // Get all accounts with OAuth connections (including expired - we'll try to recover them)
     const accountsToSync = await prisma.adAccount.findMany({
       where: {
         connectionId: { not: null },
-        connection: {
-          status: 'active',
-        },
         handoffStatus: { not: 'archived' },
       },
       include: {
@@ -73,27 +70,31 @@ export async function GET(request: NextRequest) {
     for (const [connectionId, accounts] of connectionGroups) {
       const connection = accounts[0].connection!;
 
-      // Check if token needs refresh (with 5 min buffer)
-      let accessToken = decrypt(connection.accessToken);
+      // Check if token needs refresh (with 5 min buffer) or if connection was marked expired
+      let accessToken: string;
       const tokenExpiresAt = new Date(connection.tokenExpiresAt);
       const bufferMs = 5 * 60 * 1000; // 5 minutes
+      const needsRefresh = tokenExpiresAt.getTime() - Date.now() < bufferMs || connection.status === 'expired';
 
-      if (tokenExpiresAt.getTime() - Date.now() < bufferMs) {
-        console.log(`[Google Ads Sync] Refreshing token for connection ${connectionId}`);
+      if (needsRefresh) {
+        console.log(`[Google Ads Sync] Refreshing token for connection ${connectionId} (status: ${connection.status})`);
         try {
           const refreshToken = decrypt(connection.refreshToken);
           const newTokens = await refreshAccessToken(refreshToken);
 
-          // Update stored tokens
+          // Update stored tokens AND reset status to active
           await prisma.googleAdsConnection.update({
             where: { id: connectionId },
             data: {
               accessToken: encrypt(newTokens.accessToken),
               tokenExpiresAt: newTokens.expiresAt,
+              status: 'active', // Reset to active on successful refresh
+              lastSyncError: null,
             },
           });
 
           accessToken = newTokens.accessToken;
+          console.log(`[Google Ads Sync] Token refreshed, connection ${connectionId} restored to active`);
         } catch (error) {
           console.error(`[Google Ads Sync] Token refresh failed for ${connectionId}:`, error);
 
@@ -125,6 +126,8 @@ export async function GET(request: NextRequest) {
           }
           continue;
         }
+      } else {
+        accessToken = decrypt(connection.accessToken);
       }
 
       // Sync each account in this connection group

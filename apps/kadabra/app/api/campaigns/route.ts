@@ -115,7 +115,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Decrypt and check if token needs refresh
+    // Decrypt tokens
     let accessToken: string;
     let refreshToken: string;
 
@@ -135,24 +135,40 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // Check if token needs refresh (expired OR connection marked as expired)
     const now = new Date();
+    const needsRefresh = account.connection.tokenExpiresAt <= now || account.connection.status === 'expired';
 
-    if (account.connection.tokenExpiresAt <= now) {
-      // Refresh the token
+    if (needsRefresh) {
+      // Refresh the token - try to recover even if status is 'expired'
+      console.log(`[API/campaigns] Refreshing token (status: ${account.connection.status})`);
       try {
         const refreshed = await refreshAccessToken(refreshToken);
         accessToken = refreshed.accessToken;
 
-        // Update the connection with new encrypted token
+        // Update the connection with new encrypted token AND reset status to active
         await prisma.googleAdsConnection.update({
           where: { id: account.connection.id },
           data: {
             accessToken: encrypt(refreshed.accessToken),
             tokenExpiresAt: refreshed.expiresAt,
+            status: 'active', // Reset to active on successful refresh
+            lastSyncError: null,
           },
         });
+        console.log(`[API/campaigns] Token refreshed, connection restored to active`);
       } catch (refreshError) {
         console.error("Failed to refresh token:", refreshError);
+
+        // Mark connection as expired
+        await prisma.googleAdsConnection.update({
+          where: { id: account.connection.id },
+          data: {
+            status: 'expired',
+            lastSyncError: refreshError instanceof Error ? refreshError.message : 'Token refresh failed',
+          },
+        });
+
         const cached = returnCachedCampaigns("token_refresh_failed");
         if (cached) return cached;
         return NextResponse.json(
