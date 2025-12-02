@@ -5,6 +5,15 @@ import { authOptions } from "@/lib/auth-options";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
+// =============================================================================
+// GEMINI MODEL CONFIGURATION
+// IMPORTANT: Always use the latest stable Gemini model.
+// Update this constant when Google releases newer versions.
+// Check: https://ai.google.dev/gemini-api/docs/models/gemini
+// =============================================================================
+const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+
 interface SuggestRequest {
   type: "headlines" | "enhance_description" | "cta";
   productDescription: string;
@@ -148,7 +157,7 @@ async function callGemini(
   type: "headlines" | "description" | "cta"
 ): Promise<string[]> {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    `${GEMINI_API_URL}?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

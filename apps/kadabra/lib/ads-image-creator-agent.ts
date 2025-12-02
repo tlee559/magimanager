@@ -9,6 +9,15 @@
 
 import { put } from "@vercel/blob";
 
+// =============================================================================
+// GEMINI MODEL CONFIGURATION
+// IMPORTANT: Always use the latest stable Gemini model.
+// Update this constant when Google releases newer versions.
+// Check: https://ai.google.dev/gemini-api/docs/models/gemini
+// =============================================================================
+const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+
 // Marketing angles with descriptions
 export const MARKETING_ANGLES = {
   problem_solution: {
@@ -197,7 +206,7 @@ IMPORTANT:
 
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `${GEMINI_API_URL}?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -489,7 +498,7 @@ Be specific and tactical, not generic. Return JSON:
     const mimeType = imageUrl.includes(".png") ? "image/png" : "image/jpeg";
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `${GEMINI_API_URL}?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
