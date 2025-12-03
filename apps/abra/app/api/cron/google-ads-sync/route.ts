@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db';
 import { decrypt, encrypt } from '@/lib/encryption';
 import { isValidCronRequest } from '@magimanager/auth';
 import {
-  refreshAccessToken,
+  refreshAccessTokenWithRetry,
   fetchAccountMetrics,
   mapGoogleStatus,
 } from '@/lib/google-ads-api';
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
       where: {
         connectionId: { not: null },
         connection: {
-          status: 'active',
+          status: { in: ['active', 'needs_refresh'] },
         },
         handoffStatus: { not: 'archived' },
       },
@@ -63,36 +63,32 @@ export async function GET(request: NextRequest) {
     for (const [connectionId, accounts] of connectionGroups) {
       const connection = accounts[0].connection!;
 
-      // Check if token needs refresh (with 5 min buffer)
+      // Check if token needs refresh (with 5 min buffer) or connection needs recovery
       let accessToken = decrypt(connection.accessToken);
       const tokenExpiresAt = new Date(connection.tokenExpiresAt);
       const bufferMs = 5 * 60 * 1000; // 5 minutes
+      const needsRefresh = tokenExpiresAt.getTime() - Date.now() < bufferMs || connection.status === 'needs_refresh';
 
-      if (tokenExpiresAt.getTime() - Date.now() < bufferMs) {
-        console.log(`[Google Ads Sync] Refreshing token for connection ${connectionId}`);
-        try {
-          const refreshToken = decrypt(connection.refreshToken);
-          const newTokens = await refreshAccessToken(refreshToken);
+      if (needsRefresh) {
+        console.log(`[Google Ads Sync] Refreshing token for connection ${connectionId} (status: ${connection.status})`);
 
-          // Update stored tokens
+        const refreshToken = decrypt(connection.refreshToken);
+        const refreshResult = await refreshAccessTokenWithRetry(refreshToken);
+
+        if (!refreshResult.success) {
+          const error = refreshResult.error!;
+          console.error(`[Google Ads Sync] Token refresh failed for ${connectionId}:`, error.message);
+
+          // Determine new status based on error type
+          // - Recoverable errors: 'needs_refresh' (cron will retry next hour)
+          // - Non-recoverable errors: 'expired' (user must reconnect)
+          const newStatus = error.isRecoverable ? 'needs_refresh' : 'expired';
+
           await prisma.googleAdsConnection.update({
             where: { id: connectionId },
             data: {
-              accessToken: encrypt(newTokens.accessToken),
-              tokenExpiresAt: newTokens.expiresAt,
-            },
-          });
-
-          accessToken = newTokens.accessToken;
-        } catch (error) {
-          console.error(`[Google Ads Sync] Token refresh failed for ${connectionId}:`, error);
-
-          // Mark connection as expired
-          await prisma.googleAdsConnection.update({
-            where: { id: connectionId },
-            data: {
-              status: 'expired',
-              lastSyncError: error instanceof Error ? error.message : 'Token refresh failed',
+              status: newStatus,
+              lastSyncError: error.message,
             },
           });
 
@@ -102,7 +98,9 @@ export async function GET(request: NextRequest) {
               where: { id: account.id },
               data: {
                 syncStatus: 'error',
-                googleSyncError: 'OAuth token expired - reconnection required',
+                googleSyncError: error.isRecoverable
+                  ? 'Token refresh temporarily failed - will retry'
+                  : 'OAuth token expired - reconnection required',
               },
             });
             results.errors++;
@@ -110,11 +108,38 @@ export async function GET(request: NextRequest) {
               accountId: account.id,
               cid: account.googleCid || 'unknown',
               status: 'error',
-              error: 'Token expired',
+              error: error.isRecoverable ? 'Token refresh failed (will retry)' : 'Token expired',
             });
           }
           continue;
         }
+
+        // Success - update tokens
+        const updateData: {
+          accessToken: string;
+          tokenExpiresAt: Date;
+          status: string;
+          lastSyncError: null;
+          refreshToken?: string;
+        } = {
+          accessToken: encrypt(refreshResult.accessToken!),
+          tokenExpiresAt: refreshResult.expiresAt!,
+          status: 'active', // Reset to active on successful refresh
+          lastSyncError: null,
+        };
+
+        // Handle refresh token rotation (Google may issue a new refresh token)
+        if (refreshResult.newRefreshToken) {
+          console.log(`[Google Ads Sync] Refresh token rotated for connection ${connectionId}`);
+          updateData.refreshToken = encrypt(refreshResult.newRefreshToken);
+        }
+
+        await prisma.googleAdsConnection.update({
+          where: { id: connectionId },
+          data: updateData,
+        });
+
+        accessToken = refreshResult.accessToken!;
       }
 
       // Sync each account in this connection group

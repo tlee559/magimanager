@@ -4,7 +4,7 @@
  */
 
 import { sendMessage as sendTelegramMessage } from '@magimanager/core';
-import { formatCid, normalizeCid } from '@magimanager/shared';
+import { formatCid, normalizeCid, sleep } from '@magimanager/shared';
 
 // Re-export for backwards compatibility
 export { formatCid, normalizeCid } from '@magimanager/shared';
@@ -80,10 +80,11 @@ export async function exchangeCodeForTokens(
 
 /**
  * Refresh an expired access token
+ * Note: Google may return a new refresh token (token rotation) - callers should store it
  */
 export async function refreshAccessToken(
   refreshToken: string
-): Promise<{ accessToken: string; expiresAt: Date }> {
+): Promise<{ accessToken: string; expiresAt: Date; newRefreshToken?: string }> {
   const response = await fetch(GOOGLE_OAUTH_TOKEN_URL, {
     method: 'POST',
     headers: {
@@ -107,6 +108,122 @@ export async function refreshAccessToken(
   return {
     accessToken: data.access_token,
     expiresAt: new Date(Date.now() + data.expires_in * 1000),
+    newRefreshToken: data.refresh_token, // May be undefined - Google rotates tokens sometimes
+  };
+}
+
+/**
+ * Token refresh error classification
+ */
+export interface TokenRefreshError {
+  isRecoverable: boolean;
+  errorCode: string;
+  message: string;
+}
+
+/**
+ * Classify a token refresh error as recoverable or permanent
+ *
+ * Non-recoverable errors (require user re-consent):
+ * - invalid_grant: Token revoked or expired refresh token
+ * - unauthorized_client: OAuth app configuration changed
+ * - access_denied: User revoked access
+ * - invalid_client: Client credentials invalid
+ *
+ * Recoverable errors (transient, worth retrying):
+ * - Network errors, timeouts
+ * - 5xx server errors
+ * - Rate limiting (429)
+ */
+export function classifyTokenError(error: unknown): TokenRefreshError {
+  const message = error instanceof Error ? error.message : String(error);
+  const lowerMessage = message.toLowerCase();
+
+  // Check for known non-recoverable OAuth errors
+  const nonRecoverablePatterns = [
+    { pattern: 'invalid_grant', code: 'invalid_grant' },
+    { pattern: 'unauthorized_client', code: 'unauthorized_client' },
+    { pattern: 'access_denied', code: 'access_denied' },
+    { pattern: 'invalid_client', code: 'invalid_client' },
+    { pattern: 'token has been expired or revoked', code: 'token_revoked' },
+    { pattern: 'token has been revoked', code: 'token_revoked' },
+  ];
+
+  for (const { pattern, code } of nonRecoverablePatterns) {
+    if (lowerMessage.includes(pattern)) {
+      return {
+        isRecoverable: false,
+        errorCode: code,
+        message: `Token permanently invalid: ${code}`,
+      };
+    }
+  }
+
+  // All other errors are potentially recoverable (network issues, rate limits, server errors)
+  return {
+    isRecoverable: true,
+    errorCode: 'transient',
+    message,
+  };
+}
+
+/**
+ * Result of a token refresh attempt with retry
+ */
+export interface RefreshResult {
+  success: boolean;
+  accessToken?: string;
+  expiresAt?: Date;
+  newRefreshToken?: string;
+  error?: TokenRefreshError;
+}
+
+/**
+ * Attempt to refresh an access token with retry logic for transient errors
+ *
+ * - Retries up to 3 times with exponential backoff for transient errors
+ * - Fails immediately for non-recoverable errors (invalid_grant, revoked, etc.)
+ */
+export async function refreshAccessTokenWithRetry(
+  refreshToken: string,
+  maxRetries: number = 3
+): Promise<RefreshResult> {
+  let lastError: TokenRefreshError | undefined;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const result = await refreshAccessToken(refreshToken);
+      return {
+        success: true,
+        accessToken: result.accessToken,
+        expiresAt: result.expiresAt,
+        newRefreshToken: result.newRefreshToken,
+      };
+    } catch (error) {
+      lastError = classifyTokenError(error);
+
+      // Don't retry non-recoverable errors
+      if (!lastError.isRecoverable) {
+        console.log(`[Token Refresh] Non-recoverable error: ${lastError.errorCode}`);
+        return {
+          success: false,
+          error: lastError,
+        };
+      }
+
+      // For recoverable errors, retry with exponential backoff
+      if (attempt < maxRetries - 1) {
+        const delay = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
+        console.log(`[Token Refresh] Transient error, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+        await sleep(delay);
+      }
+    }
+  }
+
+  // All retries exhausted for recoverable error
+  return {
+    success: false,
+    error: lastError || { isRecoverable: true, errorCode: 'unknown', message: 'Unknown error' },
   };
 }
 
