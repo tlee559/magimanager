@@ -22,8 +22,8 @@ export default function ToolsPage() {
             router.push("/admin/tools/campaign-planner");
           } else if (view === "video-clipper") {
             router.push("/admin/tools/video-clipper");
-          } else if (view === "ads-image-creator") {
-            router.push("/admin/tools/ads-image-creator");
+          } else if (view === "ai-image-generator") {
+            router.push("/admin/tools/ai-image-generator");
           }
         }}
       />

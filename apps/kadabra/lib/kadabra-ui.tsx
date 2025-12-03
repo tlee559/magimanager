@@ -49,7 +49,7 @@ import {
 import type { ChatWindow } from "./chat-types";
 import { CampaignPlannerView } from "./campaign-planner-view";
 import { VideoClipperView } from "./video-clipper-view";
-import { AdsImageCreatorView } from "./ads-image-creator-view";
+import { AIImageGenerator } from "./ai-image-generator";
 import { ABRA_URL, APP_VERSION, BUILD_SHA } from "./constants";
 import toast from "react-hot-toast";
 
@@ -1518,7 +1518,7 @@ function ToolsView({ onNavigate }: { onNavigate?: (view: View) => void }) {
 
           {/* Ads Image Creator AI */}
           <button
-            onClick={() => onNavigate?.("ads-image-creator")}
+            onClick={() => onNavigate?.("ai-image-generator")}
             className="bg-slate-800/50 rounded-xl p-5 border border-orange-500/30 hover:border-orange-500/50 transition text-left group"
           >
             <div className="flex items-center gap-3 mb-3">
@@ -1841,7 +1841,7 @@ function RequestModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (j
 // MAIN KADABRA APP
 // ============================================================================
 
-type View = "dashboard" | "accounts" | "account-detail" | "automations" | "tools" | "campaign-planner" | "video-clipper" | "ads-image-creator" | "action-queue" | "requests" | "notifications";
+type View = "dashboard" | "accounts" | "account-detail" | "automations" | "tools" | "campaign-planner" | "video-clipper" | "ai-image-generator" | "action-queue" | "requests" | "notifications";
 
 // ============================================================================
 // SKELETON LOADERS
@@ -2372,18 +2372,18 @@ export function KadabraApp() {
                 setChatWindows([...chatWindows, newWindow]);
               }}
               onCreateAds={(campaignPlanId) => {
-                // Navigate to ads image creator with the campaign plan ID
-                setView("ads-image-creator");
-                // Store the campaignPlanId in sessionStorage for the AdsImageCreatorView to pick up
-                sessionStorage.setItem("adsImageCreator_campaignPlanId", campaignPlanId);
+                // Navigate to AI image generator with the campaign plan ID
+                setView("ai-image-generator");
+                // Store the campaignPlanId in sessionStorage for the AIImageGenerator to pick up
+                sessionStorage.setItem("aiImageGenerator_campaignPlanId", campaignPlanId);
               }}
             />
           )}
           {view === "video-clipper" && (
             <VideoClipperView onBack={() => setView("tools")} />
           )}
-          {view === "ads-image-creator" && (
-            <AdsImageCreatorView onBack={() => setView("tools")} />
+          {view === "ai-image-generator" && (
+            <AIImageGenerator onBack={() => setView("tools")} />
           )}
           {view === "action-queue" && <ActionQueueView />}
           {view === "requests" && (
