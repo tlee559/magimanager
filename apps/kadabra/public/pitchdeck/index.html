@@ -1,0 +1,1869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MagiManager - AI-Powered Google Ads Management</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #0f172a;
+            --bg-card: #1e293b;
+            --bg-card-hover: #334155;
+            --border-color: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-violet: #8b5cf6;
+            --accent-indigo: #6366f1;
+            --accent-emerald: #10b981;
+            --accent-teal: #14b8a6;
+            --accent-amber: #f59e0b;
+            --accent-red: #ef4444;
+            --gradient-primary: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+            --gradient-cta: linear-gradient(135deg, #10b981 0%, #14b8a6 100%);
+            --gradient-gold: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            scroll-snap-type: y mandatory;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 700;
+            font-size: 1.25rem;
+        }
+
+        .nav-logo svg {
+            width: 36px;
+            height: 36px;
+        }
+
+        .nav-dots {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .nav-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--border-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .nav-dot.active {
+            background: var(--accent-violet);
+            transform: scale(1.2);
+        }
+
+        .nav-dot:hover {
+            background: var(--accent-violet);
+        }
+
+        /* Slide Container */
+        .slide {
+            min-height: 100vh;
+            scroll-snap-align: start;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 6rem 2rem 4rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .slide-content {
+            max-width: 1200px;
+            width: 100%;
+            z-index: 1;
+        }
+
+        /* Backgrounds */
+        .slide::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(ellipse at 50% 0%, rgba(139, 92, 246, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+        }
+
+        /* Typography */
+        h1 {
+            font-size: clamp(2.5rem, 6vw, 4.5rem);
+            font-weight: 800;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        h2 {
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+        }
+
+        h3 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: var(--text-primary);
+        }
+
+        .subtitle {
+            font-size: clamp(1.25rem, 2vw, 1.5rem);
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+        }
+
+        .tagline {
+            font-size: 1.125rem;
+            color: var(--accent-emerald);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 1rem;
+        }
+
+        /* Logo */
+        .logo-large {
+            width: 120px;
+            height: 120px;
+            margin-bottom: 2rem;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: var(--accent-violet);
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(139, 92, 246, 0.1);
+        }
+
+        /* Grids */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .grid-4 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        /* Problem Slide */
+        .problem-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1rem;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 12px;
+            margin-bottom: 1rem;
+        }
+
+        .problem-icon {
+            width: 24px;
+            height: 24px;
+            color: var(--accent-red);
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .problem-text {
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+
+        /* Solution Slide */
+        .solution-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1rem;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            border-radius: 12px;
+            margin-bottom: 1rem;
+        }
+
+        .solution-icon {
+            width: 24px;
+            height: 24px;
+            color: var(--accent-emerald);
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        /* Pipeline Diagram */
+        .pipeline-container {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 3rem;
+            margin-top: 2rem;
+            overflow: hidden;
+        }
+
+        .pipeline-stages {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            position: relative;
+        }
+
+        .pipeline-stage {
+            flex: 1;
+            text-align: center;
+            position: relative;
+        }
+
+        .stage-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 1rem;
+            background: var(--gradient-primary);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            animation: pulse-glow 3s ease-in-out infinite;
+        }
+
+        .stage-icon svg {
+            width: 40px;
+            height: 40px;
+            color: white;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.3); }
+            50% { box-shadow: 0 0 40px rgba(139, 92, 246, 0.6); }
+        }
+
+        .stage-title {
+            font-weight: 700;
+            font-size: 1.125rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        .stage-features {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .pipeline-arrow {
+            position: absolute;
+            top: 40px;
+            right: -30px;
+            width: 60px;
+            color: var(--accent-violet);
+            z-index: 10;
+        }
+
+        .pipeline-labels {
+            display: flex;
+            margin-top: 2rem;
+            gap: 1rem;
+        }
+
+        .pipeline-label {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .label-abra {
+            background: rgba(139, 92, 246, 0.2);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            color: var(--accent-violet);
+        }
+
+        .label-kadabra {
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: var(--accent-emerald);
+        }
+
+        /* AI Features */
+        .ai-card {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            border-radius: 16px;
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .ai-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--gradient-primary);
+        }
+
+        .ai-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--gradient-primary);
+            color: white;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            margin-bottom: 1rem;
+        }
+
+        .ai-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        .ai-description {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .ai-time-saved {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--accent-emerald);
+            font-weight: 600;
+        }
+
+        /* Stats */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .stat-card {
+            text-align: center;
+            padding: 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        /* Tables */
+        .table-container {
+            overflow-x: auto;
+            margin-top: 2rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--bg-card);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        th {
+            background: var(--bg-secondary);
+            padding: 1rem 1.5rem;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        td {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.9rem;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover {
+            background: rgba(139, 92, 246, 0.05);
+        }
+
+        /* Pricing */
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .pricing-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 2rem;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .pricing-card.featured {
+            border-color: var(--accent-violet);
+            transform: scale(1.02);
+        }
+
+        .pricing-card.featured::before {
+            content: 'Most Popular';
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--gradient-primary);
+            color: white;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.25rem 1rem;
+            border-radius: 20px;
+        }
+
+        .pricing-tier {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .pricing-price {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin-bottom: 0.25rem;
+        }
+
+        .pricing-period {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-bottom: 1.5rem;
+        }
+
+        .pricing-features {
+            list-style: none;
+        }
+
+        .pricing-features li {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 0;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .pricing-features li svg {
+            color: var(--accent-emerald);
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+        }
+
+        /* Roadmap */
+        .roadmap-phase {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+            position: relative;
+        }
+
+        .phase-badge {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            margin-bottom: 1rem;
+        }
+
+        .phase-1 .phase-badge { background: rgba(139, 92, 246, 0.2); color: var(--accent-violet); }
+        .phase-2 .phase-badge { background: rgba(16, 185, 129, 0.2); color: var(--accent-emerald); }
+        .phase-3 .phase-badge { background: rgba(245, 158, 11, 0.2); color: var(--accent-amber); }
+        .phase-4 .phase-badge { background: rgba(99, 102, 241, 0.2); color: var(--accent-indigo); }
+
+        .roadmap-items {
+            list-style: none;
+        }
+
+        .roadmap-items li {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.4rem 0;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .roadmap-items li svg {
+            color: var(--text-muted);
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+
+        /* Final Slide */
+        .final-points {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-top: 2rem;
+            justify-content: center;
+        }
+
+        .final-point {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 1rem 1.5rem;
+            border-radius: 12px;
+            font-size: 0.9rem;
+        }
+
+        .final-point svg {
+            color: var(--accent-emerald);
+            width: 20px;
+            height: 20px;
+        }
+
+        .cta-tagline {
+            font-size: clamp(1.5rem, 3vw, 2rem);
+            font-weight: 700;
+            text-align: center;
+            margin-top: 3rem;
+            padding: 2rem;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Valuation Table */
+        .valuation-table {
+            background: var(--bg-card);
+            border-radius: 16px;
+            overflow: hidden;
+            margin-top: 1.5rem;
+        }
+
+        .valuation-table td:last-child {
+            text-align: right;
+            font-weight: 600;
+        }
+
+        .valuation-total {
+            background: var(--bg-secondary);
+            font-weight: 700;
+        }
+
+        .valuation-total td {
+            font-size: 1.125rem;
+        }
+
+        /* Platform Features */
+        .platform-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            margin-top: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .platform-section {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .platform-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 2rem;
+        }
+
+        .platform-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .platform-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .platform-icon.abra {
+            background: var(--gradient-primary);
+        }
+
+        .platform-icon.kadabra {
+            background: var(--gradient-cta);
+        }
+
+        .platform-icon svg {
+            width: 24px;
+            height: 24px;
+            color: white;
+        }
+
+        .platform-name {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .platform-subtitle {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        .feature-list {
+            list-style: none;
+        }
+
+        .feature-list li {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.6rem 0;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+
+        .feature-list li svg {
+            color: var(--accent-emerald);
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+        }
+
+        /* Note callout */
+        .note-callout {
+            background: rgba(139, 92, 246, 0.1);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            border-radius: 12px;
+            padding: 1rem 1.5rem;
+            margin-top: 1.5rem;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        /* Powered by */
+        .powered-by {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2rem;
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: var(--bg-secondary);
+            border-radius: 16px;
+        }
+
+        .powered-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .powered-item img {
+            height: 24px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .slide {
+                padding: 5rem 1.5rem 3rem;
+            }
+
+            .pipeline-stages {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .pipeline-arrow {
+                display: none;
+            }
+
+            .pipeline-stage {
+                width: 100%;
+                max-width: 300px;
+            }
+
+            .pricing-card.featured {
+                transform: none;
+            }
+
+            nav {
+                padding: 0.75rem 1rem;
+            }
+
+            .nav-dots {
+                display: none;
+            }
+        }
+
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-in {
+            animation: fadeInUp 0.6s ease-out forwards;
+        }
+
+        /* Print styles */
+        @media print {
+            html {
+                scroll-snap-type: none;
+            }
+
+            .slide {
+                min-height: auto;
+                page-break-after: always;
+                padding: 2rem;
+            }
+
+            nav {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="nav-logo">
+            <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="40" height="40" rx="10" fill="url(#logo-gradient)"/>
+                <path d="M10 28V12h3.5l4.5 10 4.5-10H26v16h-3v-10l-4 9h-2l-4-9v10H10z" fill="white"/>
+                <defs>
+                    <linearGradient id="logo-gradient" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#8b5cf6"/>
+                        <stop offset="1" stop-color="#6366f1"/>
+                    </linearGradient>
+                </defs>
+            </svg>
+            MagiManager
+        </div>
+        <div class="nav-dots">
+            <div class="nav-dot active" data-slide="0"></div>
+            <div class="nav-dot" data-slide="1"></div>
+            <div class="nav-dot" data-slide="2"></div>
+            <div class="nav-dot" data-slide="3"></div>
+            <div class="nav-dot" data-slide="4"></div>
+            <div class="nav-dot" data-slide="5"></div>
+            <div class="nav-dot" data-slide="6"></div>
+            <div class="nav-dot" data-slide="7"></div>
+            <div class="nav-dot" data-slide="8"></div>
+            <div class="nav-dot" data-slide="9"></div>
+            <div class="nav-dot" data-slide="10"></div>
+            <div class="nav-dot" data-slide="11"></div>
+        </div>
+    </nav>
+
+    <!-- Slide 1: Hero -->
+    <section class="slide" id="slide-0">
+        <div class="slide-content" style="text-align: center;">
+            <svg class="logo-large" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="120" height="120" rx="28" fill="url(#logo-large-gradient)"/>
+                <path d="M30 84V36h10.5l13.5 30 13.5-30H78v48H69V54l-12 27h-6l-12-27v30H30z" fill="white"/>
+                <defs>
+                    <linearGradient id="logo-large-gradient" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#8b5cf6"/>
+                        <stop offset="1" stop-color="#6366f1"/>
+                    </linearGradient>
+                </defs>
+            </svg>
+            <p class="tagline">Made by Media Buyers, for Media Buyers</p>
+            <h1>MagiManager</h1>
+            <p class="subtitle">AI-Powered Google Ads Account Management at Scale</p>
+            <div style="margin-top: 3rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                <div class="ai-badge" style="font-size: 0.9rem; padding: 0.5rem 1.25rem;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                    </svg>
+                    Powered by AI
+                </div>
+                <div class="ai-badge" style="font-size: 0.9rem; padding: 0.5rem 1.25rem; background: var(--gradient-cta);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    Enterprise-Grade
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 2: Problem -->
+    <section class="slide" id="slide-1">
+        <div class="slide-content">
+            <p class="tagline" style="color: var(--accent-red);">10 Years of Agency Pain</p>
+            <h2>We've Lived Every Problem Media Buying Agencies Face</h2>
+            <p class="subtitle">After a decade managing 100s of accounts, we got tired of losing time and money</p>
+
+            <div class="grid-2">
+                <div>
+                    <div class="problem-item">
+                        <svg class="problem-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="8" x2="12" y2="12"/>
+                            <line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        <span class="problem-text"><strong>Accounts slip through the cracks</strong> — ads run unmonitored, spend bleeds, nobody notices until it's too late</span>
+                    </div>
+                    <div class="problem-item">
+                        <svg class="problem-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="8" x2="12" y2="12"/>
+                            <line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        <span class="problem-text"><strong>No single source of truth</strong> — account status lives in spreadsheets, Slack threads, and someone's memory</span>
+                    </div>
+                    <div class="problem-item">
+                        <svg class="problem-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="8" x2="12" y2="12"/>
+                            <line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        <span class="problem-text"><strong>Decommissioning is forgotten</strong> — old accounts keep charging, credentials get lost, clean-up becomes a project</span>
+                    </div>
+                </div>
+                <div>
+                    <div class="problem-item">
+                        <svg class="problem-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="8" x2="12" y2="12"/>
+                            <line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        <span class="problem-text"><strong>Creative bottleneck kills testing</strong> — you want to test 10 angles, but it takes a week to produce 3</span>
+                    </div>
+                    <div class="problem-item">
+                        <svg class="problem-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2v20M2 12h20"/>
+                            <circle cx="12" cy="12" r="10"/>
+                        </svg>
+                        <span class="problem-text"><strong>Scaling means more chaos</strong> — more accounts = more tabs, more logins, more chances for mistakes</span>
+                    </div>
+                    <div class="problem-item">
+                        <svg class="problem-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="8" x2="12" y2="12"/>
+                            <line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        <span class="problem-text"><strong>Time lost to repetitive tasks</strong> — the same manual work, every day, across every account</span>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: 2rem; padding: 1rem 1.5rem; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 12px; text-align: center;">
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin: 0;">
+                    <em>"We got tired of losing money to problems that should've been solved years ago. So we built MagiManager."</em>
+                </p>
+            </div>
+
+            <div style="margin-top: 1rem; padding: 0.75rem 1.25rem; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; text-align: center;">
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0;">
+                    <strong style="color: var(--accent-emerald);">As technology and AI advances, so should our workflow.</strong> This is our solution.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 3: Solution -->
+    <section class="slide" id="slide-2">
+        <div class="slide-content">
+            <p class="tagline">The Solution</p>
+            <h2>One Platform. Every Problem Solved.</h2>
+            <p class="subtitle">10 years of pain points addressed with purpose-built tools</p>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.5rem;">
+                <div class="solution-item" style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                    <svg class="solution-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <div>
+                        <strong style="color: var(--text-primary);">Accounts slip through?</strong>
+                        <p style="margin: 0.25rem 0 0; font-size: 0.85rem; color: var(--text-secondary);">Every account has a status, owner, and health score in one dashboard</p>
+                    </div>
+                </div>
+                <div class="solution-item" style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                    <svg class="solution-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <div>
+                        <strong style="color: var(--text-primary);">No source of truth?</strong>
+                        <p style="margin: 0.25rem 0 0; font-size: 0.85rem; color: var(--text-secondary);">Unified dashboard — all accounts, all team members, one place</p>
+                    </div>
+                </div>
+                <div class="solution-item" style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                    <svg class="solution-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <div>
+                        <strong style="color: var(--text-primary);">Decommissioning forgotten?</strong>
+                        <p style="margin: 0.25rem 0 0; font-size: 0.85rem; color: var(--text-secondary);">Status workflows track warmup → active → handoff → decommissioned</p>
+                    </div>
+                </div>
+                <div class="solution-item" style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                    <svg class="solution-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <div>
+                        <strong style="color: var(--text-primary);">Creative bottleneck?</strong>
+                        <p style="margin: 0.25rem 0 0; font-size: 0.85rem; color: var(--text-secondary);">AI generates campaign plans, images, and video clips in minutes</p>
+                    </div>
+                </div>
+                <div class="solution-item" style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                    <svg class="solution-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <div>
+                        <strong style="color: var(--text-primary);">Scaling = chaos?</strong>
+                        <p style="margin: 0.25rem 0 0; font-size: 0.85rem; color: var(--text-secondary);">Manage 100s of accounts without 100 browser tabs</p>
+                    </div>
+                </div>
+                <div class="solution-item" style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                    <svg class="solution-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <div>
+                        <strong style="color: var(--text-primary);">Repetitive tasks?</strong>
+                        <p style="margin: 0.25rem 0 0; font-size: 0.85rem; color: var(--text-secondary);">AI assistant and automation rules handle the grunt work</p>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: 1.5rem; padding: 1rem 1.5rem; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 12px; text-align: center;">
+                <p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0;">
+                    <strong style="color: var(--accent-violet);">Solid account tracking & organization platform</strong> — Now building AI-powered media buyer tools on top.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 4: Pipeline -->
+    <section class="slide" id="slide-3">
+        <div class="slide-content">
+            <p class="tagline">How It Works</p>
+            <h2>End-to-End Workflow Pipeline</h2>
+            <p class="subtitle">From user profile creation to campaign scaling — all in one platform</p>
+
+            <div class="pipeline-container">
+                <div class="pipeline-stages">
+                    <div class="pipeline-stage">
+                        <div class="stage-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                            </svg>
+                        </div>
+                        <div class="stage-title">Profile Factory</div>
+                        <div class="stage-features">
+                            Create user profiles<br>
+                            Store billing<br>
+                            Browser setup<br>
+                            Document management
+                        </div>
+                        <svg class="pipeline-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M5 12h14M12 5l7 7-7 7"/>
+                        </svg>
+                    </div>
+                    <div class="pipeline-stage">
+                        <div class="stage-icon" style="animation-delay: 0.5s;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="3" width="20" height="14" rx="2"/>
+                                <path d="M8 21h8M12 17v4"/>
+                            </svg>
+                        </div>
+                        <div class="stage-title">Account Setup</div>
+                        <div class="stage-features">
+                            Warmup tracking<br>
+                            Health monitoring<br>
+                            Handoff workflow<br>
+                            Team assignment
+                        </div>
+                        <svg class="pipeline-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M5 12h14M12 5l7 7-7 7"/>
+                        </svg>
+                    </div>
+                    <div class="pipeline-stage">
+                        <div class="stage-icon" style="animation-delay: 1s; background: var(--gradient-cta);">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 2L11 13"/>
+                                <path d="M22 2l-7 20-4-9-9-4 20-7z"/>
+                            </svg>
+                        </div>
+                        <div class="stage-title">AI Campaign Launch</div>
+                        <div class="stage-features">
+                            AI Campaign Planner<br>
+                            AI Image Creator<br>
+                            AI Video Clipper<br>
+                            One-click launch
+                        </div>
+                        <svg class="pipeline-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M5 12h14M12 5l7 7-7 7"/>
+                        </svg>
+                    </div>
+                    <div class="pipeline-stage">
+                        <div class="stage-icon" style="animation-delay: 1.5s; background: var(--gradient-cta);">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                            </svg>
+                        </div>
+                        <div class="stage-title">Monitor & Analyze</div>
+                        <div class="stage-features">
+                            Real-time monitoring<br>
+                            AI recommendations<br>
+                            Performance insights<br>
+                            Instant alerts
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pipeline-labels">
+                    <div class="pipeline-label label-abra" style="flex: 2;">ABRA — Account Management</div>
+                    <div class="pipeline-label label-kadabra" style="flex: 2;">KADABRA — AI Ads Console</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 5: AI Features -->
+    <section class="slide" id="slide-4">
+        <div class="slide-content">
+            <p class="tagline">AI-Native Platform</p>
+            <h2>AI Does the Heavy Lifting</h2>
+            <p class="subtitle">Powerful AI tools built for media buyers — 10x your productivity</p>
+
+            <div class="grid-3">
+                <div class="ai-card">
+                    <div class="ai-badge">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                        </svg>
+                        AI
+                    </div>
+                    <div class="ai-title">Campaign Planner</div>
+                    <div class="ai-description">Generates complete campaign blueprints with keywords, ad copy, and budgets in minutes</div>
+                    <div class="ai-time-saved">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                        Hours → Minutes
+                    </div>
+                </div>
+
+                <div class="ai-card">
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                        <div class="ai-badge" style="margin-bottom: 0;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                            </svg>
+                            AI
+                        </div>
+                        <div class="ai-badge" style="margin-bottom: 0; background: var(--gradient-gold);">
+                            In Development
+                        </div>
+                    </div>
+                    <div class="ai-title">Image Creator</div>
+                    <div class="ai-description">Creates high-converting ad creatives using Google Imagen 3 — no designer needed</div>
+                    <div class="ai-time-saved">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                        Days → Seconds
+                    </div>
+                </div>
+
+                <div class="ai-card">
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                        <div class="ai-badge" style="margin-bottom: 0;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                            </svg>
+                            AI
+                        </div>
+                        <div class="ai-badge" style="margin-bottom: 0; background: var(--gradient-gold);">
+                            In Development
+                        </div>
+                    </div>
+                    <div class="ai-title">Video Clipper</div>
+                    <div class="ai-description">Extracts viral-worthy clips from YouTube videos with marketing moment detection</div>
+                    <div class="ai-time-saved">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                        Hours → Minutes
+                    </div>
+                </div>
+
+                <div class="ai-card">
+                    <div class="ai-badge">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                        </svg>
+                        AI
+                    </div>
+                    <div class="ai-title">Chat Assistant</div>
+                    <div class="ai-description">Instant insights about any account using natural language — ask anything</div>
+                    <div class="ai-time-saved">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                        Always Available
+                    </div>
+                </div>
+
+                <div class="ai-card">
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                        <div class="ai-badge" style="margin-bottom: 0;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                            </svg>
+                            AI
+                        </div>
+                        <div class="ai-badge" style="margin-bottom: 0; background: var(--gradient-gold);">
+                            In Development
+                        </div>
+                    </div>
+                    <div class="ai-title">Ad Scoring</div>
+                    <div class="ai-description">Automatically grades every ad with Gold, Silver, Bronze, or Failing ratings</div>
+                    <div class="ai-time-saved">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                        Continuous
+                    </div>
+                </div>
+
+                <div class="ai-card">
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                        <div class="ai-badge" style="margin-bottom: 0;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                            </svg>
+                            AI
+                        </div>
+                        <div class="ai-badge" style="margin-bottom: 0; background: linear-gradient(135deg, #6366f1, #8b5cf6);">
+                            Coming Soon
+                        </div>
+                    </div>
+                    <div class="ai-title">Automation Rules</div>
+                    <div class="ai-description">Rule-based campaign optimization — UI ready, execution pending Google API approval</div>
+                    <div class="ai-time-saved">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                        Pending API Access
+                    </div>
+                </div>
+            </div>
+
+            <div class="powered-by">
+                <div class="powered-item">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2a4 4 0 0 1 4 4v2a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"/>
+                        <path d="M12 12v10M8 18h8"/>
+                    </svg>
+                    Powered by Google Gemini 2.0
+                </div>
+                <div class="powered-item">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                    Images by Google Imagen 3
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 6: Platform - ABRA & KADABRA -->
+    <section class="slide" id="slide-5">
+        <div class="slide-content">
+            <p class="tagline">Platform Overview</p>
+            <h2>Two Powerful Consoles, One Platform</h2>
+            <p class="subtitle">Account management and AI-powered ads operations working together</p>
+
+            <div class="platform-section">
+                <div class="platform-card">
+                    <div class="platform-header">
+                        <div class="platform-icon abra">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="platform-name">ABRA</div>
+                            <div class="platform-subtitle">Account Management Console</div>
+                        </div>
+                    </div>
+                    <ul class="feature-list">
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            User profile management (encrypted)
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            Ad account lifecycle tracking
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            Team management (5 role levels)
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            Account health monitoring
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            Warmup progress tracking
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            Handoff workflow automation
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            Real-time notifications
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="platform-card">
+                    <div class="platform-header">
+                        <div class="platform-icon kadabra">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="platform-name">KADABRA</div>
+                            <div class="platform-subtitle">AI-Powered Ads Console</div>
+                        </div>
+                    </div>
+                    <ul class="feature-list">
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            Campaign/ad group/keyword viewing
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            Google Ads API (read access)
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            Search terms analysis
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            AI Campaign Planner
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            AI Chat Assistant
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            Google recommendations feed
+                        </li>
+                    </ul>
+                    <div style="margin-top: 0.75rem; padding: 0.5rem 0.75rem; background: rgba(139, 92, 246, 0.1); border-radius: 6px; font-size: 0.75rem; color: var(--accent-violet);">
+                        Write access pending Google API approval
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 7: Development Status -->
+    <section class="slide" id="slide-6">
+        <div class="slide-content">
+            <p class="tagline">Current Status</p>
+            <h2>What's Already Built</h2>
+            <p class="subtitle">Production-ready platform with significant development investment</p>
+
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <div class="stat-value">136K+</div>
+                    <div class="stat-label">Lines of TypeScript</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">280</div>
+                    <div class="stat-label">API Endpoints</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">31</div>
+                    <div class="stat-label">Database Models</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">3</div>
+                    <div class="stat-label">Production Apps</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">6</div>
+                    <div class="stat-label">AI Features</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">7+</div>
+                    <div class="stat-label">Integrations</div>
+                </div>
+            </div>
+
+            <div style="margin-top: 2rem;">
+                <h3 style="margin-bottom: 1rem;">Key Integrations</h3>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
+                    <span style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.875rem;">Google Ads API v22</span>
+                    <span style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.875rem;">Google Gemini 2.0</span>
+                    <span style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.875rem;">Google Imagen 3</span>
+                    <span style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.875rem;">GoLogin</span>
+                    <span style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.875rem;">Pusher (Real-time)</span>
+                    <span style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.875rem;">Telegram Bot</span>
+                    <span style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.875rem;">NextAuth</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 8: Development Valuation -->
+    <section class="slide" id="slide-7">
+        <div class="slide-content">
+            <p class="tagline">Work Completed</p>
+            <h2>What Would This Cost to Build?</h2>
+            <p class="subtitle">Realistic estimate based on component complexity</p>
+
+            <div class="table-container">
+                <table class="valuation-table">
+                    <thead>
+                        <tr>
+                            <th>Component</th>
+                            <th>Hours</th>
+                            <th>@ $150/hr</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Infrastructure (auth, database, monorepo)</td>
+                            <td>100</td>
+                            <td>$15,000</td>
+                        </tr>
+                        <tr>
+                            <td>ABRA — Account management, CRUD, dashboards</td>
+                            <td>250</td>
+                            <td>$37,500</td>
+                        </tr>
+                        <tr>
+                            <td>KADABRA — Google Ads API integration</td>
+                            <td>300</td>
+                            <td>$45,000</td>
+                        </tr>
+                        <tr>
+                            <td>AI Campaign Planner (Gemini integration)</td>
+                            <td>80</td>
+                            <td>$12,000</td>
+                        </tr>
+                        <tr>
+                            <td>AI Chat Assistant (tool calling)</td>
+                            <td>100</td>
+                            <td>$15,000</td>
+                        </tr>
+                        <tr>
+                            <td>Team management & roles system</td>
+                            <td>120</td>
+                            <td>$18,000</td>
+                        </tr>
+                        <tr>
+                            <td>UI/UX components & styling</td>
+                            <td>200</td>
+                            <td>$30,000</td>
+                        </tr>
+                        <tr>
+                            <td>Integrations (GoLogin, Pusher, Telegram)</td>
+                            <td>100</td>
+                            <td>$15,000</td>
+                        </tr>
+                        <tr class="valuation-total">
+                            <td><strong>Total</strong></td>
+                            <td><strong>1,250 hrs</strong></td>
+                            <td style="background: var(--gradient-primary); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;"><strong>$187,500</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="note-callout">
+                Based on mid-market contractor rates ($150/hr). Agency cost would be 2-3x higher ($375K-$560K).
+            </div>
+
+            <div style="margin-top: 1.5rem; padding: 1rem 1.5rem; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px;">
+                <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <strong style="color: var(--accent-emerald);">MVP Complete — Built with AI assistance</strong>
+                </div>
+                <p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0;">
+                    We leveraged AI coding tools to dramatically accelerate development. What would take a traditional team months, we built in weeks.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 9: Pricing -->
+    <section class="slide" id="slide-8">
+        <div class="slide-content">
+            <p class="tagline">Business Model</p>
+            <h2>Pricing Tiers (Example)</h2>
+            <p class="subtitle">Flat monthly, invite-only access</p>
+
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <div class="pricing-tier">Starter</div>
+                    <div class="pricing-price">$297</div>
+                    <div class="pricing-period">per month</div>
+                    <ul class="pricing-features">
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            3 team seats
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            10 ad accounts
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            10 GoLogin profiles
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            Core platform features
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            Basic AI chat
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="pricing-card featured">
+                    <div class="pricing-tier">Pro</div>
+                    <div class="pricing-price">$597</div>
+                    <div class="pricing-period">per month</div>
+                    <ul class="pricing-features">
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            10 team seats
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            50 ad accounts
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            50 GoLogin profiles
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            Full AI suite
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            Automation rules
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            Real-time sync
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="pricing-card">
+                    <div class="pricing-tier">Enterprise</div>
+                    <div class="pricing-price">$997</div>
+                    <div class="pricing-period">per month</div>
+                    <ul class="pricing-features">
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            Unlimited seats
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            200 ad accounts
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            200 GoLogin profiles
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            Everything in Pro
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            Priority support
+                        </li>
+                        <li>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            API access
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="note-callout" style="text-align: center;">
+                Example pricing — final tiers TBD. Add-ons available: extra accounts, AI credits, white-label, API access.
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 10: Revenue Projections -->
+    <section class="slide" id="slide-9">
+        <div class="slide-content">
+            <p class="tagline">Financial Projections</p>
+            <h2>Revenue Projections</h2>
+            <p class="subtitle">Based on example pricing, invite-only model</p>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Year</th>
+                            <th>Customers</th>
+                            <th>Avg MRR/Customer</th>
+                            <th>ARR</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Year 1</strong></td>
+                            <td>100</td>
+                            <td>$507</td>
+                            <td style="color: var(--accent-emerald); font-weight: 700;">$608K</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Year 2</strong></td>
+                            <td>300</td>
+                            <td>$550</td>
+                            <td style="color: var(--accent-emerald); font-weight: 700;">$1.98M</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Year 3</strong></td>
+                            <td>600</td>
+                            <td>$600</td>
+                            <td style="color: var(--accent-emerald); font-weight: 700;">$4.32M</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="grid-3" style="margin-top: 2rem;">
+                <div class="card" style="text-align: center;">
+                    <div style="font-size: 2rem; font-weight: 800; color: var(--accent-violet);">80%</div>
+                    <div style="font-size: 0.875rem; color: var(--text-secondary);">Subscription Tiers</div>
+                </div>
+                <div class="card" style="text-align: center;">
+                    <div style="font-size: 2rem; font-weight: 800; color: var(--accent-emerald);">15%</div>
+                    <div style="font-size: 0.875rem; color: var(--text-secondary);">Add-ons & Overages</div>
+                </div>
+                <div class="card" style="text-align: center;">
+                    <div style="font-size: 2rem; font-weight: 800; color: var(--accent-amber);">5%</div>
+                    <div style="font-size: 0.875rem; color: var(--text-secondary);">Professional Services</div>
+                </div>
+            </div>
+
+            <div class="note-callout" style="text-align: center;">
+                Conservative projections based on example pricing. Actual results may vary based on final pricing decisions.
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 11: Development Roadmap -->
+    <section class="slide" id="slide-10">
+        <div class="slide-content">
+            <p class="tagline">Development Status</p>
+            <h2>Current State vs Roadmap</h2>
+            <p class="subtitle">What's working now, what's in development, and what's next</p>
+
+            <div class="grid-3" style="margin-bottom: 2rem;">
+                <!-- NOW - Complete -->
+                <div class="roadmap-phase" style="background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3);">
+                    <span class="phase-badge" style="background: var(--accent-emerald);">NOW — Complete</span>
+                    <h3 style="font-size: 1rem; color: var(--accent-emerald);">ABRA (Account Management)</h3>
+                    <ul class="roadmap-items" style="font-size: 0.8rem;">
+                        <li><svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>User profile management</li>
+                        <li><svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Account lifecycle tracking</li>
+                        <li><svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Team management (5 roles)</li>
+                        <li><svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Warmup & health monitoring</li>
+                        <li><svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>AI Campaign Planner</li>
+                        <li><svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>AI Chat Assistant</li>
+                    </ul>
+                </div>
+
+                <!-- IN DEVELOPMENT -->
+                <div class="roadmap-phase" style="background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.3);">
+                    <span class="phase-badge" style="background: var(--accent-amber);">In Development</span>
+                    <h3 style="font-size: 1rem; color: var(--accent-amber);">KADABRA AI Tools</h3>
+                    <ul class="roadmap-items" style="font-size: 0.8rem;">
+                        <li><svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>AI Image Creator (Imagen 3)</li>
+                        <li><svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>AI Video Clipper</li>
+                        <li><svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>AI Ad Scoring algorithm</li>
+                        <li><svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>Google Ads write access</li>
+                        <li><svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>Automation rule execution</li>
+                    </ul>
+                    <div style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(245, 158, 11, 0.15); border-radius: 6px; font-size: 0.7rem; color: var(--accent-amber);">
+                        Pending: Google Ads API approval
+                    </div>
+                </div>
+
+                <!-- FUTURE -->
+                <div class="roadmap-phase phase-3">
+                    <span class="phase-badge">Future Expansion</span>
+                    <h3 style="font-size: 1rem;">Multi-Platform & Mobile</h3>
+                    <ul class="roadmap-items" style="font-size: 0.8rem;">
+                        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>Meta Ads integration</li>
+                        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>TikTok Ads integration</li>
+                        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>Microsoft/LinkedIn Ads</li>
+                        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>iOS & Android app</li>
+                        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>AI bid optimization</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Support Development -->
+            <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; text-align: center;">
+                <h3 style="margin-bottom: 0.75rem; font-size: 1.1rem;">Support Continued Development</h3>
+                <p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0; max-width: 600px; margin-left: auto; margin-right: auto;">
+                    Your investment helps us complete the AI creative suite, obtain Google Ads write access, and build the full automation platform that media buyers need.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 12: Summary -->
+    <section class="slide" id="slide-11">
+        <div class="slide-content" style="text-align: center;">
+            <svg class="logo-large" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="120" height="120" rx="28" fill="url(#logo-final-gradient)"/>
+                <path d="M30 84V36h10.5l13.5 30 13.5-30H78v48H69V54l-12 27h-6l-12-27v30H30z" fill="white"/>
+                <defs>
+                    <linearGradient id="logo-final-gradient" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#8b5cf6"/>
+                        <stop offset="1" stop-color="#6366f1"/>
+                    </linearGradient>
+                </defs>
+            </svg>
+
+            <h2 style="margin-top: 1rem;">Account Management + AI Ads Automation</h2>
+            <p style="color: var(--text-secondary); margin-top: 0.5rem;">Building toward the complete AI-native ads platform</p>
+
+            <div class="final-points">
+                <div class="final-point">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    Account management complete
+                </div>
+                <div class="final-point">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    AI Campaign Planner ready
+                </div>
+                <div class="final-point">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    Built by media buyers
+                </div>
+                <div class="final-point">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    1,250+ hours of development
+                </div>
+                <div class="final-point">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>
+                    AI creative tools in development
+                </div>
+            </div>
+
+            <div class="cta-tagline">
+                "Manage the lifecycle. Accelerate creative production."
+            </div>
+
+            <div style="margin-top: 1.5rem; padding: 1rem; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 12px; max-width: 500px; margin-left: auto; margin-right: auto;">
+                <p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0;">
+                    <strong style="color: var(--accent-violet);">Support the project</strong> to continue development of the full AI platform
+                </p>
+            </div>
+
+            <div style="margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: center;">
+                <div class="ai-badge" style="font-size: 0.9rem; padding: 0.75rem 1.5rem;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                    </svg>
+                    AI-Powered
+                </div>
+                <div class="ai-badge" style="font-size: 0.9rem; padding: 0.75rem 1.5rem; background: var(--gradient-cta);">
+                    Support this Project
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        // Navigation dots
+        const slides = document.querySelectorAll('.slide');
+        const dots = document.querySelectorAll('.nav-dot');
+
+        // Update active dot on scroll
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const index = Array.from(slides).indexOf(entry.target);
+                    dots.forEach((dot, i) => {
+                        dot.classList.toggle('active', i === index);
+                    });
+                }
+            });
+        }, { threshold: 0.5 });
+
+        slides.forEach(slide => observer.observe(slide));
+
+        // Click on dots to navigate
+        dots.forEach(dot => {
+            dot.addEventListener('click', () => {
+                const slideIndex = dot.dataset.slide;
+                slides[slideIndex].scrollIntoView({ behavior: 'smooth' });
+            });
+        });
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            const currentIndex = Array.from(dots).findIndex(dot => dot.classList.contains('active'));
+
+            if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                const nextIndex = Math.min(currentIndex + 1, slides.length - 1);
+                slides[nextIndex].scrollIntoView({ behavior: 'smooth' });
+            } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+                e.preventDefault();
+                const prevIndex = Math.max(currentIndex - 1, 0);
+                slides[prevIndex].scrollIntoView({ behavior: 'smooth' });
+            }
+        });
+    </script>
+</body>
+</html>

@@ -25,6 +25,15 @@ const nextConfig: NextConfig = {
   ],
   // Set workspace root for proper file tracing
   outputFileTracingRoot: path.join(__dirname, "../../"),
+  // Rewrites for static pages
+  async rewrites() {
+    return [
+      {
+        source: "/pitchdeck",
+        destination: "/pitchdeck/index.html",
+      },
+    ];
+  },
   // Security headers
   async headers() {
     return [
