@@ -190,6 +190,138 @@ function escapeXml(text: string): string {
 }
 
 // ============================================================================
+// GRADIENT BACKGROUND GENERATOR
+// ============================================================================
+
+/**
+ * Professional gradient color palettes by marketing angle
+ */
+const GRADIENT_PALETTES = {
+  problem_solution: { primary: "#1a1a2e", secondary: "#16213e", accent: "#0f3460" },
+  social_proof: { primary: "#2d3436", secondary: "#636e72", accent: "#b2bec3" },
+  urgency_scarcity: { primary: "#c0392b", secondary: "#e74c3c", accent: "#ff6b6b" },
+  benefit_focused: { primary: "#00b894", secondary: "#00cec9", accent: "#81ecec" },
+  curiosity: { primary: "#6c5ce7", secondary: "#a29bfe", accent: "#dfe6e9" },
+  comparison: { primary: "#2d3436", secondary: "#0984e3", accent: "#74b9ff" },
+  authority: { primary: "#2c3e50", secondary: "#34495e", accent: "#95a5a6" },
+  default: { primary: "#1a1a2e", secondary: "#16213e", accent: "#0f3460" },
+} as const;
+
+export type MarketingAngleType = keyof typeof GRADIENT_PALETTES;
+
+interface GradientOptions {
+  width?: number;
+  height?: number;
+  primaryColor?: string;
+  secondaryColor?: string;
+  angle?: MarketingAngleType;
+  direction?: "diagonal" | "vertical" | "horizontal" | "radial";
+}
+
+/**
+ * Create a gradient background image using Sharp
+ * This replaces the need for external AI image generation APIs
+ */
+export async function createGradientBackground(options: GradientOptions = {}): Promise<Buffer> {
+  const {
+    width = 1080,
+    height = 1080,
+    primaryColor,
+    secondaryColor,
+    angle = "default",
+    direction = "diagonal",
+  } = options;
+
+  // Get colors from palette or use provided colors
+  const palette = GRADIENT_PALETTES[angle] || GRADIENT_PALETTES.default;
+  const color1 = primaryColor || palette.primary;
+  const color2 = secondaryColor || palette.secondary;
+  const color3 = palette.accent;
+
+  // Create SVG gradient based on direction
+  let gradientDef: string;
+  let gradientId = "bg-gradient";
+
+  switch (direction) {
+    case "vertical":
+      gradientDef = `
+        <linearGradient id="${gradientId}" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" style="stop-color:${color1}"/>
+          <stop offset="50%" style="stop-color:${color2}"/>
+          <stop offset="100%" style="stop-color:${color3}"/>
+        </linearGradient>`;
+      break;
+    case "horizontal":
+      gradientDef = `
+        <linearGradient id="${gradientId}" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" style="stop-color:${color1}"/>
+          <stop offset="50%" style="stop-color:${color2}"/>
+          <stop offset="100%" style="stop-color:${color3}"/>
+        </linearGradient>`;
+      break;
+    case "radial":
+      gradientDef = `
+        <radialGradient id="${gradientId}" cx="50%" cy="50%" r="70%">
+          <stop offset="0%" style="stop-color:${color2}"/>
+          <stop offset="100%" style="stop-color:${color1}"/>
+        </radialGradient>`;
+      break;
+    case "diagonal":
+    default:
+      gradientDef = `
+        <linearGradient id="${gradientId}" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:${color1}"/>
+          <stop offset="40%" style="stop-color:${color2}"/>
+          <stop offset="100%" style="stop-color:${color3}"/>
+        </linearGradient>`;
+      break;
+  }
+
+  // Add subtle pattern overlay for visual interest
+  const patternSvg = `
+    <pattern id="pattern" width="40" height="40" patternUnits="userSpaceOnUse">
+      <circle cx="20" cy="20" r="1" fill="rgba(255,255,255,0.03)"/>
+    </pattern>
+  `;
+
+  const svg = `
+    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        ${gradientDef}
+        ${patternSvg}
+      </defs>
+      <rect width="100%" height="100%" fill="url(#${gradientId})"/>
+      <rect width="100%" height="100%" fill="url(#pattern)"/>
+    </svg>
+  `;
+
+  // Convert SVG to PNG buffer using Sharp
+  const buffer = await sharp(Buffer.from(svg))
+    .png()
+    .toBuffer();
+
+  return buffer;
+}
+
+/**
+ * Get appropriate gradient direction based on marketing angle
+ */
+export function getGradientDirectionForAngle(angle: string): "diagonal" | "vertical" | "horizontal" | "radial" {
+  switch (angle) {
+    case "urgency_scarcity":
+      return "radial"; // Radial creates energy/urgency
+    case "problem_solution":
+    case "comparison":
+      return "horizontal"; // Horizontal suggests before/after
+    case "authority":
+    case "benefit_focused":
+      return "vertical"; // Vertical suggests stability/growth
+    default:
+      return "diagonal"; // Diagonal is dynamic and modern
+  }
+}
+
+// ============================================================================
 // MAIN COMPOSITOR FUNCTION
 // ============================================================================
 

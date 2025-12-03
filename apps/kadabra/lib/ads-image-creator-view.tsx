@@ -258,6 +258,30 @@ export function AdsImageCreatorView({ onBack }: AdsImageCreatorViewProps) {
     fetchProjects();
   };
 
+  // Handle retry - re-trigger generation for a failed project
+  const handleRetryProject = async (projectId: string) => {
+    try {
+      console.log("[AdsImageCreator] Retrying generation for project:", projectId);
+      const response = await fetch(`/api/ai/ads-image-creator/projects/${projectId}/generate`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to restart generation");
+      }
+
+      // Update local state and switch to processing view
+      const updated = await fetchProjectStatus(projectId);
+      if (updated) {
+        setSelectedProject(updated);
+        setView("processing");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to retry generation");
+    }
+  };
+
   // Render based on view
   if (view === "create") {
     return (
@@ -294,6 +318,7 @@ export function AdsImageCreatorView({ onBack }: AdsImageCreatorViewProps) {
           if (updated) setSelectedProject(updated);
         }}
         onDelete={() => handleDeleteProject(selectedProject.id)}
+        onRetry={() => handleRetryProject(selectedProject.id)}
       />
     );
   }
@@ -1122,11 +1147,13 @@ function ProjectDetailView({
   onBack,
   onRefresh,
   onDelete,
+  onRetry,
 }: {
   project: AdImageProject;
   onBack: () => void;
   onRefresh: () => void;
   onDelete: () => void;
+  onRetry: () => void;
 }) {
   const [selectedImage, setSelectedImage] = useState<AdImage | null>(null);
   const [isPolling, setIsPolling] = useState(false);
@@ -1227,11 +1254,23 @@ function ProjectDetailView({
         </div>
       </div>
 
-      {/* Error display */}
+      {/* Error display with retry button */}
       {project.processingError && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-red-400" />
-          <p className="text-sm text-red-400">{project.processingError}</p>
+        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-red-400 font-medium">Generation Failed</p>
+              <p className="text-sm text-red-400/80 mt-1">{project.processingError}</p>
+            </div>
+            <button
+              onClick={onRetry}
+              className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Retry
+            </button>
+          </div>
         </div>
       )}
 

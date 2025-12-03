@@ -8,6 +8,11 @@
  */
 
 import { put } from "@vercel/blob";
+import {
+  createGradientBackground,
+  getGradientDirectionForAngle,
+  type MarketingAngleType,
+} from "./ads-image-compositor";
 
 // =============================================================================
 // GEMINI MODEL CONFIGURATION
@@ -328,106 +333,58 @@ function generateFallbackSpecs(input: GenerateCreativesInput): Array<{
 }
 
 /**
- * Generate image using Gemini Imagen 3
- * Uses the same GOOGLE_API_KEY as the text generation
+ * Generate background image using gradient generator
+ * This is a reliable fallback that doesn't depend on external AI APIs
  *
- * IMPORTANT: Imagen API requires x-goog-api-key header (not query param)
- * Docs: https://ai.google.dev/gemini-api/docs/imagen
+ * The gradient is styled based on the marketing angle to create
+ * appropriate visual context for the ad creative.
  */
-async function generateImage(prompt: string, userId: string, imageId: string): Promise<string> {
-  const apiKey = process.env.GOOGLE_API_KEY;
+async function generateImage(
+  prompt: string,
+  userId: string,
+  imageId: string,
+  angle: string = "default",
+  colorScheme?: { primary?: string; secondary?: string }
+): Promise<string> {
   const startTime = Date.now();
 
-  console.log("[Imagen] ========== GENERATE IMAGE START ==========");
-  console.log("[Imagen] API Key present:", !!apiKey);
-  console.log("[Imagen] Prompt length:", prompt.length);
-  console.log("[Imagen] Prompt preview:", prompt.substring(0, 150));
-
-  if (!apiKey) {
-    console.log("[Imagen] ERROR: No GOOGLE_API_KEY, returning placeholder");
-    return "https://placehold.co/1080x1080/1a1a2e/ffffff?text=No+API+Key";
-  }
-
-  // Use Imagen 3 for image generation
-  // Endpoint: POST https://generativelanguage.googleapis.com/v1beta/models/{model}:predict
-  const imagenApiUrl = "https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict";
-
-  console.log("[Imagen] Calling API:", imagenApiUrl);
-  console.log("[Imagen] Request body:", JSON.stringify({
-    instances: [{ prompt: prompt.substring(0, 50) + "..." }],
-    parameters: { sampleCount: 1 }
-  }));
+  console.log("[Image Generator] ========== GENERATE IMAGE START ==========");
+  console.log("[Image Generator] Marketing angle:", angle);
+  console.log("[Image Generator] Color scheme:", colorScheme);
 
   try {
-    const response = await fetch(imagenApiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,  // IMPORTANT: Use header, not query param
-      },
-      body: JSON.stringify({
-        instances: [
-          {
-            prompt: prompt,
-          },
-        ],
-        parameters: {
-          sampleCount: 1,
-        },
-      }),
+    // Determine gradient direction based on marketing angle
+    const direction = getGradientDirectionForAngle(angle);
+
+    // Create gradient background using Sharp (no external API needed)
+    const imageBuffer = await createGradientBackground({
+      width: 1080,
+      height: 1080,
+      angle: angle as MarketingAngleType,
+      direction,
+      primaryColor: colorScheme?.primary,
+      secondaryColor: colorScheme?.secondary,
     });
 
-    const elapsed = Date.now() - startTime;
-    console.log(`[Imagen] API response status: ${response.status} (${elapsed}ms)`);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[Imagen] API error response:", errorText);
-      throw new Error(`Imagen API error ${response.status}: ${errorText.substring(0, 200)}`);
-    }
-
-    const data = await response.json();
-    console.log("[Imagen] Response keys:", Object.keys(data));
-
-    // Extract base64 image from response
-    const predictions = data.predictions;
-    if (!predictions || predictions.length === 0) {
-      console.error("[Imagen] No predictions in response. Full response:", JSON.stringify(data).substring(0, 500));
-      throw new Error("No image generated - empty predictions array");
-    }
-
-    console.log("[Imagen] Got", predictions.length, "prediction(s)");
-    console.log("[Imagen] Prediction keys:", Object.keys(predictions[0]));
-
-    const base64Image = predictions[0].bytesBase64Encoded;
-    if (!base64Image) {
-      console.error("[Imagen] No bytesBase64Encoded in prediction:", JSON.stringify(predictions[0]).substring(0, 300));
-      throw new Error("No image data in response - missing bytesBase64Encoded");
-    }
-
-    console.log("[Imagen] Base64 image length:", base64Image.length);
-
-    // Convert base64 to buffer
-    const imageBuffer = Buffer.from(base64Image, "base64");
-    console.log("[Imagen] Image buffer size:", imageBuffer.byteLength, "bytes");
+    console.log("[Image Generator] Generated gradient buffer size:", imageBuffer.byteLength, "bytes");
 
     // Upload to Vercel Blob for persistence
-    console.log("[Imagen] Uploading to Vercel Blob...");
+    console.log("[Image Generator] Uploading to Vercel Blob...");
     const blob = await put(
-      `ads-image-creator/${userId}/${imageId}/image.png`,
+      `ads-image-creator/${userId}/${imageId}/background.png`,
       imageBuffer,
       { access: "public", addRandomSuffix: true }
     );
 
     const totalElapsed = Date.now() - startTime;
-    console.log(`[Imagen] ========== SUCCESS (${totalElapsed}ms) ==========`);
-    console.log("[Imagen] Blob URL:", blob.url);
+    console.log(`[Image Generator] ========== SUCCESS (${totalElapsed}ms) ==========`);
+    console.log("[Image Generator] Blob URL:", blob.url);
     return blob.url;
 
   } catch (error) {
     const elapsed = Date.now() - startTime;
-    console.error(`[Imagen] ========== FAILED (${elapsed}ms) ==========`);
-    console.error("[Imagen] Error:", error);
+    console.error(`[Image Generator] ========== FAILED (${elapsed}ms) ==========`);
+    console.error("[Image Generator] Error:", error);
     throw error;
   }
 }
@@ -474,9 +431,9 @@ export async function generateAdCreatives(
     });
   });
 
-  // Step 2: Generate images for each spec using Gemini Imagen 3
+  // Step 2: Generate background images for each spec
   console.log("┌─────────────────────────────────────────────────────────────┐");
-  console.log("│ STEP 2: Generating images with Gemini Imagen 3             │");
+  console.log("│ STEP 2: Generating gradient backgrounds                    │");
   console.log("└─────────────────────────────────────────────────────────────┘");
   const step2Start = Date.now();
   const creatives: GeneratedCreative[] = [];
@@ -484,14 +441,19 @@ export async function generateAdCreatives(
   for (let i = 0; i < specs.length; i++) {
     const spec = specs[i];
     const imageStart = Date.now();
-    console.log(`[Main] Starting image ${i + 1}/${specs.length}...`);
+    console.log(`[Main] Starting image ${i + 1}/${specs.length} (angle: ${spec.angle})...`);
 
     try {
       const imageId = `${Date.now()}-${i}`;
       const imageUrl = await generateImage(
         spec.backgroundPrompt,
         "system", // Will be replaced with actual userId
-        imageId
+        imageId,
+        spec.angle, // Pass the marketing angle for gradient styling
+        input.colorScheme ? {
+          primary: input.colorScheme.primary,
+          secondary: input.colorScheme.secondary,
+        } : undefined
       );
 
       const imageElapsed = Date.now() - imageStart;
@@ -518,7 +480,7 @@ export async function generateAdCreatives(
   console.log("╔════════════════════════════════════════════════════════════╗");
   console.log(`║ GENERATE AD CREATIVES - COMPLETE                           ║`);
   console.log(`║ Step 1 (Gemini specs): ${step1Elapsed}ms                             `);
-  console.log(`║ Step 2 (Imagen images): ${step2Elapsed}ms                            `);
+  console.log(`║ Step 2 (Gradient images): ${step2Elapsed}ms                          `);
   console.log(`║ Total: ${totalElapsed}ms | Creatives: ${creatives.length}                      `);
   console.log("╚════════════════════════════════════════════════════════════╝");
   return creatives;

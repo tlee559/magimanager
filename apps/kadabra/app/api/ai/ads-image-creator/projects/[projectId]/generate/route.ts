@@ -41,11 +41,16 @@ export async function POST(
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    // Don't re-process if already completed
+    // Don't re-process if already completed (but allow retry of failed projects)
     if (project.status === "COMPLETED") {
       return NextResponse.json({
         error: "Project already completed. Create a new project to generate more images."
       }, { status: 400 });
+    }
+
+    // If retrying a failed project, clear the error
+    if (project.status === "FAILED") {
+      console.log("[Ads Image Creator] Retrying failed project:", projectId);
     }
 
     // Update status to generating
@@ -190,8 +195,8 @@ async function generateImagesAsync(
       let compositeUrl = creative.imageUrl; // Fallback to background if compositing fails
       let backgroundUrl = creative.imageUrl;
 
-      // Only composite if we have a real image URL (not placeholder)
-      if (creative.imageUrl && !creative.imageUrl.includes("placehold")) {
+      // Always composite - our gradient generator guarantees a real image URL
+      if (creative.imageUrl) {
         try {
           // Composite headline + CTA onto the background image
           console.log(`${LOG_PREFIX}   Running Sharp compositor...`);
@@ -223,7 +228,8 @@ async function generateImagesAsync(
           compositeUrl = creative.imageUrl;
         }
       } else {
-        console.log(`${LOG_PREFIX}   Skipping composite - placeholder or missing image`);
+        console.log(`${LOG_PREFIX}   WARNING: No background image URL - this should not happen`);
+        throw new Error(`Image generation failed for creative ${i + 1}: No background URL`);
       }
 
       // Create image record in database
