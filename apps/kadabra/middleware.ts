@@ -19,9 +19,10 @@ export async function middleware(request: NextRequest) {
   const isHomePage = request.nextUrl.pathname === "/";
   const isAuthErrorPage = request.nextUrl.pathname === "/auth-error";
   const isLogoutPage = request.nextUrl.pathname === "/logout";
+  const isPitchDeck = request.nextUrl.pathname.startsWith("/pitchdeck");
 
-  // Always allow error and logout pages
-  if (isAuthErrorPage || isLogoutPage) {
+  // Always allow error, logout, and public pages
+  if (isAuthErrorPage || isLogoutPage || isPitchDeck) {
     return NextResponse.next();
   }
 
