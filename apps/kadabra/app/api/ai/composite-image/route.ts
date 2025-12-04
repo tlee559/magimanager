@@ -60,30 +60,42 @@ export async function POST(req: NextRequest) {
       productUrl: productUrl.substring(0, 100),
       position,
       scale,
-      overlayColor,
+      overlayColor: overlayColor || "none",
       overlayOpacity,
     });
 
-    // Fetch both images
-    const [backgroundResponse, productResponse] = await Promise.all([
-      fetch(backgroundUrl),
-      fetch(productUrl),
+    // Helper to get image buffer from URL or base64 data URL
+    async function getImageBuffer(urlOrDataUrl: string): Promise<Buffer> {
+      if (urlOrDataUrl.startsWith("data:")) {
+        // Handle base64 data URL
+        const base64Data = urlOrDataUrl.split(",")[1];
+        if (!base64Data) {
+          throw new Error("Invalid base64 data URL");
+        }
+        return Buffer.from(base64Data, "base64");
+      } else {
+        // Fetch from URL
+        const response = await fetch(urlOrDataUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image: ${response.status}`);
+        }
+        return Buffer.from(await response.arrayBuffer());
+      }
+    }
+
+    // Get both images (handles both URLs and base64 data URLs)
+    const [backgroundBuffer, productBuffer] = await Promise.all([
+      getImageBuffer(backgroundUrl).catch((err) => {
+        console.error("Failed to get background:", err.message);
+        throw new Error("Failed to load background image");
+      }),
+      getImageBuffer(productUrl).catch((err) => {
+        console.error("Failed to get product:", err.message);
+        throw new Error("Failed to load product image");
+      }),
     ]);
 
-    if (!backgroundResponse.ok) {
-      console.error("Failed to fetch background:", backgroundResponse.status);
-      throw new Error("Failed to fetch background image");
-    }
-
-    if (!productResponse.ok) {
-      console.error("Failed to fetch product:", productResponse.status);
-      throw new Error("Failed to fetch product image");
-    }
-
-    const backgroundBuffer = Buffer.from(await backgroundResponse.arrayBuffer());
-    const productBuffer = Buffer.from(await productResponse.arrayBuffer());
-
-    console.log("Fetched images:", {
+    console.log("Loaded images:", {
       backgroundSize: backgroundBuffer.length,
       productSize: productBuffer.length,
     });
