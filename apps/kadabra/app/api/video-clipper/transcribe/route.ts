@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
       input: {
         audio: videoUrl,
         task: 'transcribe',
-        language: 'en',
+        language: 'english',
         timestamp: 'chunk',
         batch_size: 64,
       },
