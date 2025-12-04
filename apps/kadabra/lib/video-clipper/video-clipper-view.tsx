@@ -25,7 +25,7 @@ import {
   MessageSquare,
   Maximize2,
 } from 'lucide-react';
-import { UploadedVideo, UploadStatus, Transcript, TranscribeStatus, ClipSuggestion, AnalyzeStatus, GeneratedClip, SavedJob, SaveJobStatus, CaptionState, FormatState, SavedFormatVariants } from './types';
+import { UploadedVideo, UploadStatus, Transcript, TranscribeStatus, ClipSuggestion, AnalyzeStatus, GeneratedClip, SavedJob, SaveJobStatus, ClipExports, ExportKey, ExportStatesMap } from './types';
 import {
   MAX_FILE_SIZE,
   ALLOWED_TYPES,
@@ -33,6 +33,7 @@ import {
   formatFileSize,
   formatDuration,
   PLATFORM_FORMATS,
+  EXPORT_CELLS,
   type PlatformFormat,
 } from './constants';
 
@@ -62,12 +63,10 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
   const [clipGenerating, setClipGenerating] = useState<Set<number>>(new Set());
   const [clipErrors, setClipErrors] = useState<Map<number, string>>(new Map());
 
-  // Phase 6: Caption state
-  const [captionStates, setCaptionStates] = useState<Map<number, CaptionState>>(new Map());
-
-  // Phase 7: Format variation state
-  // Map<clipIndex, Map<format, FormatState>>
-  const [formatStates, setFormatStates] = useState<Map<number, Map<PlatformFormat, FormatState>>>(new Map());
+  // Phase 7: Export grid state - tracks all 6 export variants per clip
+  // Map<clipIndex, { exports: ClipExports, states: ExportStatesMap }>
+  const [clipExports, setClipExports] = useState<Map<number, ClipExports>>(new Map());
+  const [exportStates, setExportStates] = useState<Map<number, ExportStatesMap>>(new Map());
 
   // Phase 5: Job state
   const [savedJobs, setSavedJobs] = useState<SavedJob[]>([]);
@@ -364,130 +363,156 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     }
   };
 
-  // Phase 6: Handle caption generation
-  const handleAddCaptions = async (index: number) => {
-    const clip = generatedClips.get(index);
-    const suggestion = suggestions[index];
+  // Phase 7: Generate an export variant (handles both resize and captions)
+  const handleGenerateExport = async (clipIndex: number, exportKey: ExportKey) => {
+    const clip = generatedClips.get(clipIndex);
+    const suggestion = suggestions[clipIndex];
     if (!clip || !suggestion) return;
 
-    console.log('[VideoClipper] Adding captions to clip:', { index, clipUrl: clip.url });
+    const exportConfig = EXPORT_CELLS[exportKey];
+    if (!exportConfig) return;
+
+    const { format, withCaptions } = exportConfig;
+
+    console.log('[VideoClipper] Generating export:', { clipIndex, exportKey, format, withCaptions });
 
     // Mark as generating
-    setCaptionStates(prev => {
+    setExportStates(prev => {
       const next = new Map(prev);
-      next.set(index, { status: 'generating' });
+      const states = next.get(clipIndex) || {};
+      next.set(clipIndex, { ...states, [exportKey]: { status: 'generating' } });
       return next;
     });
 
     try {
-      const response = await fetch('/api/video-clipper/caption', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clipUrl: clip.url,
-          transcript: suggestion.transcript,
-          startTime: suggestion.startTime,
-          endTime: suggestion.endTime,
-          style: {
-            fontSize: 'medium',
-            position: 'bottom',
-            fontColor: '#FFE135',
-          },
-        }),
-      });
+      // Step 1: Get the source video for this aspect ratio
+      // If we don't have this format yet (no captions version), we need to resize first
+      const existingExports = clipExports.get(clipIndex) || {};
+      const baseFormatKey = format as ExportKey; // e.g., 'vertical', 'square', 'horizontal'
+      let sourceVideoUrl = existingExports[baseFormatKey]?.url;
 
-      const data = await response.json();
+      // If we don't have the base format, resize from original clip
+      if (!sourceVideoUrl) {
+        console.log('[VideoClipper] Resizing to format:', format);
+        const resizeResponse = await fetch('/api/video-clipper/resize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clipUrl: clip.url,
+            targetFormat: format,
+          }),
+        });
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Caption generation failed');
+        const resizeData = await resizeResponse.json();
+        if (!resizeResponse.ok) {
+          throw new Error(resizeData.error || 'Resize failed');
+        }
+
+        sourceVideoUrl = resizeData.resizedUrl;
+
+        // If this is the non-captioned version, save it directly
+        if (!withCaptions) {
+          const exportData = { url: resizeData.resizedUrl, width: resizeData.width, height: resizeData.height };
+
+          // Update local state
+          setClipExports(prev => {
+            const next = new Map(prev);
+            const exports = next.get(clipIndex) || {};
+            next.set(clipIndex, { ...exports, [exportKey]: exportData });
+            return next;
+          });
+
+          setExportStates(prev => {
+            const next = new Map(prev);
+            const states = next.get(clipIndex) || {};
+            next.set(clipIndex, { ...states, [exportKey]: { status: 'success' } });
+            return next;
+          });
+
+          // Auto-save to database if job is saved
+          if (currentJobId) {
+            await autoSaveExport(clipIndex, exportKey, exportData);
+          }
+
+          console.log('[VideoClipper] Export complete (resize only):', exportKey);
+          return;
+        }
       }
 
-      console.log('[VideoClipper] Captions added:', data.captionedClipUrl);
+      // Step 2: Add captions if needed
+      if (withCaptions) {
+        console.log('[VideoClipper] Adding captions to:', format);
+        const captionResponse = await fetch('/api/video-clipper/caption', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clipUrl: sourceVideoUrl,
+            transcript: suggestion.transcript,
+            startTime: suggestion.startTime,
+            endTime: suggestion.endTime,
+            style: {
+              fontSize: 'medium',
+              position: 'bottom',
+              fontColor: '#FFE135',
+            },
+          }),
+        });
 
-      // Store the captioned URL
-      setCaptionStates(prev => {
-        const next = new Map(prev);
-        next.set(index, {
-          status: 'success',
-          captionedUrl: data.captionedClipUrl,
+        const captionData = await captionResponse.json();
+        if (!captionResponse.ok) {
+          throw new Error(captionData.error || 'Caption generation failed');
+        }
+
+        const config = PLATFORM_FORMATS[format];
+        const exportData = { url: captionData.captionedClipUrl, width: config.width, height: config.height };
+
+        // Update local state
+        setClipExports(prev => {
+          const next = new Map(prev);
+          const exports = next.get(clipIndex) || {};
+          next.set(clipIndex, { ...exports, [exportKey]: exportData });
+          return next;
         });
-        return next;
-      });
+
+        setExportStates(prev => {
+          const next = new Map(prev);
+          const states = next.get(clipIndex) || {};
+          next.set(clipIndex, { ...states, [exportKey]: { status: 'success' } });
+          return next;
+        });
+
+        // Auto-save to database if job is saved
+        if (currentJobId) {
+          await autoSaveExport(clipIndex, exportKey, exportData);
+        }
+
+        console.log('[VideoClipper] Export complete (with captions):', exportKey);
+      }
     } catch (err) {
-      console.error('[VideoClipper] Caption error:', err);
-      setCaptionStates(prev => {
+      console.error('[VideoClipper] Export generation error:', err);
+      setExportStates(prev => {
         const next = new Map(prev);
-        next.set(index, {
-          status: 'error',
-          error: err instanceof Error ? err.message : 'Caption generation failed',
-        });
+        const states = next.get(clipIndex) || {};
+        next.set(clipIndex, { ...states, [exportKey]: { status: 'error', error: err instanceof Error ? err.message : 'Export failed' } });
         return next;
       });
     }
   };
 
-  // Phase 7: Handle format variation generation
-  const handleGenerateFormat = async (clipIndex: number, format: PlatformFormat) => {
-    const clip = generatedClips.get(clipIndex);
-    if (!clip) return;
-
-    console.log('[VideoClipper] Generating format variation:', { clipIndex, format });
-
-    // Mark as generating
-    setFormatStates(prev => {
-      const next = new Map(prev);
-      const clipFormats = next.get(clipIndex) || new Map<PlatformFormat, FormatState>();
-      clipFormats.set(format, { status: 'generating' });
-      next.set(clipIndex, clipFormats);
-      return next;
-    });
+  // Auto-save export to database when job is saved
+  const autoSaveExport = async (clipIndex: number, exportKey: ExportKey, exportData: { url: string; width: number; height: number }) => {
+    const savedClip = savedJobs.find(j => j.id === currentJobId)?.clips[clipIndex];
+    if (!savedClip) return;
 
     try {
-      const response = await fetch('/api/video-clipper/resize', {
-        method: 'POST',
+      await fetch(`/api/video-clipper/clips/${savedClip.id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clipUrl: clip.url,
-          targetFormat: format,
-        }),
+        body: JSON.stringify({ exportKey, exportData }),
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Format generation failed');
-      }
-
-      console.log('[VideoClipper] Format generated:', data);
-
-      // Store the generated format
-      setFormatStates(prev => {
-        const next = new Map(prev);
-        const clipFormats = next.get(clipIndex) || new Map<PlatformFormat, FormatState>();
-        clipFormats.set(format, {
-          status: 'success',
-          variant: {
-            format,
-            url: data.resizedUrl,
-            width: data.width,
-            height: data.height,
-          },
-        });
-        next.set(clipIndex, clipFormats);
-        return next;
-      });
+      console.log('[VideoClipper] Export auto-saved to database');
     } catch (err) {
-      console.error('[VideoClipper] Format generation error:', err);
-      setFormatStates(prev => {
-        const next = new Map(prev);
-        const clipFormats = next.get(clipIndex) || new Map<PlatformFormat, FormatState>();
-        clipFormats.set(format, {
-          status: 'error',
-          error: err instanceof Error ? err.message : 'Format generation failed',
-        });
-        next.set(clipIndex, clipFormats);
-        return next;
-      });
+      console.warn('[VideoClipper] Failed to auto-save export:', err);
     }
   };
 
@@ -500,25 +525,10 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     setSaveJobError(null);
 
     try {
-      // Convert generated clips map to array with suggestion data and format variants
+      // Convert generated clips map to array with suggestion data and export variants
       const clipsToSave = Array.from(generatedClips.entries()).map(([index, clip]) => {
         const suggestion = suggestions[index];
-        const captionState = captionStates.get(index);
-        const clipFormats = formatStates.get(index);
-
-        // Convert format variants to saveable format
-        const formatVariants: SavedFormatVariants = {};
-        if (clipFormats) {
-          clipFormats.forEach((state, format) => {
-            if (state.status === 'success' && state.variant) {
-              formatVariants[format] = {
-                url: state.variant.url,
-                width: state.variant.width,
-                height: state.variant.height,
-              };
-            }
-          });
-        }
+        const exports = clipExports.get(index) || {};
 
         return {
           url: clip.url,
@@ -528,8 +538,8 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
           type: suggestion?.type || 'unknown',
           reason: suggestion?.reason || '',
           transcript: suggestion?.transcript || '',
-          captionedUrl: captionState?.captionedUrl || null,
-          formatVariants: Object.keys(formatVariants).length > 0 ? formatVariants : null,
+          captionedUrl: null, // Legacy field - now using exports
+          formatVariants: Object.keys(exports).length > 0 ? exports : null,
         };
       });
 
@@ -610,8 +620,8 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     // Load clips as generated clips
     const clips = new Map<number, GeneratedClip>();
     const loadedSuggestions: ClipSuggestion[] = [];
-    const loadedCaptionStates = new Map<number, CaptionState>();
-    const loadedFormatStates = new Map<number, Map<PlatformFormat, FormatState>>();
+    const loadedExports = new Map<number, ClipExports>();
+    const loadedExportStates = new Map<number, ExportStatesMap>();
 
     job.clips.forEach((clip, index) => {
       clips.set(index, {
@@ -629,41 +639,33 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
         transcript: clip.transcript || '',
       });
 
-      // Load captioned URL if exists
-      if (clip.clipWithCaptionsUrl) {
-        loadedCaptionStates.set(index, {
-          status: 'success',
-          captionedUrl: clip.clipWithCaptionsUrl,
-        });
-      }
-
-      // Load format variants if exists
+      // Load export variants from platformRecommendations (now contains ClipExports structure)
       if (clip.platformRecommendations && typeof clip.platformRecommendations === 'object') {
-        const formatMap = new Map<PlatformFormat, FormatState>();
-        const variants = clip.platformRecommendations as SavedFormatVariants;
+        const exports = clip.platformRecommendations as ClipExports;
+        const states: ExportStatesMap = {};
 
-        Object.entries(variants).forEach(([format, variant]) => {
-          formatMap.set(format as PlatformFormat, {
-            status: 'success',
-            variant: {
-              format: format as PlatformFormat,
-              url: variant.url,
-              width: variant.width,
-              height: variant.height,
-            },
-          });
+        // Mark each saved export as success
+        Object.keys(exports).forEach((key) => {
+          const exportKey = key as ExportKey;
+          if (exports[exportKey]) {
+            states[exportKey] = { status: 'success' };
+          }
         });
 
-        if (formatMap.size > 0) {
-          loadedFormatStates.set(index, formatMap);
+        if (Object.keys(exports).length > 0) {
+          loadedExports.set(index, exports);
+          loadedExportStates.set(index, states);
         }
       }
+
+      // Handle legacy clipWithCaptionsUrl by mapping to the appropriate export
+      // (we can't know which aspect ratio it was, so we skip this for now)
     });
 
     setGeneratedClips(clips);
     setSuggestions(loadedSuggestions);
-    setCaptionStates(loadedCaptionStates);
-    setFormatStates(loadedFormatStates);
+    setClipExports(loadedExports);
+    setExportStates(loadedExportStates);
     setAnalyzeStatus('success');
     setTranscribeStatus('success');
 
@@ -717,10 +719,9 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     setGeneratedClips(new Map());
     setClipGenerating(new Set());
     setClipErrors(new Map());
-    // Reset caption state
-    setCaptionStates(new Map());
-    // Reset format state
-    setFormatStates(new Map());
+    // Reset export state
+    setClipExports(new Map());
+    setExportStates(new Map());
     // Reset job state
     setCurrentJobId(null);
     setSaveJobStatus('idle');
@@ -1173,7 +1174,6 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                       const isGenerating = clipGenerating.has(index);
                       const generatedClip = generatedClips.get(index);
                       const clipError = clipErrors.get(index);
-                      const captionState = captionStates.get(index);
 
                       return (
                         <div key={index} className="p-5">
@@ -1251,7 +1251,7 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                             </div>
                           )}
 
-                          {/* Generated Clip Player */}
+                          {/* Generated Clip Player with Original Video */}
                           {generatedClip && (
                             <div className="mt-4 bg-slate-900/50 rounded-lg overflow-hidden border border-slate-700/50">
                               <video
@@ -1262,142 +1262,167 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                               <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700/50">
                                 <span className="text-xs text-slate-500 flex items-center gap-1">
                                   <Clock className="w-3 h-3" />
-                                  {Math.round(generatedClip.duration)}s
+                                  {Math.round(generatedClip.duration)}s • Original
                                 </span>
-                                <div className="flex gap-2">
-                                  {/* Add Captions Button */}
-                                  {!captionState?.captionedUrl && captionState?.status !== 'generating' && (
-                                    <button
-                                      onClick={() => handleAddCaptions(index)}
-                                      className="px-3 py-1.5 text-sm text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded-lg transition flex items-center gap-1"
-                                    >
-                                      <Type className="w-3 h-3" />
-                                      Add Captions
-                                    </button>
-                                  )}
-                                  {captionState?.status === 'generating' && (
-                                    <button
-                                      disabled
-                                      className="px-3 py-1.5 text-sm text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center gap-1 cursor-not-allowed"
-                                    >
-                                      <Loader2 className="w-3 h-3 animate-spin" />
-                                      Adding...
-                                    </button>
-                                  )}
-                                  <a
-                                    href={generatedClip.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    download={`clip-${index + 1}-${suggestion.type}.mp4`}
-                                    className="px-3 py-1.5 text-sm text-violet-400 hover:text-violet-300 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 rounded-lg transition flex items-center gap-1"
-                                  >
-                                    <Download className="w-3 h-3" />
-                                    Download
-                                  </a>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Caption Error */}
-                          {captionState?.status === 'error' && (
-                            <div className="mt-3 bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-start gap-2">
-                              <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-                              <div>
-                                <p className="text-red-400 text-sm">{captionState.error}</p>
-                                <button
-                                  onClick={() => handleAddCaptions(index)}
-                                  className="text-red-400 hover:text-red-300 underline text-xs mt-1"
-                                >
-                                  Try again
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Captioned Clip Player */}
-                          {captionState?.captionedUrl && (
-                            <div className="mt-4 bg-gradient-to-br from-amber-500/10 to-amber-600/5 rounded-lg overflow-hidden border border-amber-500/20">
-                              <div className="px-4 py-2 border-b border-amber-500/20 flex items-center gap-2">
-                                <MessageSquare className="w-4 h-4 text-amber-400" />
-                                <span className="text-sm font-medium text-amber-400">With Captions</span>
-                              </div>
-                              <video
-                                src={captionState.captionedUrl}
-                                controls
-                                className="w-full max-h-[300px]"
-                              />
-                              <div className="flex items-center justify-end px-4 py-3 border-t border-amber-500/20">
                                 <a
-                                  href={captionState.captionedUrl}
+                                  href={generatedClip.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  download={`clip-${index + 1}-${suggestion.type}-captioned.mp4`}
-                                  className="px-3 py-1.5 text-sm text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded-lg transition flex items-center gap-1"
+                                  download={`clip-${index + 1}-${suggestion.type}-original.mp4`}
+                                  className="px-3 py-1.5 text-sm text-violet-400 hover:text-violet-300 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 rounded-lg transition flex items-center gap-1"
                                 >
                                   <Download className="w-3 h-3" />
-                                  Download Captioned
+                                  Download Original
                                 </a>
                               </div>
                             </div>
                           )}
 
-                          {/* Phase 7: Format Variations - Simplified */}
+                          {/* Phase 7: 3x2 Export Grid */}
                           {generatedClip && (
-                            <div className="mt-4 flex flex-wrap gap-2">
-                              {(Object.entries(PLATFORM_FORMATS) as [PlatformFormat, typeof PLATFORM_FORMATS[PlatformFormat]][]).map(([format, config]) => {
-                                const clipFormats = formatStates.get(index);
-                                const formatState = clipFormats?.get(format);
-                                const isGenerating = formatState?.status === 'generating';
-                                const isGenerated = formatState?.status === 'success';
-                                const hasError = formatState?.status === 'error';
+                            <div className="mt-4 bg-slate-900/30 rounded-lg border border-slate-700/50 p-4">
+                              <h4 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+                                <Maximize2 className="w-4 h-4 text-slate-400" />
+                                Export Formats
+                              </h4>
 
-                                if (isGenerated && formatState?.variant) {
-                                  return (
-                                    <a
-                                      key={format}
-                                      href={formatState.variant.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      download={`clip-${index + 1}-${suggestion.type}-${format}.mp4`}
-                                      className="px-3 py-1.5 text-sm text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-lg transition flex items-center gap-2"
-                                      title={`Download ${config.name} (${config.aspectRatio})`}
-                                    >
-                                      <Download className="w-3 h-3" />
-                                      {config.aspectRatio}
-                                    </a>
-                                  );
-                                }
+                              {/* Grid Header */}
+                              <div className="grid grid-cols-4 gap-2 mb-2">
+                                <div className="text-xs text-slate-500"></div>
+                                <div className="text-xs text-slate-400 text-center font-medium">9:16</div>
+                                <div className="text-xs text-slate-400 text-center font-medium">1:1</div>
+                                <div className="text-xs text-slate-400 text-center font-medium">16:9</div>
+                              </div>
 
-                                if (isGenerating) {
+                              {/* Row 1: Without Captions */}
+                              <div className="grid grid-cols-4 gap-2 mb-2">
+                                <div className="text-xs text-slate-500 flex items-center">No Captions</div>
+                                {(['vertical', 'square', 'horizontal'] as const).map((format) => {
+                                  const exportKey = format as ExportKey;
+                                  const exports = clipExports.get(index) || {};
+                                  const states = exportStates.get(index) || {};
+                                  const exportData = exports[exportKey];
+                                  const state = states[exportKey];
+                                  const isGenerating = state?.status === 'generating';
+                                  const isGenerated = !!exportData;
+                                  const hasError = state?.status === 'error';
+
+                                  if (isGenerated && exportData) {
+                                    return (
+                                      <a
+                                        key={format}
+                                        href={exportData.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        download={`clip-${index + 1}-${suggestion.type}-${format}.mp4`}
+                                        className="px-2 py-1.5 text-xs text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded transition flex items-center justify-center gap-1"
+                                      >
+                                        <Download className="w-3 h-3" />
+                                      </a>
+                                    );
+                                  }
+
+                                  if (isGenerating) {
+                                    return (
+                                      <button
+                                        key={format}
+                                        disabled
+                                        className="px-2 py-1.5 text-xs text-slate-400 bg-slate-700/50 border border-slate-600/50 rounded flex items-center justify-center"
+                                      >
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                      </button>
+                                    );
+                                  }
+
                                   return (
                                     <button
                                       key={format}
-                                      disabled
-                                      className="px-3 py-1.5 text-sm text-slate-400 bg-slate-700/50 border border-slate-600/50 rounded-lg flex items-center gap-2"
+                                      onClick={() => handleGenerateExport(index, exportKey)}
+                                      className={`px-2 py-1.5 text-xs rounded transition flex items-center justify-center ${
+                                        hasError
+                                          ? 'text-red-400 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20'
+                                          : 'text-slate-400 hover:text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-600/50'
+                                      }`}
                                     >
-                                      <Loader2 className="w-3 h-3 animate-spin" />
-                                      {config.aspectRatio}
+                                      <Plus className="w-3 h-3" />
                                     </button>
                                   );
-                                }
+                                })}
+                              </div>
 
-                                return (
-                                  <button
-                                    key={format}
-                                    onClick={() => handleGenerateFormat(index, format)}
-                                    className={`px-3 py-1.5 text-sm rounded-lg transition flex items-center gap-2 ${
-                                      hasError
-                                        ? 'text-red-400 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20'
-                                        : 'text-slate-300 hover:text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-600/50'
-                                    }`}
-                                    title={`Generate ${config.name} - ${config.description}`}
-                                  >
-                                    <Maximize2 className="w-3 h-3" />
-                                    {config.aspectRatio}
-                                  </button>
-                                );
-                              })}
+                              {/* Row 2: With Captions */}
+                              <div className="grid grid-cols-4 gap-2">
+                                <div className="text-xs text-amber-500/80 flex items-center gap-1">
+                                  <Type className="w-3 h-3" />
+                                  Captions
+                                </div>
+                                {(['vertical', 'square', 'horizontal'] as const).map((format) => {
+                                  const exportKey = `${format}Captioned` as ExportKey;
+                                  const exports = clipExports.get(index) || {};
+                                  const states = exportStates.get(index) || {};
+                                  const exportData = exports[exportKey];
+                                  const state = states[exportKey];
+                                  const isGenerating = state?.status === 'generating';
+                                  const isGenerated = !!exportData;
+                                  const hasError = state?.status === 'error';
+
+                                  if (isGenerated && exportData) {
+                                    return (
+                                      <a
+                                        key={format}
+                                        href={exportData.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        download={`clip-${index + 1}-${suggestion.type}-${format}-captioned.mp4`}
+                                        className="px-2 py-1.5 text-xs text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded transition flex items-center justify-center gap-1"
+                                      >
+                                        <Download className="w-3 h-3" />
+                                      </a>
+                                    );
+                                  }
+
+                                  if (isGenerating) {
+                                    return (
+                                      <button
+                                        key={format}
+                                        disabled
+                                        className="px-2 py-1.5 text-xs text-slate-400 bg-slate-700/50 border border-slate-600/50 rounded flex items-center justify-center"
+                                      >
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                      </button>
+                                    );
+                                  }
+
+                                  return (
+                                    <button
+                                      key={format}
+                                      onClick={() => handleGenerateExport(index, exportKey)}
+                                      className={`px-2 py-1.5 text-xs rounded transition flex items-center justify-center ${
+                                        hasError
+                                          ? 'text-red-400 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20'
+                                          : 'text-slate-400 hover:text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-600/50'
+                                      }`}
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Error display */}
+                              {(() => {
+                                const states = exportStates.get(index) || {};
+                                const errorEntry = Object.entries(states).find(([, s]) => s?.status === 'error');
+                                if (errorEntry && errorEntry[1]?.error) {
+                                  return (
+                                    <div className="mt-3 text-xs text-red-400 flex items-center gap-1">
+                                      <AlertCircle className="w-3 h-3" />
+                                      {errorEntry[1].error}
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
                             </div>
                           )}
                         </div>

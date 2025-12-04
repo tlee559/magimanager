@@ -62,8 +62,45 @@ export interface CaptionState {
   error?: string;
 }
 
-// Phase 7: Format Variation types
-export type FormatStatus = 'idle' | 'generating' | 'success' | 'error';
+// Phase 7: Export Variants - 3x2 Grid (3 aspect ratios × 2 caption options)
+export type ExportStatus = 'idle' | 'generating' | 'success' | 'error';
+
+// Each export variant can be with or without captions
+export interface ExportVariant {
+  url: string;
+  width: number;
+  height: number;
+}
+
+// The 6 possible exports per clip
+export interface ClipExports {
+  // Without captions
+  vertical?: ExportVariant;      // 9:16 no captions
+  square?: ExportVariant;        // 1:1 no captions
+  horizontal?: ExportVariant;    // 16:9 no captions
+  // With captions
+  verticalCaptioned?: ExportVariant;   // 9:16 with captions
+  squareCaptioned?: ExportVariant;     // 1:1 with captions
+  horizontalCaptioned?: ExportVariant; // 16:9 with captions
+}
+
+// Key for each cell in the 3x2 grid
+export type ExportKey =
+  | 'vertical' | 'square' | 'horizontal'
+  | 'verticalCaptioned' | 'squareCaptioned' | 'horizontalCaptioned';
+
+// Status tracking for each export in the grid
+export interface ExportState {
+  status: ExportStatus;
+  error?: string;
+}
+
+export type ExportStatesMap = {
+  [K in ExportKey]?: ExportState;
+};
+
+// Legacy types for backwards compatibility
+export type FormatStatus = ExportStatus;
 
 export interface FormatVariant {
   format: PlatformFormat;
@@ -78,7 +115,7 @@ export interface FormatState {
   error?: string;
 }
 
-// Saved format variants structure (for job persistence)
+// Saved format variants structure (for job persistence) - now includes captioned versions
 export interface SavedFormatVariants {
   [format: string]: {
     url: string;
@@ -94,11 +131,12 @@ export interface SavedClip {
   endTime: number;
   duration: number;
   momentType: string;
-  clipUrl: string | null;
-  clipWithCaptionsUrl?: string | null;
+  clipUrl: string | null;                           // Original clip (source aspect ratio)
+  clipWithCaptionsUrl?: string | null;              // Legacy: captioned in source aspect ratio
   whySelected: string | null;
   transcript: string | null;
-  platformRecommendations?: SavedFormatVariants | null;
+  exports?: ClipExports | null;                     // New: all 6 export variants
+  platformRecommendations?: SavedFormatVariants | null; // Legacy: keep for backwards compat
 }
 
 export interface SavedJob {

@@ -60,3 +60,25 @@ export function formatDuration(seconds: number): string {
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
+
+// Export Grid Configuration for 3x2 grid (3 aspect ratios × 2 caption options)
+export const EXPORT_GRID = {
+  formats: ['vertical', 'square', 'horizontal'] as PlatformFormat[],
+  captionOptions: [false, true] as const, // without, with
+};
+
+// Map export keys to display info
+export interface ExportCellConfig {
+  format: PlatformFormat;
+  withCaptions: boolean;
+  label: string;
+}
+
+export const EXPORT_CELLS: Record<string, ExportCellConfig> = {
+  vertical: { format: 'vertical', withCaptions: false, label: '9:16' },
+  square: { format: 'square', withCaptions: false, label: '1:1' },
+  horizontal: { format: 'horizontal', withCaptions: false, label: '16:9' },
+  verticalCaptioned: { format: 'vertical', withCaptions: true, label: '9:16 + Captions' },
+  squareCaptioned: { format: 'square', withCaptions: true, label: '1:1 + Captions' },
+  horizontalCaptioned: { format: 'horizontal', withCaptions: true, label: '16:9 + Captions' },
+};
