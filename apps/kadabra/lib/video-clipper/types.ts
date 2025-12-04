@@ -26,6 +26,32 @@ export interface Transcript {
 
 export type TranscribeStatus = 'idle' | 'transcribing' | 'success' | 'error';
 
+// Marketing context for AI analysis
+export interface MarketingContext {
+  product: string;           // What is being sold/promoted
+  audience: string;          // Target audience description
+  goal: string;              // Marketing goal (awareness, conversion, etc.)
+  tone: 'professional' | 'casual' | 'energetic' | 'emotional' | 'educational';
+}
+
+// Clip scoring - rates each moment on marketing effectiveness
+export interface ClipScores {
+  hookStrength: number;        // 1-10: How attention-grabbing is the opening
+  emotionalImpact: number;     // 1-10: Emotional resonance (fear, joy, curiosity, etc.)
+  conversionPotential: number; // 1-10: Likelihood to drive action
+  viralPotential: number;      // 1-10: Shareability factor
+  overallScore: number;        // 1-10: Weighted average
+}
+
+// Platform-specific recommendations per clip
+export interface PlatformRecommendation {
+  platform: string;
+  suggestedCaption: string;
+  hashtags: string[];
+  bestTimeToPost?: string;
+  whyThisPlatform: string;
+}
+
 // Phase 3: AI Analysis types
 export interface ClipSuggestion {
   startTime: number;
@@ -33,6 +59,11 @@ export interface ClipSuggestion {
   type: 'hook' | 'testimonial' | 'benefit' | 'cta' | 'problem' | 'solution' | 'viral';
   reason: string;
   transcript: string;
+  // New marketing-focused fields
+  scores?: ClipScores;
+  platformRecommendations?: PlatformRecommendation[];
+  psychologicalTrigger?: string;   // e.g., "FOMO", "Social Proof", "Scarcity"
+  suggestedCTA?: string;           // AI-generated call to action
 }
 
 export type AnalyzeStatus = 'idle' | 'analyzing' | 'success' | 'error';
@@ -43,6 +74,12 @@ export interface GeneratedClip {
   startTime: number;
   endTime: number;
   duration: number;
+}
+
+// Trim adjustment for fine-tuning clip boundaries
+export interface TrimAdjustment {
+  startOffset: number;  // Seconds to add/subtract from start (-5 to +5)
+  endOffset: number;    // Seconds to add/subtract from end (-5 to +5)
 }
 
 export type ClipStatus = 'idle' | 'generating' | 'success' | 'error';

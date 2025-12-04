@@ -10,12 +10,38 @@ interface TranscriptSegment {
   text: string;
 }
 
+interface MarketingContext {
+  product: string;
+  audience: string;
+  goal: string;
+  tone: 'professional' | 'casual' | 'energetic' | 'emotional' | 'educational';
+}
+
+interface ClipScores {
+  hookStrength: number;
+  emotionalImpact: number;
+  conversionPotential: number;
+  viralPotential: number;
+  overallScore: number;
+}
+
+interface PlatformRecommendation {
+  platform: string;
+  suggestedCaption: string;
+  hashtags: string[];
+  whyThisPlatform: string;
+}
+
 interface ClipSuggestion {
   startTime: number;
   endTime: number;
-  type: 'hook' | 'testimonial' | 'benefit' | 'cta' | 'problem' | 'solution';
+  type: 'hook' | 'testimonial' | 'benefit' | 'cta' | 'problem' | 'solution' | 'viral';
   reason: string;
   transcript: string;
+  scores: ClipScores;
+  platformRecommendations: PlatformRecommendation[];
+  psychologicalTrigger: string;
+  suggestedCTA: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -31,10 +57,11 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { segments, videoDuration, targetClipDuration = 30 } = body as {
+    const { segments, videoDuration, targetClipDuration = 30, marketingContext } = body as {
       segments: TranscriptSegment[];
       videoDuration: number;
       targetClipDuration?: number;
+      marketingContext?: MarketingContext;
     };
 
     if (!segments || segments.length === 0) {
@@ -49,6 +76,7 @@ export async function POST(req: NextRequest) {
     const maxDuration = Math.ceil(targetClipDuration * 1.3);
 
     console.log('[VideoClipper] Analyzing', segments.length, 'segments, target duration:', targetClipDuration, 'seconds');
+    console.log('[VideoClipper] Marketing context:', marketingContext);
 
     // Format transcript for AI
     const formattedTranscript = segments
@@ -58,7 +86,20 @@ export async function POST(req: NextRequest) {
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-    const prompt = `You are an expert video editor specializing in creating short-form ad content and viral social media clips. Analyze this video transcript and identify 3-5 compelling moments that would make great ad clips or viral content.
+    // Build marketing context section if provided
+    const marketingSection = marketingContext ? `
+MARKETING CONTEXT:
+- Product/Service: ${marketingContext.product || 'Not specified'}
+- Target Audience: ${marketingContext.audience || 'Not specified'}
+- Marketing Goal: ${marketingContext.goal || 'Not specified'}
+- Desired Tone: ${marketingContext.tone || 'Not specified'}
+
+Use this context to find moments that will resonate with the target audience and achieve the marketing goal.
+` : '';
+
+    const prompt = `You are an elite performance marketer and video content strategist who has generated billions in ad revenue. Your specialty is identifying psychological triggers and high-converting moments in video content.
+
+${marketingSection}
 
 CRITICAL DURATION REQUIREMENT:
 - Target clip duration: approximately ${targetClipDuration} seconds
@@ -70,17 +111,38 @@ VIDEO DURATION: ${Math.round(videoDuration)} seconds
 TRANSCRIPT:
 ${formattedTranscript}
 
-For each suggested clip, identify:
-1. The exact start and end timestamps (must be within the video duration, and clip must be ${minDuration}-${maxDuration} seconds)
-2. The type of moment:
-   - "hook" - Attention-grabbing opening statement
-   - "testimonial" - Customer story or endorsement
-   - "benefit" - Clear product/service benefit
-   - "cta" - Call to action or compelling close
-   - "problem" - Pain point identification
-   - "solution" - Problem resolution moment
-   - "viral" - Highly shareable moment with emotional impact, humor, surprise, controversy, or relatability that could go viral on social media
-3. Why this moment would work well as an ad clip or viral content
+ANALYSIS FRAMEWORK - For each moment, consider:
+
+1. PSYCHOLOGICAL TRIGGERS (identify which apply):
+   - FOMO: Fear of missing out
+   - Social Proof: Others doing/endorsing it
+   - Scarcity: Limited time/availability
+   - Authority: Expert/credibility statements
+   - Curiosity: Creates desire to know more
+   - Pain Point: Identifies a problem viewers have
+   - Transformation: Before/after or outcome
+   - Urgency: Creates need to act now
+   - Trust: Builds credibility
+
+2. HOOK STRENGTH: How quickly does it grab attention? (1-10)
+   - Great hooks: Controversy, bold claims, relatable problems, pattern interrupts
+
+3. EMOTIONAL IMPACT: What emotion does it evoke? (1-10)
+   - Fear, joy, curiosity, anger, surprise, nostalgia, desire
+
+4. CONVERSION POTENTIAL: How likely to drive action? (1-10)
+   - Clear benefit, solves real problem, has urgency
+
+5. VIRAL POTENTIAL: How shareable is it? (1-10)
+   - Relatable, surprising, emotional, controversial, educational
+
+For each suggested clip, provide:
+- Exact timestamps (${minDuration}-${maxDuration} seconds)
+- Type: "hook", "testimonial", "benefit", "cta", "problem", "solution", or "viral"
+- Scores for each criterion (1-10)
+- The primary psychological trigger at play
+- Platform-specific recommendations (TikTok, Instagram Reels, YouTube Shorts)
+- A suggested CTA for this clip
 
 Return ONLY valid JSON in this exact format (no markdown, no explanation):
 {
@@ -89,8 +151,31 @@ Return ONLY valid JSON in this exact format (no markdown, no explanation):
       "startTime": 0,
       "endTime": ${targetClipDuration},
       "type": "hook",
-      "reason": "Strong opening that grabs attention",
-      "transcript": "The exact text from this segment"
+      "reason": "This moment works because [specific marketing reason]",
+      "transcript": "The exact text from this segment",
+      "scores": {
+        "hookStrength": 8,
+        "emotionalImpact": 7,
+        "conversionPotential": 9,
+        "viralPotential": 6,
+        "overallScore": 8
+      },
+      "psychologicalTrigger": "Pain Point",
+      "suggestedCTA": "Link in bio for the free guide",
+      "platformRecommendations": [
+        {
+          "platform": "TikTok",
+          "suggestedCaption": "This changed everything...",
+          "hashtags": ["#fyp", "#marketing", "#business"],
+          "whyThisPlatform": "Fast-paced hook perfect for TikTok's attention economy"
+        },
+        {
+          "platform": "Instagram Reels",
+          "suggestedCaption": "Save this for later",
+          "hashtags": ["#reels", "#marketingtips"],
+          "whyThisPlatform": "Educational content performs well with saves"
+        }
+      ]
     }
   ]
 }`;

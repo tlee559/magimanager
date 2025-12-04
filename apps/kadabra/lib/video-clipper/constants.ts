@@ -1,6 +1,37 @@
 // Video Clipper Constants
 
 export const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1GB
+
+// Marketing Context Options
+export const MARKETING_GOALS = [
+  { value: 'awareness', label: 'Brand Awareness', description: 'Get more people to know about you' },
+  { value: 'engagement', label: 'Engagement', description: 'Drive likes, comments, and shares' },
+  { value: 'conversion', label: 'Conversion', description: 'Drive purchases or sign-ups' },
+  { value: 'traffic', label: 'Traffic', description: 'Drive clicks to website or landing page' },
+  { value: 'viral', label: 'Viral Reach', description: 'Maximize shareability and reach' },
+] as const;
+
+export const MARKETING_TONES = [
+  { value: 'professional', label: 'Professional', emoji: '💼' },
+  { value: 'casual', label: 'Casual', emoji: '😊' },
+  { value: 'energetic', label: 'Energetic', emoji: '⚡' },
+  { value: 'emotional', label: 'Emotional', emoji: '❤️' },
+  { value: 'educational', label: 'Educational', emoji: '📚' },
+] as const;
+
+// Psychological Triggers used in marketing
+export const PSYCHOLOGICAL_TRIGGERS = [
+  'FOMO',           // Fear of missing out
+  'Social Proof',   // Others are doing it
+  'Scarcity',       // Limited time/availability
+  'Authority',      // Expert endorsement
+  'Reciprocity',    // Give to get
+  'Curiosity',      // Need to know more
+  'Pain Point',     // Problem identification
+  'Transformation', // Before/after
+  'Trust',          // Credibility building
+  'Urgency',        // Act now
+] as const;
 export const MAX_DURATION = 30 * 60; // 30 minutes in seconds
 export const ALLOWED_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 export const ALLOWED_EXTENSIONS = ['.mp4', '.webm', '.mov'];

@@ -26,8 +26,18 @@ import {
   Type,
   MessageSquare,
   Maximize2,
+  Target,
+  Users,
+  Zap,
+  TrendingUp,
+  Star,
+  Hash,
+  Copy,
+  SkipBack,
+  SkipForward,
+  RefreshCw,
 } from 'lucide-react';
-import { UploadedVideo, UploadStatus, Transcript, TranscribeStatus, ClipSuggestion, AnalyzeStatus, GeneratedClip, SavedJob, SaveJobStatus, ClipExports, ExportKey, ExportStatesMap, ClipExportsWithProcessing, ExportProcessingState } from './types';
+import { UploadedVideo, UploadStatus, Transcript, TranscribeStatus, ClipSuggestion, AnalyzeStatus, GeneratedClip, SavedJob, SaveJobStatus, ClipExports, ExportKey, ExportStatesMap, ClipExportsWithProcessing, ExportProcessingState, MarketingContext, TrimAdjustment } from './types';
 import {
   MAX_FILE_SIZE,
   ALLOWED_TYPES,
@@ -36,6 +46,8 @@ import {
   formatDuration,
   PLATFORM_FORMATS,
   EXPORT_CELLS,
+  MARKETING_GOALS,
+  MARKETING_TONES,
   type PlatformFormat,
 } from './constants';
 
@@ -81,6 +93,21 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
   // UI state
   const [showTranscript, setShowTranscript] = useState(false);
   const [targetClipDuration, setTargetClipDuration] = useState<number>(30); // Default 30 seconds
+  const [showMarketingContext, setShowMarketingContext] = useState(false);
+
+  // Marketing context for AI analysis
+  const [marketingContext, setMarketingContext] = useState<MarketingContext>({
+    product: '',
+    audience: '',
+    goal: 'engagement',
+    tone: 'casual',
+  });
+
+  // Trim adjustments per clip: Map<clipIndex, TrimAdjustment>
+  const [trimAdjustments, setTrimAdjustments] = useState<Map<number, TrimAdjustment>>(new Map());
+
+  // Expanded suggestion details: Set<clipIndex>
+  const [expandedSuggestions, setExpandedSuggestions] = useState<Set<number>>(new Set());
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -388,10 +415,14 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     if (!transcript || !video) return;
 
     console.log('[VideoClipper] Starting AI analysis...');
+    console.log('[VideoClipper] Marketing context:', marketingContext);
     setAnalyzeStatus('analyzing');
     setAnalyzeError(null);
 
     try {
+      // Only include marketing context if at least one field is filled
+      const hasContext = marketingContext.product || marketingContext.audience;
+
       const response = await fetch('/api/video-clipper/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -399,6 +430,7 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
           segments: transcript.segments,
           videoDuration: video.duration || 0,
           targetClipDuration,
+          marketingContext: hasContext ? marketingContext : undefined,
         }),
       });
 
@@ -418,11 +450,16 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     }
   };
 
-  // Phase 4: Handle clip generation
-  const handleGenerateClip = async (index: number, suggestion: ClipSuggestion) => {
+  // Phase 4: Handle clip generation (with optional trim adjustment)
+  const handleGenerateClip = async (index: number, suggestion: ClipSuggestion, useTrimAdjustment = false) => {
     if (!video) return;
 
-    console.log('[VideoClipper] Generating clip:', { index, startTime: suggestion.startTime, endTime: suggestion.endTime });
+    // Apply trim adjustment if requested
+    const trimAdj = useTrimAdjustment ? trimAdjustments.get(index) : undefined;
+    const startTime = Math.max(0, suggestion.startTime + (trimAdj?.startOffset || 0));
+    const endTime = Math.min(video.duration || suggestion.endTime, suggestion.endTime + (trimAdj?.endOffset || 0));
+
+    console.log('[VideoClipper] Generating clip:', { index, startTime, endTime, trimAdj });
 
     // Mark as generating
     setClipGenerating(prev => new Set(prev).add(index));
@@ -438,8 +475,8 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           videoUrl: video.url,
-          startTime: suggestion.startTime,
-          endTime: suggestion.endTime,
+          startTime,
+          endTime,
         }),
       });
 
@@ -483,6 +520,61 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
         await handleGenerateClip(i, suggestions[i]);
       }
     }
+  };
+
+  // Batch export: Generate all 6 formats for a specific clip
+  const handleBatchExport = async (clipIndex: number) => {
+    const exportKeys: ExportKey[] = [
+      'vertical', 'square', 'horizontal',
+      'verticalCaptioned', 'squareCaptioned', 'horizontalCaptioned'
+    ];
+
+    for (const exportKey of exportKeys) {
+      const exports = clipExports.get(clipIndex) || {};
+      const states = exportStates.get(clipIndex) || {};
+
+      // Skip if already generated or generating
+      if (exports[exportKey] || states[exportKey]?.status === 'generating') {
+        continue;
+      }
+
+      // Generate this format
+      await handleGenerateExport(clipIndex, exportKey);
+    }
+  };
+
+  // Copy text to clipboard with feedback
+  const handleCopyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      // Could add a toast notification here
+      console.log('[VideoClipper] Copied to clipboard:', text.slice(0, 50));
+    } catch (err) {
+      console.error('[VideoClipper] Failed to copy:', err);
+    }
+  };
+
+  // Update trim adjustment for a clip
+  const handleTrimChange = (clipIndex: number, field: 'startOffset' | 'endOffset', value: number) => {
+    setTrimAdjustments(prev => {
+      const next = new Map(prev);
+      const current = next.get(clipIndex) || { startOffset: 0, endOffset: 0 };
+      next.set(clipIndex, { ...current, [field]: value });
+      return next;
+    });
+  };
+
+  // Toggle expanded state for a suggestion
+  const toggleSuggestionExpanded = (index: number) => {
+    setExpandedSuggestions(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
   };
 
   // Phase 7: Generate an export variant (handles both resize and captions)
@@ -903,6 +995,10 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     setCurrentJobId(null);
     setSaveJobStatus('idle');
     setSaveJobError(null);
+    // Reset new marketing states
+    setTrimAdjustments(new Map());
+    setExpandedSuggestions(new Set());
+    setShowMarketingContext(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -1248,46 +1344,6 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                         ({transcript.segments.length} segments)
                       </span>
                     </button>
-
-                    {/* Duration Selector + Analyze Button */}
-                    {suggestions.length === 0 && (
-                      <div className="flex items-center gap-3">
-                        {/* Clip Duration Selector */}
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-500">Clip length:</span>
-                          <select
-                            value={targetClipDuration}
-                            onChange={(e) => setTargetClipDuration(Number(e.target.value))}
-                            disabled={analyzeStatus === 'analyzing'}
-                            className="px-2 py-1.5 text-sm bg-slate-700 border border-slate-600 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-                          >
-                            <option value={10}>~10 sec</option>
-                            <option value={15}>~15 sec</option>
-                            <option value={30}>~30 sec</option>
-                            <option value={60}>~60 sec</option>
-                            <option value={90}>~90 sec</option>
-                          </select>
-                        </div>
-
-                        {analyzeStatus !== 'analyzing' ? (
-                          <button
-                            onClick={handleAnalyze}
-                            className="px-4 py-2 text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition text-sm flex items-center gap-2"
-                          >
-                            <Sparkles className="w-4 h-4" />
-                            Find Ad Moments
-                          </button>
-                        ) : (
-                          <button
-                            disabled
-                            className="px-4 py-2 text-white bg-emerald-500/50 rounded-lg flex items-center gap-2 cursor-not-allowed text-sm"
-                          >
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            Analyzing...
-                          </button>
-                        )}
-                      </div>
-                    )}
                   </div>
 
                   {showTranscript && (
@@ -1313,6 +1369,146 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                       )}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Marketing Context + Analysis Controls */}
+              {transcript && suggestions.length === 0 && (
+                <div className="bg-gradient-to-br from-violet-500/10 to-emerald-500/5 rounded-xl border border-violet-500/20 p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-violet-500/20 rounded-lg">
+                        <Sparkles className="w-5 h-5 text-violet-400" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-slate-100">AI Moment Detection</h3>
+                        <p className="text-sm text-slate-500">Find high-converting ad moments in your video</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowMarketingContext(!showMarketingContext)}
+                      className="text-sm text-violet-400 hover:text-violet-300 flex items-center gap-1"
+                    >
+                      <Target className="w-4 h-4" />
+                      {showMarketingContext ? 'Hide' : 'Add'} Context
+                      {showMarketingContext ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                    </button>
+                  </div>
+
+                  {/* Marketing Context Form - Collapsible */}
+                  {showMarketingContext && (
+                    <div className="mb-5 bg-slate-900/50 rounded-lg border border-slate-700/50 p-4 space-y-4">
+                      <p className="text-xs text-slate-400 mb-3">
+                        Optional: Add context to help AI find the best moments for your specific needs
+                      </p>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Product/Service */}
+                        <div>
+                          <label className="flex items-center gap-2 text-sm text-slate-300 mb-1.5">
+                            <Zap className="w-3 h-3 text-amber-400" />
+                            Product/Service
+                          </label>
+                          <input
+                            type="text"
+                            value={marketingContext.product}
+                            onChange={(e) => setMarketingContext(prev => ({ ...prev, product: e.target.value }))}
+                            placeholder="e.g., SaaS tool, coaching program, physical product"
+                            className="w-full px-3 py-2 text-sm bg-slate-800 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                          />
+                        </div>
+
+                        {/* Target Audience */}
+                        <div>
+                          <label className="flex items-center gap-2 text-sm text-slate-300 mb-1.5">
+                            <Users className="w-3 h-3 text-blue-400" />
+                            Target Audience
+                          </label>
+                          <input
+                            type="text"
+                            value={marketingContext.audience}
+                            onChange={(e) => setMarketingContext(prev => ({ ...prev, audience: e.target.value }))}
+                            placeholder="e.g., small business owners, fitness enthusiasts"
+                            className="w-full px-3 py-2 text-sm bg-slate-800 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                          />
+                        </div>
+
+                        {/* Marketing Goal */}
+                        <div>
+                          <label className="flex items-center gap-2 text-sm text-slate-300 mb-1.5">
+                            <Target className="w-3 h-3 text-emerald-400" />
+                            Marketing Goal
+                          </label>
+                          <select
+                            value={marketingContext.goal}
+                            onChange={(e) => setMarketingContext(prev => ({ ...prev, goal: e.target.value }))}
+                            className="w-full px-3 py-2 text-sm bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                          >
+                            {MARKETING_GOALS.map(goal => (
+                              <option key={goal.value} value={goal.value}>{goal.label}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Tone */}
+                        <div>
+                          <label className="flex items-center gap-2 text-sm text-slate-300 mb-1.5">
+                            <MessageSquare className="w-3 h-3 text-pink-400" />
+                            Desired Tone
+                          </label>
+                          <select
+                            value={marketingContext.tone}
+                            onChange={(e) => setMarketingContext(prev => ({ ...prev, tone: e.target.value as MarketingContext['tone'] }))}
+                            className="w-full px-3 py-2 text-sm bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                          >
+                            {MARKETING_TONES.map(tone => (
+                              <option key={tone.value} value={tone.value}>{tone.emoji} {tone.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Analysis Controls */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      {/* Clip Duration Selector */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500">Clip length:</span>
+                        <select
+                          value={targetClipDuration}
+                          onChange={(e) => setTargetClipDuration(Number(e.target.value))}
+                          disabled={analyzeStatus === 'analyzing'}
+                          className="px-2 py-1.5 text-sm bg-slate-700 border border-slate-600 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                        >
+                          <option value={10}>~10 sec</option>
+                          <option value={15}>~15 sec</option>
+                          <option value={30}>~30 sec</option>
+                          <option value={60}>~60 sec</option>
+                          <option value={90}>~90 sec</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {analyzeStatus !== 'analyzing' ? (
+                      <button
+                        onClick={handleAnalyze}
+                        className="px-5 py-2.5 text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition flex items-center gap-2 font-medium"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        Find Ad Moments
+                      </button>
+                    ) : (
+                      <button
+                        disabled
+                        className="px-5 py-2.5 text-white bg-emerald-500/50 rounded-lg flex items-center gap-2 cursor-not-allowed"
+                      >
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Analyzing...
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -1402,13 +1598,26 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
 
                             {/* Generate Clip Button */}
                             {!generatedClip && !isGenerating && (
-                              <button
-                                onClick={() => handleGenerateClip(index, suggestion)}
-                                className="px-3 py-1.5 text-sm text-white bg-violet-600 hover:bg-violet-500 rounded-lg transition flex items-center gap-1"
-                              >
-                                <Scissors className="w-3 h-3" />
-                                Generate
-                              </button>
+                              <div className="flex items-center gap-2">
+                                {/* Show different button if trim is adjusted */}
+                                {(trimAdjustments.get(index)?.startOffset || trimAdjustments.get(index)?.endOffset) ? (
+                                  <button
+                                    onClick={() => handleGenerateClip(index, suggestion, true)}
+                                    className="px-3 py-1.5 text-sm text-white bg-amber-600 hover:bg-amber-500 rounded-lg transition flex items-center gap-1"
+                                  >
+                                    <Scissors className="w-3 h-3" />
+                                    Generate Adjusted
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handleGenerateClip(index, suggestion)}
+                                    className="px-3 py-1.5 text-sm text-white bg-violet-600 hover:bg-violet-500 rounded-lg transition flex items-center gap-1"
+                                  >
+                                    <Scissors className="w-3 h-3" />
+                                    Generate
+                                  </button>
+                                )}
+                              </div>
                             )}
 
                             {/* Generating State */}
@@ -1436,9 +1645,165 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                           </p>
 
                           {suggestion.transcript && (
-                            <p className="text-slate-500 text-xs italic border-l-2 border-slate-700 pl-3">
+                            <p className="text-slate-500 text-xs italic border-l-2 border-slate-700 pl-3 mb-3">
                               "{suggestion.transcript}"
                             </p>
+                          )}
+
+                          {/* Scores and Marketing Insights */}
+                          {suggestion.scores && (
+                            <div className="mb-3 flex flex-wrap items-center gap-2">
+                              {/* Overall Score */}
+                              <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                                <Star className="w-3 h-3 text-emerald-400" />
+                                <span className="text-xs font-bold text-emerald-400">
+                                  {suggestion.scores.overallScore}/10
+                                </span>
+                              </div>
+
+                              {/* Individual Scores */}
+                              <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-700/50 rounded text-xs text-slate-400">
+                                <Zap className="w-3 h-3 text-amber-400" />
+                                Hook: {suggestion.scores.hookStrength}
+                              </div>
+                              <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-700/50 rounded text-xs text-slate-400">
+                                <TrendingUp className="w-3 h-3 text-pink-400" />
+                                Emotion: {suggestion.scores.emotionalImpact}
+                              </div>
+                              <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-700/50 rounded text-xs text-slate-400">
+                                <Target className="w-3 h-3 text-blue-400" />
+                                Conversion: {suggestion.scores.conversionPotential}
+                              </div>
+                              <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-700/50 rounded text-xs text-slate-400">
+                                <TrendingUp className="w-3 h-3 text-violet-400" />
+                                Viral: {suggestion.scores.viralPotential}
+                              </div>
+
+                              {/* Psychological Trigger */}
+                              {suggestion.psychologicalTrigger && (
+                                <span className="px-2 py-1 bg-violet-500/20 border border-violet-500/30 rounded text-xs text-violet-300 font-medium">
+                                  {suggestion.psychologicalTrigger}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Suggested CTA */}
+                          {suggestion.suggestedCTA && (
+                            <div className="mb-3 flex items-center gap-2">
+                              <span className="text-xs text-slate-500">Suggested CTA:</span>
+                              <span className="text-xs text-amber-400 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">
+                                {suggestion.suggestedCTA}
+                              </span>
+                              <button
+                                onClick={() => handleCopyToClipboard(suggestion.suggestedCTA || '')}
+                                className="text-slate-500 hover:text-slate-300 transition"
+                                title="Copy to clipboard"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Platform Recommendations - Expandable */}
+                          {suggestion.platformRecommendations && suggestion.platformRecommendations.length > 0 && (
+                            <div className="mb-3">
+                              <button
+                                onClick={() => toggleSuggestionExpanded(index)}
+                                className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1 mb-2"
+                              >
+                                {expandedSuggestions.has(index) ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                Platform Recommendations ({suggestion.platformRecommendations.length})
+                              </button>
+
+                              {expandedSuggestions.has(index) && (
+                                <div className="space-y-2">
+                                  {suggestion.platformRecommendations.map((rec, recIdx) => (
+                                    <div key={recIdx} className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <span className="text-sm font-medium text-slate-200">{rec.platform}</span>
+                                        <button
+                                          onClick={() => handleCopyToClipboard(`${rec.suggestedCaption}\n\n${rec.hashtags.join(' ')}`)}
+                                          className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1"
+                                        >
+                                          <Copy className="w-3 h-3" />
+                                          Copy All
+                                        </button>
+                                      </div>
+                                      <p className="text-xs text-slate-300 mb-2">"{rec.suggestedCaption}"</p>
+                                      <div className="flex flex-wrap gap-1 mb-2">
+                                        {rec.hashtags.map((tag, tagIdx) => (
+                                          <span key={tagIdx} className="text-xs text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">
+                                            {tag}
+                                          </span>
+                                        ))}
+                                      </div>
+                                      <p className="text-xs text-slate-500">{rec.whyThisPlatform}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Trim Adjustment Controls - Before clip generation */}
+                          {!generatedClip && (
+                            <div className="mb-3 bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs text-slate-400 flex items-center gap-1">
+                                  <Scissors className="w-3 h-3" />
+                                  Adjust Clip Boundaries
+                                </span>
+                                {(trimAdjustments.get(index)?.startOffset !== 0 || trimAdjustments.get(index)?.endOffset !== 0) && (
+                                  <button
+                                    onClick={() => setTrimAdjustments(prev => {
+                                      const next = new Map(prev);
+                                      next.delete(index);
+                                      return next;
+                                    })}
+                                    className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1"
+                                  >
+                                    <RefreshCw className="w-3 h-3" />
+                                    Reset
+                                  </button>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                  <label className="text-xs text-slate-500 flex items-center gap-1">
+                                    <SkipBack className="w-3 h-3" />
+                                    Start:
+                                  </label>
+                                  <select
+                                    value={trimAdjustments.get(index)?.startOffset || 0}
+                                    onChange={(e) => handleTrimChange(index, 'startOffset', Number(e.target.value))}
+                                    className="px-2 py-1 text-xs bg-slate-700 border border-slate-600 rounded text-slate-200"
+                                  >
+                                    {[-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5].map(v => (
+                                      <option key={v} value={v}>{v > 0 ? `+${v}s` : v === 0 ? '0s' : `${v}s`}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <label className="text-xs text-slate-500 flex items-center gap-1">
+                                    <SkipForward className="w-3 h-3" />
+                                    End:
+                                  </label>
+                                  <select
+                                    value={trimAdjustments.get(index)?.endOffset || 0}
+                                    onChange={(e) => handleTrimChange(index, 'endOffset', Number(e.target.value))}
+                                    className="px-2 py-1 text-xs bg-slate-700 border border-slate-600 rounded text-slate-200"
+                                  >
+                                    {[-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5].map(v => (
+                                      <option key={v} value={v}>{v > 0 ? `+${v}s` : v === 0 ? '0s' : `${v}s`}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <span className="text-xs text-slate-600">
+                                  = {Math.round((suggestion.endTime + (trimAdjustments.get(index)?.endOffset || 0)) - (suggestion.startTime + (trimAdjustments.get(index)?.startOffset || 0)))}s
+                                </span>
+                              </div>
+                            </div>
                           )}
 
                           {/* Clip Error */}
@@ -1492,20 +1857,35 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                                   <Maximize2 className="w-4 h-4 text-slate-400" />
                                   Export Formats
                                 </h4>
-                                {/* Background processing indicator */}
-                                {currentJobId && (() => {
-                                  const states = exportStates.get(index) || {};
-                                  const hasProcessing = Object.values(states).some(s => s?.status === 'generating');
-                                  if (hasProcessing) {
+                                <div className="flex items-center gap-2">
+                                  {/* Batch Export Button */}
+                                  {(() => {
+                                    const exports = clipExports.get(index) || {};
+                                    const states = exportStates.get(index) || {};
+                                    const generatedCount = Object.keys(exports).length;
+                                    const processingCount = Object.values(states).filter(s => s?.status === 'generating').length;
+
+                                    if (generatedCount >= 6) return null; // All generated
+                                    if (processingCount > 0) {
+                                      return (
+                                        <span className="text-xs text-violet-400 bg-violet-500/10 px-2 py-1 rounded-full flex items-center gap-1">
+                                          <Loader2 className="w-3 h-3 animate-spin" />
+                                          {currentJobId ? 'Processing in background' : 'Processing...'}
+                                        </span>
+                                      );
+                                    }
+
                                     return (
-                                      <span className="text-xs text-violet-400 bg-violet-500/10 px-2 py-1 rounded-full flex items-center gap-1">
-                                        <Loader2 className="w-3 h-3 animate-spin" />
-                                        Processing in background — you can navigate away
-                                      </span>
+                                      <button
+                                        onClick={() => handleBatchExport(index)}
+                                        className="px-3 py-1.5 text-xs text-violet-400 hover:text-violet-300 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 rounded-lg transition flex items-center gap-1"
+                                      >
+                                        <Sparkles className="w-3 h-3" />
+                                        Generate All ({6 - generatedCount})
+                                      </button>
                                     );
-                                  }
-                                  return null;
-                                })()}
+                                  })()}
+                                </div>
                               </div>
 
                               {/* Grid Header */}
