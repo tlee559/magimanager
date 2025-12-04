@@ -26,8 +26,10 @@ export async function GET(req: NextRequest) {
             duration: true,
             momentType: true,
             clipUrl: true,
+            clipWithCaptionsUrl: true,
             whySelected: true,
             transcript: true,
+            platformRecommendations: true, // Contains format variants
           },
         },
       },
@@ -98,6 +100,8 @@ export async function POST(req: NextRequest) {
             type: string;
             reason: string;
             transcript: string;
+            captionedUrl?: string | null;
+            formatVariants?: Record<string, unknown> | null;
           }) => ({
             startTime: Math.round(clip.startTime),
             endTime: Math.round(clip.endTime),
@@ -110,6 +114,8 @@ export async function POST(req: NextRequest) {
             whySelected: clip.reason,
             transcript: clip.transcript,
             clipUrl: clip.url,
+            clipWithCaptionsUrl: clip.captionedUrl || null,
+            platformRecommendations: clip.formatVariants || null, // Store format variants as JSON
             status: 'COMPLETED',
           })),
         },

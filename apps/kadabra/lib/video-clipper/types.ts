@@ -1,5 +1,8 @@
 // Video Clipper Types
 
+// Import types needed for Phase 7
+import type { PlatformFormat } from './constants';
+
 export interface UploadedVideo {
   url: string;
   filename: string;
@@ -44,31 +47,6 @@ export interface GeneratedClip {
 
 export type ClipStatus = 'idle' | 'generating' | 'success' | 'error';
 
-// Phase 5: Job types
-export interface SavedClip {
-  id: string;
-  startTime: number;
-  endTime: number;
-  duration: number;
-  momentType: string;
-  clipUrl: string | null;
-  whySelected: string | null;
-  transcript: string | null;
-}
-
-export interface SavedJob {
-  id: string;
-  name: string;
-  sourceType: string;
-  uploadedVideoUrl: string | null;
-  videoDuration: number | null;
-  status: string;
-  createdAt: string;
-  clips: SavedClip[];
-}
-
-export type SaveJobStatus = 'idle' | 'saving' | 'success' | 'error';
-
 // Phase 6: Caption types
 export type CaptionStatus = 'idle' | 'generating' | 'success' | 'error';
 
@@ -83,3 +61,58 @@ export interface CaptionState {
   captionedUrl?: string;
   error?: string;
 }
+
+// Phase 7: Format Variation types
+export type FormatStatus = 'idle' | 'generating' | 'success' | 'error';
+export type CropMode = 'pad' | 'crop';
+
+export interface FormatVariant {
+  format: PlatformFormat;
+  url: string;
+  width: number;
+  height: number;
+  cropMode: CropMode;
+}
+
+export interface FormatState {
+  status: FormatStatus;
+  variant?: FormatVariant;
+  error?: string;
+}
+
+// Saved format variants structure (for job persistence)
+export interface SavedFormatVariants {
+  [format: string]: {
+    url: string;
+    width: number;
+    height: number;
+    cropMode: CropMode;
+  };
+}
+
+// Phase 5: Job types (after Phase 7 types since SavedClip references SavedFormatVariants)
+export interface SavedClip {
+  id: string;
+  startTime: number;
+  endTime: number;
+  duration: number;
+  momentType: string;
+  clipUrl: string | null;
+  clipWithCaptionsUrl?: string | null;
+  whySelected: string | null;
+  transcript: string | null;
+  platformRecommendations?: SavedFormatVariants | null;
+}
+
+export interface SavedJob {
+  id: string;
+  name: string;
+  sourceType: string;
+  uploadedVideoUrl: string | null;
+  videoDuration: number | null;
+  status: string;
+  createdAt: string;
+  clips: SavedClip[];
+}
+
+export type SaveJobStatus = 'idle' | 'saving' | 'success' | 'error';

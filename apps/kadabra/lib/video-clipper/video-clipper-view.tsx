@@ -22,15 +22,20 @@ import {
   Eye,
   Film,
   Type,
-  MessageSquare
+  MessageSquare,
+  Maximize2,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
-import { UploadedVideo, UploadStatus, Transcript, TranscribeStatus, ClipSuggestion, AnalyzeStatus, GeneratedClip, SavedJob, SaveJobStatus, CaptionState } from './types';
+import { UploadedVideo, UploadStatus, Transcript, TranscribeStatus, ClipSuggestion, AnalyzeStatus, GeneratedClip, SavedJob, SaveJobStatus, CaptionState, FormatState, CropMode, SavedFormatVariants } from './types';
 import {
   MAX_FILE_SIZE,
   ALLOWED_TYPES,
   ERRORS,
   formatFileSize,
   formatDuration,
+  PLATFORM_FORMATS,
+  type PlatformFormat,
 } from './constants';
 
 interface VideoClipperViewProps {
@@ -61,6 +66,11 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
 
   // Phase 6: Caption state
   const [captionStates, setCaptionStates] = useState<Map<number, CaptionState>>(new Map());
+
+  // Phase 7: Format variation state
+  // Map<clipIndex, Map<format, FormatState>>
+  const [formatStates, setFormatStates] = useState<Map<number, Map<PlatformFormat, FormatState>>>(new Map());
+  const [expandedFormats, setExpandedFormats] = useState<Set<number>>(new Set());
 
   // Phase 5: Job state
   const [savedJobs, setSavedJobs] = useState<SavedJob[]>([]);
@@ -419,6 +429,86 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     }
   };
 
+  // Phase 7: Toggle format panel expansion
+  const toggleFormatPanel = (index: number) => {
+    setExpandedFormats(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  };
+
+  // Phase 7: Handle format variation generation
+  const handleGenerateFormat = async (clipIndex: number, format: PlatformFormat, cropMode: CropMode = 'pad') => {
+    const clip = generatedClips.get(clipIndex);
+    if (!clip) return;
+
+    console.log('[VideoClipper] Generating format variation:', { clipIndex, format, cropMode });
+
+    // Mark as generating
+    setFormatStates(prev => {
+      const next = new Map(prev);
+      const clipFormats = next.get(clipIndex) || new Map<PlatformFormat, FormatState>();
+      clipFormats.set(format, { status: 'generating' });
+      next.set(clipIndex, clipFormats);
+      return next;
+    });
+
+    try {
+      const response = await fetch('/api/video-clipper/resize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clipUrl: clip.url,
+          targetFormat: format,
+          cropMode,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Format generation failed');
+      }
+
+      console.log('[VideoClipper] Format generated:', data);
+
+      // Store the generated format
+      setFormatStates(prev => {
+        const next = new Map(prev);
+        const clipFormats = next.get(clipIndex) || new Map<PlatformFormat, FormatState>();
+        clipFormats.set(format, {
+          status: 'success',
+          variant: {
+            format,
+            url: data.resizedUrl,
+            width: data.width,
+            height: data.height,
+            cropMode,
+          },
+        });
+        next.set(clipIndex, clipFormats);
+        return next;
+      });
+    } catch (err) {
+      console.error('[VideoClipper] Format generation error:', err);
+      setFormatStates(prev => {
+        const next = new Map(prev);
+        const clipFormats = next.get(clipIndex) || new Map<PlatformFormat, FormatState>();
+        clipFormats.set(format, {
+          status: 'error',
+          error: err instanceof Error ? err.message : 'Format generation failed',
+        });
+        next.set(clipIndex, clipFormats);
+        return next;
+      });
+    }
+  };
+
   // Phase 5: Save current session as a job
   const handleSaveJob = async () => {
     if (!video || generatedClips.size === 0) return;
@@ -428,9 +518,27 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     setSaveJobError(null);
 
     try {
-      // Convert generated clips map to array with suggestion data
+      // Convert generated clips map to array with suggestion data and format variants
       const clipsToSave = Array.from(generatedClips.entries()).map(([index, clip]) => {
         const suggestion = suggestions[index];
+        const captionState = captionStates.get(index);
+        const clipFormats = formatStates.get(index);
+
+        // Convert format variants to saveable format
+        const formatVariants: SavedFormatVariants = {};
+        if (clipFormats) {
+          clipFormats.forEach((state, format) => {
+            if (state.status === 'success' && state.variant) {
+              formatVariants[format] = {
+                url: state.variant.url,
+                width: state.variant.width,
+                height: state.variant.height,
+                cropMode: state.variant.cropMode,
+              };
+            }
+          });
+        }
+
         return {
           url: clip.url,
           startTime: clip.startTime,
@@ -439,6 +547,8 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
           type: suggestion?.type || 'unknown',
           reason: suggestion?.reason || '',
           transcript: suggestion?.transcript || '',
+          captionedUrl: captionState?.captionedUrl || null,
+          formatVariants: Object.keys(formatVariants).length > 0 ? formatVariants : null,
         };
       });
 
@@ -519,6 +629,8 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     // Load clips as generated clips
     const clips = new Map<number, GeneratedClip>();
     const loadedSuggestions: ClipSuggestion[] = [];
+    const loadedCaptionStates = new Map<number, CaptionState>();
+    const loadedFormatStates = new Map<number, Map<PlatformFormat, FormatState>>();
 
     job.clips.forEach((clip, index) => {
       clips.set(index, {
@@ -535,10 +647,44 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
         reason: clip.whySelected || '',
         transcript: clip.transcript || '',
       });
+
+      // Load captioned URL if exists
+      if (clip.clipWithCaptionsUrl) {
+        loadedCaptionStates.set(index, {
+          status: 'success',
+          captionedUrl: clip.clipWithCaptionsUrl,
+        });
+      }
+
+      // Load format variants if exists
+      if (clip.platformRecommendations && typeof clip.platformRecommendations === 'object') {
+        const formatMap = new Map<PlatformFormat, FormatState>();
+        const variants = clip.platformRecommendations as SavedFormatVariants;
+
+        Object.entries(variants).forEach(([format, variant]) => {
+          formatMap.set(format as PlatformFormat, {
+            status: 'success',
+            variant: {
+              format: format as PlatformFormat,
+              url: variant.url,
+              width: variant.width,
+              height: variant.height,
+              cropMode: variant.cropMode,
+            },
+          });
+        });
+
+        if (formatMap.size > 0) {
+          loadedFormatStates.set(index, formatMap);
+        }
+      }
     });
 
     setGeneratedClips(clips);
     setSuggestions(loadedSuggestions);
+    setCaptionStates(loadedCaptionStates);
+    setFormatStates(loadedFormatStates);
+    setExpandedFormats(new Set());
     setAnalyzeStatus('success');
     setTranscribeStatus('success');
     setTranscript({ fullText: '', segments: [] });
@@ -579,6 +725,9 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     setClipErrors(new Map());
     // Reset caption state
     setCaptionStates(new Map());
+    // Reset format state
+    setFormatStates(new Map());
+    setExpandedFormats(new Set());
     // Reset job state
     setCurrentJobId(null);
     setSaveJobStatus('idle');
@@ -1197,6 +1346,126 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                                   Download Captioned
                                 </a>
                               </div>
+                            </div>
+                          )}
+
+                          {/* Phase 7: Format Variations Panel */}
+                          {generatedClip && (
+                            <div className="mt-4">
+                              {/* Toggle Button */}
+                              <button
+                                onClick={() => toggleFormatPanel(index)}
+                                className="w-full px-4 py-3 bg-gradient-to-br from-cyan-500/10 to-cyan-600/5 border border-cyan-500/20 rounded-lg flex items-center justify-between text-cyan-400 hover:bg-cyan-500/15 transition"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <Maximize2 className="w-4 h-4" />
+                                  <span className="text-sm font-medium">Platform Format Variations</span>
+                                  {formatStates.get(index) && formatStates.get(index)!.size > 0 && (
+                                    <span className="bg-cyan-500/20 text-cyan-400 text-xs px-2 py-0.5 rounded-full">
+                                      {Array.from(formatStates.get(index)!.values()).filter(s => s.status === 'success').length} generated
+                                    </span>
+                                  )}
+                                </div>
+                                {expandedFormats.has(index) ? (
+                                  <ChevronUp className="w-4 h-4" />
+                                ) : (
+                                  <ChevronDown className="w-4 h-4" />
+                                )}
+                              </button>
+
+                              {/* Expanded Format Panel */}
+                              {expandedFormats.has(index) && (
+                                <div className="mt-3 bg-slate-900/50 rounded-lg border border-slate-700/50 overflow-hidden">
+                                  <div className="p-4">
+                                    <p className="text-xs text-slate-500 mb-4">
+                                      Generate platform-specific versions with correct aspect ratios
+                                    </p>
+
+                                    {/* Format Grid */}
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                                      {(Object.entries(PLATFORM_FORMATS) as [PlatformFormat, typeof PLATFORM_FORMATS[PlatformFormat]][]).map(([format, config]) => {
+                                        const clipFormats = formatStates.get(index);
+                                        const formatState = clipFormats?.get(format);
+                                        const isGenerating = formatState?.status === 'generating';
+                                        const isGenerated = formatState?.status === 'success';
+                                        const hasError = formatState?.status === 'error';
+
+                                        return (
+                                          <div
+                                            key={format}
+                                            className={`p-3 rounded-lg border transition ${
+                                              isGenerated
+                                                ? 'bg-cyan-500/10 border-cyan-500/30'
+                                                : 'bg-slate-800/50 border-slate-700/50 hover:border-slate-600'
+                                            }`}
+                                          >
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <span className="text-lg">{config.icon}</span>
+                                              <div>
+                                                <p className="text-sm font-medium text-slate-200">{config.name}</p>
+                                                <p className="text-xs text-slate-500">{config.aspectRatio}</p>
+                                              </div>
+                                            </div>
+
+                                            {isGenerated && formatState?.variant ? (
+                                              <div className="space-y-2">
+                                                <video
+                                                  src={formatState.variant.url}
+                                                  controls
+                                                  className="w-full rounded"
+                                                  style={{ maxHeight: '120px' }}
+                                                />
+                                                <a
+                                                  href={formatState.variant.url}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  download={`clip-${index + 1}-${suggestion.type}-${format}.mp4`}
+                                                  className="block w-full text-center px-2 py-1.5 text-xs text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded transition"
+                                                >
+                                                  <Download className="w-3 h-3 inline mr-1" />
+                                                  Download
+                                                </a>
+                                              </div>
+                                            ) : isGenerating ? (
+                                              <button
+                                                disabled
+                                                className="w-full px-2 py-1.5 text-xs text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 rounded flex items-center justify-center gap-1"
+                                              >
+                                                <Loader2 className="w-3 h-3 animate-spin" />
+                                                Generating...
+                                              </button>
+                                            ) : (
+                                              <div className="space-y-2">
+                                                {hasError && (
+                                                  <p className="text-xs text-red-400 truncate" title={formatState?.error}>
+                                                    {formatState?.error}
+                                                  </p>
+                                                )}
+                                                <div className="flex gap-1">
+                                                  <button
+                                                    onClick={() => handleGenerateFormat(index, format, 'pad')}
+                                                    className="flex-1 px-2 py-1.5 text-xs text-slate-300 hover:text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-600/50 rounded transition"
+                                                    title="Add black bars to fit"
+                                                  >
+                                                    Pad
+                                                  </button>
+                                                  <button
+                                                    onClick={() => handleGenerateFormat(index, format, 'crop')}
+                                                    className="flex-1 px-2 py-1.5 text-xs text-slate-300 hover:text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-600/50 rounded transition"
+                                                    title="Crop to fit"
+                                                  >
+                                                    Crop
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
