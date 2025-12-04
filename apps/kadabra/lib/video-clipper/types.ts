@@ -27,7 +27,7 @@ export type TranscribeStatus = 'idle' | 'transcribing' | 'success' | 'error';
 export interface ClipSuggestion {
   startTime: number;
   endTime: number;
-  type: 'hook' | 'testimonial' | 'benefit' | 'cta' | 'problem' | 'solution';
+  type: 'hook' | 'testimonial' | 'benefit' | 'cta' | 'problem' | 'solution' | 'viral';
   reason: string;
   transcript: string;
 }

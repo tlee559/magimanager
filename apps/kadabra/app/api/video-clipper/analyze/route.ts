@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-    const prompt = `You are an expert video editor specializing in creating short-form ad content. Analyze this video transcript and identify 3-5 compelling moments that would make great ad clips (15-60 seconds each).
+    const prompt = `You are an expert video editor specializing in creating short-form ad content and viral social media clips. Analyze this video transcript and identify 3-5 compelling moments that would make great ad clips or viral content (15-60 seconds each).
 
 VIDEO DURATION: ${Math.round(videoDuration)} seconds
 
@@ -69,7 +69,8 @@ For each suggested clip, identify:
    - "cta" - Call to action or compelling close
    - "problem" - Pain point identification
    - "solution" - Problem resolution moment
-3. Why this moment would work well as an ad clip
+   - "viral" - Highly shareable moment with emotional impact, humor, surprise, controversy, or relatability that could go viral on social media
+3. Why this moment would work well as an ad clip or viral content
 
 Return ONLY valid JSON in this exact format (no markdown, no explanation):
 {

@@ -237,6 +237,7 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
       cta: 'bg-orange-100 text-orange-700',
       problem: 'bg-red-100 text-red-700',
       solution: 'bg-teal-100 text-teal-700',
+      viral: 'bg-pink-100 text-pink-700',
     };
     return colors[type] || 'bg-gray-100 text-gray-700';
   };
