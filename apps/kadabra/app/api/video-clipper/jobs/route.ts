@@ -36,9 +36,25 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    console.log('[VideoClipper] Found', jobs.length, 'jobs');
+    // Parse analysisResults for each job to include transcript data
+    const jobsWithTranscript = jobs.map(job => {
+      let analysisData = null;
+      if (job.analysisResults) {
+        try {
+          analysisData = JSON.parse(job.analysisResults as string);
+        } catch {
+          console.warn('[VideoClipper] Failed to parse analysisResults for job:', job.id);
+        }
+      }
+      return {
+        ...job,
+        transcript: analysisData?.transcript || null,
+      };
+    });
 
-    return NextResponse.json({ jobs });
+    console.log('[VideoClipper] Found', jobsWithTranscript.length, 'jobs');
+
+    return NextResponse.json({ jobs: jobsWithTranscript });
   } catch (error) {
     console.error('[VideoClipper] Error fetching jobs:', error);
     return NextResponse.json(

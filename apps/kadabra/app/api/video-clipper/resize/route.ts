@@ -6,8 +6,8 @@ import { PLATFORM_FORMATS, type PlatformFormat } from '@/lib/video-clipper/const
 export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 minutes max for resizing
 
-// Using lucataco/ffmpeg for video transformations
-const FFMPEG_MODEL = 'lucataco/ffmpeg:bc37e2112366e5afb06c83725f386fd8a3e37340f9f16e46a6e2c9c4b2d209fa';
+// Using magpai-app/cog-ffmpeg for video transformations
+const FFMPEG_MODEL = 'magpai-app/cog-ffmpeg:efd0b79b577bcd58ae7d035bce9de5c4659a59e09faafac4d426d61c04249251';
 
 type CropMode = 'pad' | 'crop';
 
@@ -73,10 +73,11 @@ export async function POST(req: NextRequest) {
       vfCommand = `scale=${config.width}:${config.height}:force_original_aspect_ratio=decrease,pad=${config.width}:${config.height}:(ow-iw)/2:(oh-ih)/2:black`;
     }
 
-    // FFmpeg arguments for video transformation
-    const ffmpegArgs = `-i input.mp4 -vf "${vfCommand}" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k output.mp4`;
+    // FFmpeg command for the magpai-app/cog-ffmpeg model
+    // Note: this model uses 'file1' as input and expects full ffmpeg command with input/output references
+    const ffmpegCommand = `ffmpeg -i /tmp/file1.mp4 -vf "${vfCommand}" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k /tmp/output1.mp4`;
 
-    console.log('[VideoClipper] FFmpeg command:', ffmpegArgs);
+    console.log('[VideoClipper] FFmpeg command:', ffmpegCommand);
 
     // Create prediction
     console.log('[VideoClipper] Creating resize prediction...');
@@ -84,11 +85,11 @@ export async function POST(req: NextRequest) {
     let prediction;
     try {
       prediction = await replicate.predictions.create({
-        version: 'bc37e2112366e5afb06c83725f386fd8a3e37340f9f16e46a6e2c9c4b2d209fa',
+        version: 'efd0b79b577bcd58ae7d035bce9de5c4659a59e09faafac4d426d61c04249251',
         input: {
-          input_file: clipUrl,
-          ffmpeg_args: ffmpegArgs,
-          output_filename: 'output.mp4',
+          file1: clipUrl,
+          command: ffmpegCommand,
+          output1: 'resized.mp4',
         },
       });
       console.log('[VideoClipper] Prediction created:', JSON.stringify(prediction, null, 2));
@@ -152,7 +153,7 @@ export async function POST(req: NextRequest) {
     const output = finalPrediction.output;
     console.log('[VideoClipper] Resize output:', output);
 
-    // Get the resized video URL
+    // Get the resized video URL - magpai-app/cog-ffmpeg returns { files: [url1, url2, ...] }
     let resizedUrl: string | null = null;
 
     if (typeof output === 'string') {
@@ -160,7 +161,13 @@ export async function POST(req: NextRequest) {
     } else if (Array.isArray(output) && output.length > 0) {
       resizedUrl = output[0];
     } else if (output && typeof output === 'object') {
-      if ('output' in output) {
+      // Handle { files: [...] } format from magpai-app/cog-ffmpeg
+      if ('files' in output && Array.isArray((output as { files: string[] }).files)) {
+        const files = (output as { files: string[] }).files;
+        if (files.length > 0) {
+          resizedUrl = files[0];
+        }
+      } else if ('output' in output) {
         resizedUrl = (output as { output: string }).output;
       } else if ('url' in output) {
         resizedUrl = (output as { url: string }).url;

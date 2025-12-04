@@ -687,7 +687,22 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     setExpandedFormats(new Set());
     setAnalyzeStatus('success');
     setTranscribeStatus('success');
-    setTranscript({ fullText: '', segments: [] });
+
+    // Load transcript from job if available
+    if (job.transcript && job.transcript.segments && job.transcript.segments.length > 0) {
+      setTranscript(job.transcript);
+    } else {
+      // Fallback: construct transcript from clip transcripts
+      const allTranscripts = job.clips
+        .filter(clip => clip.transcript)
+        .map(clip => clip.transcript)
+        .join(' ');
+      setTranscript({
+        fullText: allTranscripts,
+        segments: []
+      });
+    }
+
     setShowJobHistory(false);
   };
 

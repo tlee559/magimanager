@@ -113,6 +113,7 @@ export interface SavedJob {
   status: string;
   createdAt: string;
   clips: SavedClip[];
+  transcript?: Transcript | null;
 }
 
 export type SaveJobStatus = 'idle' | 'saving' | 'success' | 'error';
