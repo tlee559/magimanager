@@ -48,7 +48,7 @@ import {
 } from "./chat-window-bar";
 import type { ChatWindow } from "./chat-types";
 import { CampaignPlannerView } from "./campaign-planner-view";
-import { VideoClipperView } from "./video-clipper-view";
+import { VideoClipperView } from "./video-clipper/video-clipper-view";
 import { AIImageGenerator } from "./ai-image-generator";
 import { ABRA_URL, APP_VERSION, BUILD_SHA } from "./constants";
 import toast from "react-hot-toast";
