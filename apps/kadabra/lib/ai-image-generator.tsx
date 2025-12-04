@@ -469,37 +469,18 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
 
           {/* Output Section */}
           <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <h2 className="text-sm font-medium text-slate-300">
                 {generatedImages.length > 1
                   ? `Generated Images (${currentImageIndex + 1}/${generatedImages.length})`
                   : "Generated Image"}
               </h2>
               {generatedImages.length > 0 && (
-                <div className="flex items-center gap-2">
-                  {generatedImages.length > 1 && (
-                    <>
-                      <button
-                        onClick={handleSaveAll}
-                        disabled={savedIndices.size === generatedImages.length}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-green-600/20 hover:bg-green-600/30 border border-green-500/30 rounded-lg text-sm text-green-400 transition disabled:opacity-50"
-                      >
-                        <Save className="w-4 h-4" />
-                        Save All
-                      </button>
-                      <button
-                        onClick={handleDownloadAll}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm text-slate-300 transition"
-                      >
-                        <Download className="w-4 h-4" />
-                        All
-                      </button>
-                    </>
-                  )}
+                <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={() => handleSaveImage(currentImageIndex)}
                     disabled={savingIndex === currentImageIndex || savedIndices.has(currentImageIndex)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition ${
                       savedIndices.has(currentImageIndex)
                         ? "bg-green-600/20 border border-green-500/30 text-green-400"
                         : "bg-slate-700 hover:bg-slate-600 text-slate-300"
@@ -514,10 +495,31 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                   </button>
                   <button
                     onClick={() => handleDownload()}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm text-slate-300 transition"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm text-slate-300 transition"
                   >
                     <Download className="w-4 h-4" />
+                    Download
                   </button>
+                  {generatedImages.length > 1 && (
+                    <>
+                      <div className="w-px h-6 bg-slate-600" />
+                      <button
+                        onClick={handleSaveAll}
+                        disabled={savedIndices.size === generatedImages.length}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600/20 hover:bg-green-600/30 border border-green-500/30 rounded-lg text-sm text-green-400 transition disabled:opacity-50"
+                      >
+                        <Save className="w-4 h-4" />
+                        Save All
+                      </button>
+                      <button
+                        onClick={handleDownloadAll}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm text-slate-300 transition"
+                      >
+                        <Download className="w-4 h-4" />
+                        Download All
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
