@@ -1,4 +1,4 @@
-// Video Clipper Types - Phase 1
+// Video Clipper Types
 
 export interface UploadedVideo {
   url: string;
@@ -8,3 +8,17 @@ export interface UploadedVideo {
 }
 
 export type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
+
+// Phase 2: Transcription types
+export interface TranscriptSegment {
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface Transcript {
+  fullText: string;
+  segments: TranscriptSegment[];
+}
+
+export type TranscribeStatus = 'idle' | 'transcribing' | 'success' | 'error';

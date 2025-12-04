@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { upload } from '@vercel/blob/client';
-import { UploadedVideo, UploadStatus } from './types';
+import { UploadedVideo, UploadStatus, Transcript, TranscribeStatus } from './types';
 import {
   MAX_FILE_SIZE,
   ALLOWED_TYPES,
@@ -21,6 +21,11 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Phase 2: Transcription state
+  const [transcript, setTranscript] = useState<Transcript | null>(null);
+  const [transcribeStatus, setTranscribeStatus] = useState<TranscribeStatus>('idle');
+  const [transcribeError, setTranscribeError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -146,12 +151,54 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     }
   }, []);
 
+  // Phase 2: Handle transcription
+  const handleTranscribe = async () => {
+    if (!video) return;
+
+    console.log('[VideoClipper] Starting transcription for:', video.url);
+    setTranscribeStatus('transcribing');
+    setTranscribeError(null);
+
+    try {
+      const response = await fetch('/api/video-clipper/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoUrl: video.url }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Transcription failed');
+      }
+
+      console.log('[VideoClipper] Transcription complete:', data.transcript);
+      setTranscript(data.transcript);
+      setTranscribeStatus('success');
+    } catch (err) {
+      console.error('[VideoClipper] Transcription error:', err);
+      setTranscribeError(err instanceof Error ? err.message : 'Transcription failed');
+      setTranscribeStatus('error');
+    }
+  };
+
+  // Format timestamp for display (seconds to MM:SS)
+  const formatTimestamp = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   // Reset to upload another
   const handleReset = () => {
     setVideo(null);
     setStatus('idle');
     setProgress(0);
     setError(null);
+    // Reset transcription state too
+    setTranscript(null);
+    setTranscribeStatus('idle');
+    setTranscribeError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -227,16 +274,35 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
           {status === 'uploading' && (
             <div className="py-12">
               <div className="text-center mb-4">
-                <p className="text-lg font-medium text-gray-700">
-                  Uploading video...
-                </p>
-                <p className="text-3xl font-bold text-blue-600 mt-2">
-                  {progress}%
-                </p>
+                {progress < 100 ? (
+                  <>
+                    <p className="text-lg font-medium text-gray-700">
+                      Uploading video...
+                    </p>
+                    <p className="text-3xl font-bold text-blue-600 mt-2">
+                      {progress}%
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-center mb-3">
+                      <svg className="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    </div>
+                    <p className="text-lg font-medium text-gray-700">
+                      Processing video...
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Almost done
+                    </p>
+                  </>
+                )}
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3">
                 <div
-                  className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                  className={`h-3 rounded-full transition-all duration-300 ${progress >= 100 ? 'bg-blue-600 animate-pulse' : 'bg-blue-600'}`}
                   style={{ width: `${progress}%` }}
                 />
               </div>
@@ -292,8 +358,78 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                 >
                   Upload Another
                 </button>
-                {/* Placeholder for Phase 2 - Transcribe button will go here */}
+
+                {/* Phase 2: Transcribe Button */}
+                {!transcript && transcribeStatus !== 'transcribing' && (
+                  <button
+                    onClick={handleTranscribe}
+                    className="px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                  >
+                    Transcribe Video
+                  </button>
+                )}
+
+                {/* Transcribing State */}
+                {transcribeStatus === 'transcribing' && (
+                  <button
+                    disabled
+                    className="px-4 py-2 text-white bg-blue-400 rounded-lg flex items-center gap-2 cursor-not-allowed"
+                  >
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Transcribing...
+                  </button>
+                )}
               </div>
+
+              {/* Transcription Error */}
+              {transcribeError && (
+                <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
+                  <p className="text-red-700">{transcribeError}</p>
+                  <button
+                    onClick={() => {
+                      setTranscribeError(null);
+                      setTranscribeStatus('idle');
+                    }}
+                    className="text-red-600 underline mt-2 text-sm"
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
+
+              {/* Phase 2: Transcript Display */}
+              {transcript && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                    Transcript
+                  </h3>
+                  <div className="bg-gray-50 rounded-lg border border-gray-200 max-h-64 overflow-y-auto">
+                    {transcript.segments.length > 0 ? (
+                      <div className="divide-y divide-gray-200">
+                        {transcript.segments.map((segment, index) => (
+                          <div
+                            key={index}
+                            className="p-3 hover:bg-gray-100 transition-colors"
+                          >
+                            <span className="text-xs font-mono text-blue-600 mr-3">
+                              {formatTimestamp(segment.start)}
+                            </span>
+                            <span className="text-gray-700">{segment.text}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-4 text-gray-500">
+                        {transcript.fullText || 'No transcript available'}
+                      </div>
+                    )}
+                  </div>
+                  {/* Placeholder for Phase 3 - Analyze button will go here */}
+                </div>
+              )}
             </div>
           )}
         </div>
