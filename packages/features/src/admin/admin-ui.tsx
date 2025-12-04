@@ -596,6 +596,22 @@ export function AdminApp({
           ))}
         </nav>
 
+        {/* Kadabra Ad Manager Button */}
+        <div className="flex-shrink-0 px-3 py-3 border-t border-slate-800">
+          <a
+            href={`${kadabraUrl}/admin`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-medium text-sm transition-all shadow-lg shadow-violet-500/20 hover:shadow-violet-500/30 hover:scale-[1.02]"
+          >
+            <span className="text-base">🚀</span>
+            <span>KADABRA Ad Manager</span>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 opacity-70">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+            </svg>
+          </a>
+        </div>
+
         {/* Version Info - Minimal footer */}
         <div className="flex-shrink-0 w-full px-4 py-2 border-t border-slate-800">
           <div className="text-[10px] text-center text-slate-500">
