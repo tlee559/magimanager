@@ -157,13 +157,22 @@ export async function POST(req: NextRequest) {
       const b = parseInt(hex.slice(4, 6), 16);
       const alpha = Math.round(overlayOpacity * 255);
 
-      // Create semi-transparent color overlay
-      const colorOverlay = await sharp({
-        create: {
+      console.log("Creating color overlay:", { r, g, b, alpha, overlayOpacity });
+
+      // Create semi-transparent color overlay using raw RGBA buffer
+      const pixels = Buffer.alloc(bgWidth * bgHeight * 4);
+      for (let i = 0; i < bgWidth * bgHeight; i++) {
+        pixels[i * 4] = r;
+        pixels[i * 4 + 1] = g;
+        pixels[i * 4 + 2] = b;
+        pixels[i * 4 + 3] = alpha;
+      }
+
+      const colorOverlay = await sharp(pixels, {
+        raw: {
           width: bgWidth,
           height: bgHeight,
           channels: 4,
-          background: { r, g, b, alpha },
         },
       })
         .png()
@@ -173,6 +182,7 @@ export async function POST(req: NextRequest) {
         input: colorOverlay,
         top: 0,
         left: 0,
+        blend: "over" as const,
       });
     }
 
