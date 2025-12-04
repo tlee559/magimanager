@@ -372,37 +372,6 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     }
   }, []);
 
-  // Phase 2: Handle transcription
-  const handleTranscribe = async () => {
-    if (!video) return;
-
-    console.log('[VideoClipper] Starting transcription for:', video.url);
-    setTranscribeStatus('transcribing');
-    setTranscribeError(null);
-
-    try {
-      const response = await fetch('/api/video-clipper/transcribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoUrl: video.url }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Transcription failed');
-      }
-
-      console.log('[VideoClipper] Transcription complete:', data.transcript);
-      setTranscript(data.transcript);
-      setTranscribeStatus('success');
-    } catch (err) {
-      console.error('[VideoClipper] Transcription error:', err);
-      setTranscribeError(err instanceof Error ? err.message : 'Transcription failed');
-      setTranscribeStatus('error');
-    }
-  };
-
   // Format timestamp for display (seconds to MM:SS)
   const formatTimestamp = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -410,19 +379,189 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Phase 3: Handle AI analysis
-  const handleAnalyze = async () => {
-    if (!transcript || !video) return;
+  // Combined flow status for the unified analyze button
+  type AnalyzeFlowStep = 'idle' | 'transcribing' | 'analyzing' | 'generating' | 'complete' | 'error';
+  const [analyzeFlowStep, setAnalyzeFlowStep] = useState<AnalyzeFlowStep>('idle');
+  const [analyzeFlowError, setAnalyzeFlowError] = useState<string | null>(null);
 
-    console.log('[VideoClipper] Starting AI analysis...');
-    console.log('[VideoClipper] Marketing context:', marketingContext);
-    setAnalyzeStatus('analyzing');
+  // Unified "Analyze Video" - combines transcribe + analyze + auto-generate clips
+  const handleAnalyzeVideo = async () => {
+    if (!video) return;
+
+    console.log('[VideoClipper] Starting unified analyze flow...');
+    setAnalyzeFlowStep('transcribing');
+    setAnalyzeFlowError(null);
+    setTranscribeError(null);
     setAnalyzeError(null);
 
     try {
-      // Only include marketing context if at least one field is filled
+      // Step 1: Transcribe
+      console.log('[VideoClipper] Step 1: Transcribing...');
+      setTranscribeStatus('transcribing');
+
+      const transcribeResponse = await fetch('/api/video-clipper/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoUrl: video.url }),
+      });
+
+      const transcribeData = await transcribeResponse.json();
+
+      if (!transcribeResponse.ok) {
+        throw new Error(transcribeData.error || 'Transcription failed');
+      }
+
+      console.log('[VideoClipper] Transcription complete');
+      setTranscript(transcribeData.transcript);
+      setTranscribeStatus('success');
+
+      // Step 2: Analyze
+      console.log('[VideoClipper] Step 2: Analyzing for marketing moments...');
+      setAnalyzeFlowStep('analyzing');
+      setAnalyzeStatus('analyzing');
+
       const hasContext = marketingContext.product || marketingContext.audience;
 
+      const analyzeResponse = await fetch('/api/video-clipper/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          segments: transcribeData.transcript.segments,
+          videoDuration: video.duration || 0,
+          targetClipDuration,
+          marketingContext: hasContext ? marketingContext : undefined,
+        }),
+      });
+
+      const analyzeData = await analyzeResponse.json();
+
+      if (!analyzeResponse.ok) {
+        throw new Error(analyzeData.error || 'Analysis failed');
+      }
+
+      console.log('[VideoClipper] Analysis complete:', analyzeData.suggestions?.length, 'suggestions');
+      setSuggestions(analyzeData.suggestions || []);
+      setAnalyzeStatus('success');
+
+      // Auto-expand first suggestion to show value
+      if (analyzeData.suggestions?.length > 0) {
+        setExpandedSuggestions(new Set([0]));
+      }
+
+      // Step 3: Auto-generate all clips
+      console.log('[VideoClipper] Step 3: Generating clips...');
+      setAnalyzeFlowStep('generating');
+
+      const clipSuggestions = analyzeData.suggestions || [];
+      for (let i = 0; i < clipSuggestions.length; i++) {
+        const suggestion = clipSuggestions[i];
+        console.log(`[VideoClipper] Generating clip ${i + 1}/${clipSuggestions.length}`);
+
+        setClipGenerating(prev => new Set(prev).add(i));
+
+        try {
+          const clipResponse = await fetch('/api/video-clipper/clip', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              videoUrl: video.url,
+              startTime: suggestion.startTime,
+              endTime: suggestion.endTime,
+            }),
+          });
+
+          const clipData = await clipResponse.json();
+
+          if (clipResponse.ok && clipData.clipUrl) {
+            setGeneratedClips(prev => {
+              const next = new Map(prev);
+              next.set(i, {
+                url: clipData.clipUrl,
+                startTime: suggestion.startTime,
+                endTime: suggestion.endTime,
+                duration: suggestion.endTime - suggestion.startTime,
+              });
+              return next;
+            });
+          } else {
+            setClipErrors(prev => {
+              const next = new Map(prev);
+              next.set(i, clipData.error || 'Clip generation failed');
+              return next;
+            });
+          }
+        } catch (clipErr) {
+          console.error(`[VideoClipper] Clip ${i + 1} error:`, clipErr);
+          setClipErrors(prev => {
+            const next = new Map(prev);
+            next.set(i, clipErr instanceof Error ? clipErr.message : 'Clip generation failed');
+            return next;
+          });
+        } finally {
+          setClipGenerating(prev => {
+            const next = new Set(prev);
+            next.delete(i);
+            return next;
+          });
+        }
+      }
+
+      console.log('[VideoClipper] All clips generated');
+      setAnalyzeFlowStep('complete');
+    } catch (err) {
+      console.error('[VideoClipper] Analyze flow error:', err);
+      const errorMsg = err instanceof Error ? err.message : 'Analysis failed';
+      setAnalyzeFlowError(errorMsg);
+      setAnalyzeFlowStep('error');
+
+      // Set appropriate status based on where we failed
+      if (analyzeFlowStep === 'transcribing') {
+        setTranscribeError(errorMsg);
+        setTranscribeStatus('error');
+      } else {
+        setAnalyzeError(errorMsg);
+        setAnalyzeStatus('error');
+      }
+    }
+  };
+
+  // Seek video to a specific time (for preview)
+  const handleSeekToTime = (seconds: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = seconds;
+      videoRef.current.play().catch(() => {
+        // Autoplay may be blocked, that's ok
+      });
+    }
+  };
+
+  // Legacy handlers for manual control (keep for re-try functionality)
+  const handleTranscribe = async () => {
+    if (!video) return;
+    setTranscribeStatus('transcribing');
+    setTranscribeError(null);
+    try {
+      const response = await fetch('/api/video-clipper/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoUrl: video.url }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Transcription failed');
+      setTranscript(data.transcript);
+      setTranscribeStatus('success');
+    } catch (err) {
+      setTranscribeError(err instanceof Error ? err.message : 'Transcription failed');
+      setTranscribeStatus('error');
+    }
+  };
+
+  const handleAnalyze = async () => {
+    if (!transcript || !video) return;
+    setAnalyzeStatus('analyzing');
+    setAnalyzeError(null);
+    try {
+      const hasContext = marketingContext.product || marketingContext.audience;
       const response = await fetch('/api/video-clipper/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -433,18 +572,14 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
           marketingContext: hasContext ? marketingContext : undefined,
         }),
       });
-
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Analysis failed');
-      }
-
-      console.log('[VideoClipper] Analysis complete:', data.suggestions);
+      if (!response.ok) throw new Error(data.error || 'Analysis failed');
       setSuggestions(data.suggestions);
       setAnalyzeStatus('success');
+      if (data.suggestions?.length > 0) {
+        setExpandedSuggestions(new Set([0]));
+      }
     } catch (err) {
-      console.error('[VideoClipper] Analysis error:', err);
       setAnalyzeError(err instanceof Error ? err.message : 'Analysis failed');
       setAnalyzeStatus('error');
     }
@@ -999,6 +1134,9 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     setTrimAdjustments(new Map());
     setExpandedSuggestions(new Set());
     setShowMarketingContext(false);
+    // Reset unified flow state
+    setAnalyzeFlowStep('idle');
+    setAnalyzeFlowError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -1279,101 +1417,13 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                       >
                         Upload Another
                       </button>
-
-                      {/* Transcribe Button */}
-                      {!transcript && transcribeStatus !== 'transcribing' && (
-                        <button
-                          onClick={handleTranscribe}
-                          className="px-4 py-2 text-white bg-violet-600 hover:bg-violet-500 rounded-lg transition text-sm flex items-center gap-2"
-                        >
-                          <Wand2 className="w-4 h-4" />
-                          Transcribe Video
-                        </button>
-                      )}
-
-                      {/* Transcribing State */}
-                      {transcribeStatus === 'transcribing' && (
-                        <button
-                          disabled
-                          className="px-4 py-2 text-white bg-violet-500/50 rounded-lg flex items-center gap-2 cursor-not-allowed text-sm"
-                        >
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Transcribing...
-                        </button>
-                      )}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Transcription Error */}
-              {transcribeError && (
-                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-red-400">{transcribeError}</p>
-                    <button
-                      onClick={() => {
-                        setTranscribeError(null);
-                        setTranscribeStatus('idle');
-                      }}
-                      className="text-red-400 hover:text-red-300 underline mt-2 text-sm"
-                    >
-                      Try again
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Transcript Display - Collapsible */}
-              {transcript && (
-                <div className="bg-slate-800/50 rounded-xl border border-slate-700/50">
-                  <div className="px-5 py-4 flex items-center justify-between">
-                    <button
-                      onClick={() => setShowTranscript(!showTranscript)}
-                      className="font-semibold text-slate-100 flex items-center gap-2 hover:text-slate-200 transition"
-                    >
-                      {showTranscript ? (
-                        <ChevronDown className="w-4 h-4 text-slate-400" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4 text-slate-400" />
-                      )}
-                      <FileVideo className="w-4 h-4 text-slate-400" />
-                      Transcript
-                      <span className="text-sm text-slate-500 font-normal">
-                        ({transcript.segments.length} segments)
-                      </span>
-                    </button>
-                  </div>
-
-                  {showTranscript && (
-                    <div className="max-h-64 overflow-y-auto border-t border-slate-700/50">
-                      {transcript.segments.length > 0 ? (
-                        <div className="divide-y divide-slate-700/50">
-                          {transcript.segments.map((segment, index) => (
-                            <div
-                              key={index}
-                              className="px-5 py-3 hover:bg-slate-700/30 transition"
-                            >
-                              <span className="text-xs font-mono text-violet-400 mr-3">
-                                {formatTimestamp(segment.start)}
-                              </span>
-                              <span className="text-slate-300">{segment.text}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="p-5 text-slate-500">
-                          {transcript.fullText || 'No transcript available'}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Marketing Context + Analysis Controls */}
-              {transcript && suggestions.length === 0 && (
+              {/* Unified Analyze Video Section - Shows when no analysis done yet */}
+              {suggestions.length === 0 && analyzeFlowStep !== 'complete' && (
                 <div className="bg-gradient-to-br from-violet-500/10 to-emerald-500/5 rounded-xl border border-violet-500/20 p-5">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
@@ -1381,22 +1431,24 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                         <Sparkles className="w-5 h-5 text-violet-400" />
                       </div>
                       <div>
-                        <h3 className="font-semibold text-slate-100">AI Moment Detection</h3>
-                        <p className="text-sm text-slate-500">Find high-converting ad moments in your video</p>
+                        <h3 className="font-semibold text-slate-100">Find Viral Moments</h3>
+                        <p className="text-sm text-slate-500">AI will transcribe, analyze, and clip your video automatically</p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => setShowMarketingContext(!showMarketingContext)}
-                      className="text-sm text-violet-400 hover:text-violet-300 flex items-center gap-1"
-                    >
-                      <Target className="w-4 h-4" />
-                      {showMarketingContext ? 'Hide' : 'Add'} Context
-                      {showMarketingContext ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                    </button>
+                    {analyzeFlowStep === 'idle' && (
+                      <button
+                        onClick={() => setShowMarketingContext(!showMarketingContext)}
+                        className="text-sm text-violet-400 hover:text-violet-300 flex items-center gap-1"
+                      >
+                        <Target className="w-4 h-4" />
+                        {showMarketingContext ? 'Hide' : 'Add'} Context
+                        {showMarketingContext ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                      </button>
+                    )}
                   </div>
 
-                  {/* Marketing Context Form - Collapsible */}
-                  {showMarketingContext && (
+                  {/* Marketing Context Form - Collapsible (only when idle) */}
+                  {showMarketingContext && analyzeFlowStep === 'idle' && (
                     <div className="mb-5 bg-slate-900/50 rounded-lg border border-slate-700/50 p-4 space-y-4">
                       <p className="text-xs text-slate-400 mb-3">
                         Optional: Add context to help AI find the best moments for your specific needs
@@ -1470,6 +1522,99 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                     </div>
                   )}
 
+                  {/* Progress Steps Indicator */}
+                  {analyzeFlowStep !== 'idle' && analyzeFlowStep !== 'error' && (() => {
+                    // Use string type to avoid TypeScript narrowing issues with union types
+                    const step = analyzeFlowStep as string;
+                    const isStep1Active = step === 'transcribing';
+                    const isStep1Done = !isStep1Active;
+                    const isStep2Active = step === 'analyzing';
+                    const isStep2Done = step === 'generating' || step === 'complete';
+                    const isStep3Active = step === 'generating';
+                    const isStep3Done = step === 'complete';
+
+                    return (
+                      <div className="mb-5 bg-slate-900/50 rounded-lg border border-slate-700/50 p-4">
+                        <div className="flex items-center gap-4">
+                          {/* Step 1: Transcribe */}
+                          <div className="flex items-center gap-2">
+                            {isStep1Active ? (
+                              <Loader2 className="w-4 h-4 text-violet-400 animate-spin" />
+                            ) : (
+                              <Check className="w-4 h-4 text-emerald-400" />
+                            )}
+                            <span className={`text-sm ${isStep1Active ? 'text-violet-400' : 'text-emerald-400'}`}>
+                              Transcribing
+                            </span>
+                          </div>
+
+                          <ChevronRight className="w-4 h-4 text-slate-600" />
+
+                          {/* Step 2: Analyze */}
+                          <div className="flex items-center gap-2">
+                            {isStep2Active ? (
+                              <Loader2 className="w-4 h-4 text-violet-400 animate-spin" />
+                            ) : isStep2Done ? (
+                              <Check className="w-4 h-4 text-emerald-400" />
+                            ) : (
+                              <div className="w-4 h-4 rounded-full border-2 border-slate-600" />
+                            )}
+                            <span className={`text-sm ${
+                              isStep2Active ? 'text-violet-400' :
+                              isStep2Done ? 'text-emerald-400' :
+                              'text-slate-500'
+                            }`}>
+                              Finding Moments
+                            </span>
+                          </div>
+
+                          <ChevronRight className="w-4 h-4 text-slate-600" />
+
+                          {/* Step 3: Generate */}
+                          <div className="flex items-center gap-2">
+                            {isStep3Active ? (
+                              <>
+                                <Loader2 className="w-4 h-4 text-violet-400 animate-spin" />
+                                <span className="text-sm text-violet-400">
+                                  Generating Clips ({generatedClips.size}/{suggestions.length})
+                                </span>
+                              </>
+                            ) : isStep3Done ? (
+                              <>
+                                <Check className="w-4 h-4 text-emerald-400" />
+                                <span className="text-sm text-emerald-400">Complete</span>
+                              </>
+                            ) : (
+                              <>
+                                <div className="w-4 h-4 rounded-full border-2 border-slate-600" />
+                                <span className="text-sm text-slate-500">Generating Clips</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Error Display */}
+                  {analyzeFlowStep === 'error' && analyzeFlowError && (
+                    <div className="mb-5 bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex items-start gap-3">
+                      <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-red-400">{analyzeFlowError}</p>
+                        <button
+                          onClick={() => {
+                            setAnalyzeFlowStep('idle');
+                            setAnalyzeFlowError(null);
+                          }}
+                          className="text-red-400 hover:text-red-300 underline mt-2 text-sm"
+                        >
+                          Try again
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Analysis Controls */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
@@ -1479,8 +1624,8 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                         <select
                           value={targetClipDuration}
                           onChange={(e) => setTargetClipDuration(Number(e.target.value))}
-                          disabled={analyzeStatus === 'analyzing'}
-                          className="px-2 py-1.5 text-sm bg-slate-700 border border-slate-600 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                          disabled={analyzeFlowStep !== 'idle'}
+                          className="px-2 py-1.5 text-sm bg-slate-700 border border-slate-600 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/50 disabled:opacity-50"
                         >
                           <option value={10}>~10 sec</option>
                           <option value={15}>~15 sec</option>
@@ -1491,13 +1636,21 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                       </div>
                     </div>
 
-                    {analyzeStatus !== 'analyzing' ? (
+                    {analyzeFlowStep === 'idle' ? (
                       <button
-                        onClick={handleAnalyze}
+                        onClick={handleAnalyzeVideo}
                         className="px-5 py-2.5 text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition flex items-center gap-2 font-medium"
                       >
                         <Sparkles className="w-4 h-4" />
-                        Find Ad Moments
+                        Analyze Video
+                      </button>
+                    ) : analyzeFlowStep === 'error' ? (
+                      <button
+                        onClick={handleAnalyzeVideo}
+                        className="px-5 py-2.5 text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition flex items-center gap-2 font-medium"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        Retry
                       </button>
                     ) : (
                       <button
@@ -1505,31 +1658,61 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                         className="px-5 py-2.5 text-white bg-emerald-500/50 rounded-lg flex items-center gap-2 cursor-not-allowed"
                       >
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Analyzing...
+                        Processing...
                       </button>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* Analysis Error */}
-              {analyzeError && (
-                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-red-400">{analyzeError}</p>
+              {/* Transcript Display - Collapsible (only show after analysis) */}
+              {transcript && suggestions.length > 0 && (
+                <div className="bg-slate-800/50 rounded-xl border border-slate-700/50">
+                  <div className="px-5 py-4 flex items-center justify-between">
                     <button
-                      onClick={() => {
-                        setAnalyzeError(null);
-                        setAnalyzeStatus('idle');
-                      }}
-                      className="text-red-400 hover:text-red-300 underline mt-2 text-sm"
+                      onClick={() => setShowTranscript(!showTranscript)}
+                      className="font-semibold text-slate-100 flex items-center gap-2 hover:text-slate-200 transition"
                     >
-                      Try again
+                      {showTranscript ? (
+                        <ChevronDown className="w-4 h-4 text-slate-400" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-slate-400" />
+                      )}
+                      <FileVideo className="w-4 h-4 text-slate-400" />
+                      Transcript
+                      <span className="text-sm text-slate-500 font-normal">
+                        ({transcript.segments.length} segments)
+                      </span>
                     </button>
                   </div>
+
+                  {showTranscript && (
+                    <div className="max-h-64 overflow-y-auto border-t border-slate-700/50">
+                      {transcript.segments.length > 0 ? (
+                        <div className="divide-y divide-slate-700/50">
+                          {transcript.segments.map((segment, index) => (
+                            <div
+                              key={index}
+                              className="px-5 py-3 hover:bg-slate-700/30 transition cursor-pointer"
+                              onClick={() => handleSeekToTime(segment.start)}
+                            >
+                              <span className="text-xs font-mono text-violet-400 mr-3">
+                                {formatTimestamp(segment.start)}
+                              </span>
+                              <span className="text-slate-300">{segment.text}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-5 text-slate-500">
+                          {transcript.fullText || 'No transcript available'}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
+
 
               {/* Clip Suggestions */}
               {suggestions.length > 0 && (
@@ -1587,10 +1770,14 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                               <span className={`px-2 py-1 rounded text-xs font-medium uppercase tracking-wide border ${getTypeColor(suggestion.type)}`}>
                                 {suggestion.type}
                               </span>
-                              <span className="text-sm text-slate-500 flex items-center gap-1">
+                              <button
+                                onClick={() => handleSeekToTime(suggestion.startTime)}
+                                className="text-sm text-violet-400 hover:text-violet-300 flex items-center gap-1 transition"
+                                title="Click to preview in source video"
+                              >
                                 <Clock className="w-3 h-3" />
                                 {formatTimestamp(suggestion.startTime)} - {formatTimestamp(suggestion.endTime)}
-                              </span>
+                              </button>
                               <span className="text-xs text-slate-600">
                                 ({Math.round(suggestion.endTime - suggestion.startTime)}s)
                               </span>
