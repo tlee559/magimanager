@@ -26,6 +26,8 @@ export async function GET(req: NextRequest) {
             duration: true,
             momentType: true,
             clipUrl: true,
+            whySelected: true,
+            transcript: true,
           },
         },
       },

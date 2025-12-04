@@ -5,8 +5,8 @@ import { put } from '@vercel/blob';
 export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 minutes max for captioning
 
-// Video captioning model - uses FFmpeg to burn in subtitles
-const CAPTION_MODEL = 'fictions-ai/autocaption:18a45ff0d95feb4449d192bbdc06b4a6df168fa33def76e507a06c8a9e880d87';
+// Video captioning model - auto-generates captions from audio and burns them in
+const CAPTION_MODEL = 'fictions-ai/autocaption:18a45ff0d95feb4449d192bbdc06b4a6df168fa33def76dfc51b78ae224b599b';
 
 interface CaptionStyle {
   fontSize?: 'small' | 'medium' | 'large';
@@ -48,21 +48,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!transcript) {
-      console.error('[VideoClipper] ERROR: Transcript is missing');
-      return NextResponse.json(
-        { error: 'Transcript is required' },
-        { status: 400 }
-      );
-    }
-
+    // Note: transcript is optional - autocaption generates its own from audio
     const clipDuration = endTime - startTime;
     console.log('[VideoClipper] Clip duration:', clipDuration, 'seconds');
-    console.log('[VideoClipper] Transcript length:', transcript.length, 'chars');
-
-    // Generate SRT content from transcript
-    const srtContent = generateSRT(transcript, clipDuration);
-    console.log('[VideoClipper] Generated SRT:', srtContent);
+    console.log('[VideoClipper] Transcript provided:', transcript ? `${transcript.length} chars` : 'No (will auto-generate)');
 
     const replicate = new Replicate({
       auth: process.env.REPLICATE_API_TOKEN,
@@ -99,7 +88,7 @@ export async function POST(req: NextRequest) {
     let prediction;
     try {
       prediction = await replicate.predictions.create({
-        version: '18a45ff0d95feb4449d192bbdc06b4a6df168fa33def76e507a06c8a9e880d87',
+        version: '18a45ff0d95feb4449d192bbdc06b4a6df168fa33def76dfc51b78ae224b599b',
         input: modelInput,
       });
       console.log('[VideoClipper] Prediction created:', JSON.stringify(prediction, null, 2));
