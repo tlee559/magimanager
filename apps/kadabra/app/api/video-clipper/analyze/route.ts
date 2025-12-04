@@ -53,7 +53,9 @@ export async function POST(req: NextRequest) {
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-    const prompt = `You are an expert video editor specializing in creating short-form ad content and viral social media clips. Analyze this video transcript and identify 3-5 compelling moments that would make great ad clips or viral content (15-60 seconds each).
+    const prompt = `You are an expert video editor specializing in creating short-form ad content and viral social media clips. Analyze this video transcript and identify 3-5 compelling moments that would make great ad clips or viral content.
+
+IMPORTANT: Each clip MUST be between 10-60 seconds long. Never suggest clips shorter than 10 seconds.
 
 VIDEO DURATION: ${Math.round(videoDuration)} seconds
 

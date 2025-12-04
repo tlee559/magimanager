@@ -48,6 +48,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Calculate duration
+    const clipDuration = endTime - startTime;
+
+    // Ensure minimum clip duration of 5 seconds
+    if (clipDuration < 5) {
+      return NextResponse.json(
+        { error: 'Clip must be at least 5 seconds long' },
+        { status: 400 }
+      );
+    }
+
     // Format time as HH:MM:SS for the model
     const formatTimeForModel = (seconds: number): string => {
       const hrs = Math.floor(seconds / 3600);
@@ -57,20 +68,20 @@ export async function POST(req: NextRequest) {
     };
 
     const formattedStart = formatTimeForModel(startTime);
-    const formattedEnd = formatTimeForModel(endTime);
+    const formattedDuration = formatTimeForModel(clipDuration);
 
     console.log('[VideoClipper] Clipping video:', {
       videoUrl: videoUrl.slice(0, 50) + '...',
       startTime: formattedStart,
-      endTime: formattedEnd,
-      duration: endTime - startTime,
+      duration: formattedDuration,
+      durationSeconds: clipDuration,
     });
 
     const replicate = new Replicate({
       auth: process.env.REPLICATE_API_TOKEN,
     });
 
-    // Run trim-video model
+    // Run trim-video model - use duration instead of end_time for better compatibility
     console.log('[VideoClipper] Calling trim-video model...');
     let output;
     try {
@@ -78,7 +89,7 @@ export async function POST(req: NextRequest) {
         input: {
           video: videoUrl,
           start_time: formattedStart,
-          end_time: formattedEnd,
+          duration: formattedDuration,
           quality: 'medium',
           output_format: 'mp4',
         },
