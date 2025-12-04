@@ -42,6 +42,8 @@ export {
 // Authenticator handlers
 export {
   authenticatorsGetAllHandler,
+  authenticatorsPostHandler,
+  standaloneAuthenticatorCodeHandler,
   authenticatorsGetHandler,
   authenticatorsWithCodesHandler,
   authenticatorPostHandler,

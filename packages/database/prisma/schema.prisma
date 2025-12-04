@@ -72,7 +72,7 @@ model IdentityDocument {
 
 model Authenticator {
   id                String   @id @default(cuid())
-  identityProfileId String
+  identityProfileId String?  // Optional - standalone authenticators don't need an identity
 
   // Display info
   name              String   // Display name (e.g., "Google Ads - john@gmail.com")
@@ -95,7 +95,7 @@ model Authenticator {
   lastUsedAt        DateTime? // When code was last copied
 
   // Relations
-  identityProfile   IdentityProfile @relation(fields: [identityProfileId], references: [id], onDelete: Cascade)
+  identityProfile   IdentityProfile? @relation(fields: [identityProfileId], references: [id], onDelete: Cascade)
 
   @@index([identityProfileId])
 }

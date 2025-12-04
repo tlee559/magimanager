@@ -76,7 +76,7 @@ export type AuthenticatorPlatform = "google" | "meta" | "tiktok" | "microsoft" |
 
 export interface Authenticator {
   id: string;
-  identityProfileId: string;
+  identityProfileId: string | null;  // Optional - standalone authenticators don't need an identity
   name: string;
   platform: AuthenticatorPlatform | null;
   issuer: string | null;
@@ -97,7 +97,7 @@ export interface AuthenticatorWithCode extends Omit<Authenticator, 'secret'> {
 }
 
 export interface AuthenticatorCreateInput {
-  identityProfileId: string;
+  identityProfileId?: string | null;  // Optional - standalone authenticators don't need an identity
   name: string;
   platform?: AuthenticatorPlatform | null;
   issuer?: string | null;

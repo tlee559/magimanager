@@ -33,6 +33,82 @@ export async function authenticatorsGetAllHandler(request: NextRequest) {
 }
 
 /**
+ * Handler for POST /api/authenticators
+ * Creates a standalone authenticator (not tied to an identity)
+ */
+export async function authenticatorsPostHandler(request: NextRequest) {
+  const auth = await requireManager();
+  if (!auth.authorized) return auth.error;
+
+  const userId = auth.user?.id || null;
+
+  try {
+    const body = await request.json() as {
+      name: string;
+      identityProfileId?: string | null;
+      platform?: AuthenticatorPlatform | null;
+      issuer?: string | null;
+      accountName?: string | null;
+      secret: string;
+      algorithm?: string;
+      digits?: number;
+      period?: number;
+      notes?: string | null;
+    };
+
+    const data: AuthenticatorCreateInput = {
+      identityProfileId: body.identityProfileId ?? null,
+      name: body.name,
+      platform: body.platform ?? null,
+      issuer: body.issuer || null,
+      accountName: body.accountName || null,
+      secret: body.secret,
+      algorithm: body.algorithm || "SHA1",
+      digits: body.digits || 6,
+      period: body.period || 30,
+      notes: body.notes || null,
+    };
+
+    const result = await authenticatorService.create(data, userId);
+
+    if (!result.success) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+
+    return NextResponse.json(result.data, { status: 201 });
+  } catch (error) {
+    console.error("POST /api/authenticators error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+/**
+ * Handler for GET /api/authenticators/[authId]/code
+ * Gets the current TOTP code for a standalone authenticator
+ */
+export async function standaloneAuthenticatorCodeHandler(
+  request: NextRequest,
+  { params }: { params: Promise<{ authId: string }> }
+) {
+  const auth = await requireAuth();
+  if (!auth.authorized) return auth.error;
+
+  try {
+    const { authId } = await params;
+    const result = await authenticatorService.getCode(authId);
+
+    if (!result.success) {
+      return NextResponse.json({ error: result.error }, { status: 404 });
+    }
+
+    return NextResponse.json(result.data);
+  } catch (error) {
+    console.error("GET /api/authenticators/[authId]/code error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+/**
  * Handler for GET /api/identities/[id]/authenticators
  * Returns all authenticators for an identity
  */

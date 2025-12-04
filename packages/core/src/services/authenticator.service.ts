@@ -203,7 +203,7 @@ class AuthenticatorService {
    * Get all authenticators with identity info (for standalone view)
    */
   async getAllWithIdentity(options: AuthenticatorFindOptions = {}): Promise<
-    ServiceResult<(AuthenticatorPublic & { identityProfile: { id: string; fullName: string; email: string | null } })[]>
+    ServiceResult<(AuthenticatorPublic & { identityProfile: { id: string; fullName: string; email: string | null } | null })[]>
   > {
     try {
       const authenticators = await authenticatorRepository.findAllWithIdentity(options);
@@ -227,25 +227,29 @@ class AuthenticatorService {
         return { success: false, error: "Invalid secret format. Must be a valid base32 string." };
       }
 
-      // Validate identity exists
-      const prisma = getPrisma();
-      const identity = await prisma.identityProfile.findUnique({
-        where: { id: data.identityProfileId },
-      });
+      // Validate identity exists if identityProfileId is provided
+      if (data.identityProfileId) {
+        const prisma = getPrisma();
+        const identity = await prisma.identityProfile.findUnique({
+          where: { id: data.identityProfileId },
+        });
 
-      if (!identity) {
-        return { success: false, error: "Identity not found" };
+        if (!identity) {
+          return { success: false, error: "Identity not found" };
+        }
       }
 
       const authenticator = await authenticatorRepository.create(data);
 
-      // Log activity
-      await this.logActivity(
-        data.identityProfileId,
-        "AUTHENTICATOR_ADDED",
-        `Authenticator "${data.name}" added`,
-        userId
-      );
+      // Log activity if linked to an identity
+      if (data.identityProfileId) {
+        await this.logActivity(
+          data.identityProfileId,
+          "AUTHENTICATOR_ADDED",
+          `Authenticator "${data.name}" added`,
+          userId
+        );
+      }
 
       return { success: true, data: authenticator };
     } catch (error) {
@@ -270,13 +274,15 @@ class AuthenticatorService {
 
       const authenticator = await authenticatorRepository.update(id, data);
 
-      // Log activity
-      await this.logActivity(
-        existing.identityProfileId,
-        "AUTHENTICATOR_UPDATED",
-        `Authenticator "${authenticator.name}" updated`,
-        userId
-      );
+      // Log activity if linked to an identity
+      if (existing.identityProfileId) {
+        await this.logActivity(
+          existing.identityProfileId,
+          "AUTHENTICATOR_UPDATED",
+          `Authenticator "${authenticator.name}" updated`,
+          userId
+        );
+      }
 
       return { success: true, data: authenticator };
     } catch (error) {
@@ -297,13 +303,15 @@ class AuthenticatorService {
 
       await authenticatorRepository.delete(id);
 
-      // Log activity
-      await this.logActivity(
-        existing.identityProfileId,
-        "AUTHENTICATOR_DELETED",
-        `Authenticator "${existing.name}" deleted`,
-        userId
-      );
+      // Log activity if linked to an identity
+      if (existing.identityProfileId) {
+        await this.logActivity(
+          existing.identityProfileId,
+          "AUTHENTICATOR_DELETED",
+          `Authenticator "${existing.name}" deleted`,
+          userId
+        );
+      }
 
       return { success: true };
     } catch (error) {

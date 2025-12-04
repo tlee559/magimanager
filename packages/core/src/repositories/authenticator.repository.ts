@@ -16,7 +16,7 @@ export interface AuthenticatorFindOptions {
 // Type for internal use - includes encrypted secret
 interface AuthenticatorRecord {
   id: string;
-  identityProfileId: string;
+  identityProfileId: string | null;
   name: string;
   platform: string | null;
   issuer: string | null;
@@ -128,7 +128,7 @@ class AuthenticatorRepository {
   /**
    * Find all authenticators with identity info (for standalone view)
    */
-  async findAllWithIdentity(options: AuthenticatorFindOptions = {}): Promise<(AuthenticatorPublic & { identityProfile: { id: string; fullName: string; email: string | null } })[]> {
+  async findAllWithIdentity(options: AuthenticatorFindOptions = {}): Promise<(AuthenticatorPublic & { identityProfile: { id: string; fullName: string; email: string | null } | null })[]> {
     const where: Record<string, unknown> = {};
 
     if (options.identityProfileId) {
@@ -187,7 +187,7 @@ class AuthenticatorRepository {
 
     const record = await this.prisma.authenticator.create({
       data: {
-        identityProfileId: data.identityProfileId,
+        identityProfileId: data.identityProfileId || null,
         name: data.name,
         platform: data.platform || null,
         issuer: data.issuer || null,

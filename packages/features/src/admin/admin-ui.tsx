@@ -4337,7 +4337,7 @@ function AddAuthenticatorModal({
   onClose,
   onSuccess,
 }: {
-  identityId: string;
+  identityId?: string | null;  // Optional - for standalone authenticators
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -4496,7 +4496,12 @@ function AddAuthenticatorModal({
 
     setSaving(true);
     try {
-      const res = await fetch(`/api/identities/${identityId}/authenticators`, {
+      // Use identity-specific or standalone API based on whether identityId is provided
+      const url = identityId
+        ? `/api/identities/${identityId}/authenticators`
+        : `/api/authenticators`;
+
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -4506,11 +4511,15 @@ function AddAuthenticatorModal({
           issuer: formData.issuer || null,
           accountName: formData.accountName || null,
           notes: formData.notes || null,
+          ...(identityId ? {} : { identityProfileId: null }),
         }),
       });
 
       if (res.ok) {
-        await showSuccess("Authenticator Added", "2FA codes will now be available for this identity.");
+        const message = identityId
+          ? "2FA codes will now be available for this identity."
+          : "Standalone authenticator added successfully.";
+        await showSuccess("Authenticator Added", message);
         onSuccess();
       } else {
         const data = await res.json();
@@ -4736,7 +4745,7 @@ type AuthenticatorWithIdentity = AuthenticatorWithCode & {
     id: string;
     fullName: string;
     email: string | null;
-  };
+  } | null;
 };
 
 function AuthenticatorStandaloneView({ onNavigateToIdentity }: { onNavigateToIdentity: (id: string) => void }) {
@@ -4744,6 +4753,7 @@ function AuthenticatorStandaloneView({ onNavigateToIdentity }: { onNavigateToIde
   const [authenticators, setAuthenticators] = useState<AuthenticatorWithIdentity[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [showAddModal, setShowAddModal] = useState(false);
 
   useEffect(() => {
     fetchAllAuthenticators();
@@ -4762,7 +4772,11 @@ function AuthenticatorStandaloneView({ onNavigateToIdentity }: { onNavigateToIde
         const withCodes: AuthenticatorWithIdentity[] = [];
         for (const auth of data.authenticators || []) {
           try {
-            const codeRes = await fetch(`/api/identities/${auth.identityProfileId}/authenticators/${auth.id}/code`);
+            // Use identity-specific or standalone code endpoint
+            const codeUrl = auth.identityProfileId
+              ? `/api/identities/${auth.identityProfileId}/authenticators/${auth.id}/code`
+              : `/api/authenticators/${auth.id}/code`;
+            const codeRes = await fetch(codeUrl);
             if (codeRes.ok) {
               const codeData = await codeRes.json();
               withCodes.push({
@@ -4807,18 +4821,22 @@ function AuthenticatorStandaloneView({ onNavigateToIdentity }: { onNavigateToIde
     const searchLower = search.toLowerCase();
     return (
       auth.name.toLowerCase().includes(searchLower) ||
-      auth.identityProfile.fullName.toLowerCase().includes(searchLower) ||
-      (auth.identityProfile.email && auth.identityProfile.email.toLowerCase().includes(searchLower)) ||
+      (auth.identityProfile?.fullName && auth.identityProfile.fullName.toLowerCase().includes(searchLower)) ||
+      (auth.identityProfile?.email && auth.identityProfile.email.toLowerCase().includes(searchLower)) ||
       (auth.issuer && auth.issuer.toLowerCase().includes(searchLower))
     );
   });
 
-  // Group by identity
-  const groupedByIdentity = filteredAuthenticators.reduce((acc, auth) => {
-    const identityId = auth.identityProfile.id;
+  // Separate standalone authenticators from identity-linked ones
+  const standaloneAuthenticators = filteredAuthenticators.filter((auth) => !auth.identityProfile);
+  const linkedAuthenticators = filteredAuthenticators.filter((auth) => auth.identityProfile);
+
+  // Group identity-linked by identity
+  const groupedByIdentity = linkedAuthenticators.reduce((acc, auth) => {
+    const identityId = auth.identityProfile!.id;
     if (!acc[identityId]) {
       acc[identityId] = {
-        identity: auth.identityProfile,
+        identity: auth.identityProfile!,
         authenticators: [],
       };
     }
@@ -4840,24 +4858,39 @@ function AuthenticatorStandaloneView({ onNavigateToIdentity }: { onNavigateToIde
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      {/* Search */}
-      <div className="mb-6">
+      {/* Header with Search and Add Button */}
+      <div className="mb-6 flex items-center gap-4">
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by name, identity, or email..."
-          className="w-full max-w-md px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-600"
+          className="flex-1 max-w-md px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-600"
         />
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium rounded-lg transition flex items-center gap-2"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          Add
+        </button>
       </div>
 
       {authenticators.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-5xl mb-4 opacity-50">🔐</div>
           <h3 className="text-lg font-medium text-slate-300 mb-2">No Authenticators Yet</h3>
-          <p className="text-sm text-slate-500 max-w-md mx-auto">
-            2FA authenticators are added through Identity Profiles. Go to an identity and click &quot;Add&quot; in the Authenticator section.
+          <p className="text-sm text-slate-500 max-w-md mx-auto mb-4">
+            Add your first authenticator using the button above, or add one through an Identity Profile.
           </p>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium rounded-lg transition"
+          >
+            Add Authenticator
+          </button>
         </div>
       ) : filteredAuthenticators.length === 0 ? (
         <div className="text-center py-12">
@@ -4867,6 +4900,57 @@ function AuthenticatorStandaloneView({ onNavigateToIdentity }: { onNavigateToIde
         </div>
       ) : (
         <div className="space-y-6">
+          {/* Standalone Authenticators Section */}
+          {standaloneAuthenticators.length > 0 && (
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+              {/* Standalone Header */}
+              <div className="px-5 py-3 bg-slate-800/50 flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-slate-100">Standalone Authenticators</div>
+                  <div className="text-xs text-slate-500">Not linked to any identity</div>
+                </div>
+                <div className="text-xs text-slate-500">
+                  {standaloneAuthenticators.length} code{standaloneAuthenticators.length !== 1 ? "s" : ""}
+                </div>
+              </div>
+
+              {/* Standalone Authenticators */}
+              <div className="divide-y divide-slate-800">
+                {standaloneAuthenticators.map((auth) => (
+                  <div
+                    key={auth.id}
+                    className="px-5 py-3 flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg">{platformIcons[auth.platform || "other"]}</span>
+                      <div>
+                        <div className="text-sm font-medium text-slate-200">{auth.name}</div>
+                        {auth.issuer && (
+                          <div className="text-[10px] text-slate-500">{auth.issuer}</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <button
+                          onClick={() => copyCode(auth.code)}
+                          className="font-mono text-xl font-bold text-cyan-400 hover:text-cyan-300 transition tracking-wider"
+                          title="Click to copy"
+                        >
+                          {auth.code.slice(0, 3)} {auth.code.slice(3)}
+                        </button>
+                        <div className="text-[10px] text-slate-500">
+                          {auth.remainingSeconds}s
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Identity-Linked Authenticators */}
           {Object.values(groupedByIdentity).map(({ identity, authenticators: auths }) => (
             <div
               key={identity.id}
@@ -4924,6 +5008,18 @@ function AuthenticatorStandaloneView({ onNavigateToIdentity }: { onNavigateToIde
             </div>
           ))}
         </div>
+      )}
+
+      {/* Add Authenticator Modal */}
+      {showAddModal && (
+        <AddAuthenticatorModal
+          identityId={null}
+          onClose={() => setShowAddModal(false)}
+          onSuccess={() => {
+            setShowAddModal(false);
+            fetchAllAuthenticators();
+          }}
+        />
       )}
     </div>
   );
