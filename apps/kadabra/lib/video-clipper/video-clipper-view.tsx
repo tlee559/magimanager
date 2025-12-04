@@ -686,6 +686,8 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                                 </span>
                                 <a
                                   href={generatedClip.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
                                   download={`clip-${index + 1}-${suggestion.type}.mp4`}
                                   className="px-3 py-1.5 text-sm text-indigo-600 hover:text-indigo-700 border border-indigo-600 hover:border-indigo-700 rounded-lg transition-colors"
                                 >
