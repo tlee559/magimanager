@@ -59,24 +59,34 @@ export async function POST(req: NextRequest) {
 
     // Map style options to model parameters
     const fontSizeMap = {
-      small: 6,
-      medium: 8,
-      large: 10,
+      small: 5,
+      medium: 7,
+      large: 9,
     };
 
-    const highlightColor = style?.fontColor || '#FFE135'; // Yellow default
+    const highlightColor = style?.fontColor || 'yellow';
+
+    // Map position to model's expected values
+    const positionMap: Record<string, string> = {
+      bottom: 'bottom75',
+      center: 'center',
+      top: 'top',
+    };
 
     // Prepare input for the autocaption model
     const modelInput = {
-      video_file: clipUrl,
+      video_file_input: clipUrl,
+      output_video: true,
       font: 'Poppins/Poppins-ExtraBold.ttf',
       color: 'white',
       highlight_color: highlightColor,
-      font_size: fontSizeMap[style?.fontSize || 'medium'],
+      fontsize: fontSizeMap[style?.fontSize || 'medium'],
       stroke_color: 'black',
       stroke_width: 2.6,
       right_to_left: false,
-      subs_position: style?.position || 'bottom',
+      subs_position: positionMap[style?.position || 'bottom'] || 'bottom75',
+      MaxChars: 15,
+      opacity: 0,
     };
 
     console.log('[VideoClipper] Model input:', JSON.stringify(modelInput, null, 2));
