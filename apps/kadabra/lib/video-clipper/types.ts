@@ -33,3 +33,13 @@ export interface ClipSuggestion {
 }
 
 export type AnalyzeStatus = 'idle' | 'analyzing' | 'success' | 'error';
+
+// Phase 4: Clipping types
+export interface GeneratedClip {
+  url: string;
+  startTime: number;
+  endTime: number;
+  duration: number;
+}
+
+export type ClipStatus = 'idle' | 'generating' | 'success' | 'error';

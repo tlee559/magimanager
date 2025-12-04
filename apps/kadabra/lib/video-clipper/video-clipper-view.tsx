@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { upload } from '@vercel/blob/client';
-import { UploadedVideo, UploadStatus, Transcript, TranscribeStatus, ClipSuggestion, AnalyzeStatus } from './types';
+import { UploadedVideo, UploadStatus, Transcript, TranscribeStatus, ClipSuggestion, AnalyzeStatus, GeneratedClip } from './types';
 import {
   MAX_FILE_SIZE,
   ALLOWED_TYPES,
@@ -31,6 +31,11 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
   const [suggestions, setSuggestions] = useState<ClipSuggestion[]>([]);
   const [analyzeStatus, setAnalyzeStatus] = useState<AnalyzeStatus>('idle');
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+
+  // Phase 4: Clipping state
+  const [generatedClips, setGeneratedClips] = useState<Map<number, GeneratedClip>>(new Map());
+  const [clipGenerating, setClipGenerating] = useState<Set<number>>(new Set());
+  const [clipErrors, setClipErrors] = useState<Map<number, string>>(new Map());
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -228,6 +233,61 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     }
   };
 
+  // Phase 4: Handle clip generation
+  const handleGenerateClip = async (index: number, suggestion: ClipSuggestion) => {
+    if (!video) return;
+
+    console.log('[VideoClipper] Generating clip:', { index, startTime: suggestion.startTime, endTime: suggestion.endTime });
+
+    // Mark as generating
+    setClipGenerating(prev => new Set(prev).add(index));
+    setClipErrors(prev => {
+      const next = new Map(prev);
+      next.delete(index);
+      return next;
+    });
+
+    try {
+      const response = await fetch('/api/video-clipper/clip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoUrl: video.url,
+          startTime: suggestion.startTime,
+          endTime: suggestion.endTime,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Clip generation failed');
+      }
+
+      console.log('[VideoClipper] Clip generated:', data.clip);
+
+      // Store the generated clip
+      setGeneratedClips(prev => {
+        const next = new Map(prev);
+        next.set(index, data.clip);
+        return next;
+      });
+    } catch (err) {
+      console.error('[VideoClipper] Clip generation error:', err);
+      setClipErrors(prev => {
+        const next = new Map(prev);
+        next.set(index, err instanceof Error ? err.message : 'Clip generation failed');
+        return next;
+      });
+    } finally {
+      setClipGenerating(prev => {
+        const next = new Set(prev);
+        next.delete(index);
+        return next;
+      });
+    }
+  };
+
   // Get label color for clip type
   const getTypeColor = (type: ClipSuggestion['type']) => {
     const colors = {
@@ -256,6 +316,10 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     setSuggestions([]);
     setAnalyzeStatus('idle');
     setAnalyzeError(null);
+    // Reset clip state
+    setGeneratedClips(new Map());
+    setClipGenerating(new Set());
+    setClipErrors(new Map());
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -534,35 +598,105 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                     Suggested Clips ({suggestions.length})
                   </h3>
                   <div className="space-y-4">
-                    {suggestions.map((suggestion, index) => (
-                      <div
-                        key={index}
-                        className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm"
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg font-semibold text-gray-900">
-                              #{index + 1}
-                            </span>
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${getTypeColor(suggestion.type)}`}>
-                              {suggestion.type}
-                            </span>
-                            <span className="text-sm text-gray-500">
-                              {formatTimestamp(suggestion.startTime)} - {formatTimestamp(suggestion.endTime)}
-                            </span>
+                    {suggestions.map((suggestion, index) => {
+                      const isGenerating = clipGenerating.has(index);
+                      const generatedClip = generatedClips.get(index);
+                      const clipError = clipErrors.get(index);
+
+                      return (
+                        <div
+                          key={index}
+                          className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm"
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg font-semibold text-gray-900">
+                                #{index + 1}
+                              </span>
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${getTypeColor(suggestion.type)}`}>
+                                {suggestion.type}
+                              </span>
+                              <span className="text-sm text-gray-500">
+                                {formatTimestamp(suggestion.startTime)} - {formatTimestamp(suggestion.endTime)}
+                              </span>
+                              <span className="text-xs text-gray-400">
+                                ({Math.round(suggestion.endTime - suggestion.startTime)}s)
+                              </span>
+                            </div>
+
+                            {/* Phase 4: Generate Clip Button */}
+                            {!generatedClip && !isGenerating && (
+                              <button
+                                onClick={() => handleGenerateClip(index, suggestion)}
+                                className="px-3 py-1.5 text-sm text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+                              >
+                                Generate Clip
+                              </button>
+                            )}
+
+                            {/* Generating State */}
+                            {isGenerating && (
+                              <button
+                                disabled
+                                className="px-3 py-1.5 text-sm text-white bg-indigo-400 rounded-lg flex items-center gap-2 cursor-not-allowed"
+                              >
+                                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Generating...
+                              </button>
+                            )}
                           </div>
-                          {/* Placeholder for Phase 4 - Generate Clip button */}
-                        </div>
-                        <p className="text-gray-700 text-sm mb-2">
-                          {suggestion.reason}
-                        </p>
-                        {suggestion.transcript && (
-                          <p className="text-gray-500 text-xs italic border-l-2 border-gray-200 pl-3">
-                            "{suggestion.transcript}"
+
+                          <p className="text-gray-700 text-sm mb-2">
+                            {suggestion.reason}
                           </p>
-                        )}
-                      </div>
-                    ))}
+
+                          {suggestion.transcript && (
+                            <p className="text-gray-500 text-xs italic border-l-2 border-gray-200 pl-3 mb-3">
+                              "{suggestion.transcript}"
+                            </p>
+                          )}
+
+                          {/* Clip Error */}
+                          {clipError && (
+                            <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3">
+                              <p className="text-red-700 text-sm">{clipError}</p>
+                              <button
+                                onClick={() => handleGenerateClip(index, suggestion)}
+                                className="text-red-600 underline text-xs mt-1"
+                              >
+                                Try again
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Generated Clip Player */}
+                          {generatedClip && (
+                            <div className="mt-3 bg-gray-50 rounded-lg p-3">
+                              <video
+                                src={generatedClip.url}
+                                controls
+                                className="w-full rounded-lg max-h-[300px]"
+                              />
+                              <div className="flex items-center justify-between mt-2">
+                                <span className="text-xs text-gray-500">
+                                  Duration: {Math.round(generatedClip.duration)}s
+                                </span>
+                                <a
+                                  href={generatedClip.url}
+                                  download={`clip-${index + 1}-${suggestion.type}.mp4`}
+                                  className="px-3 py-1.5 text-sm text-indigo-600 hover:text-indigo-700 border border-indigo-600 hover:border-indigo-700 rounded-lg transition-colors"
+                                >
+                                  Download
+                                </a>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
