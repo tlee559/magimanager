@@ -140,6 +140,8 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
   const [productPosition, setProductPosition] = useState<ProductPosition>("center");
   const [productScale, setProductScale] = useState(0.6);
   const [isCompositing, setIsCompositing] = useState(false);
+  const [bgOverlayColor, setBgOverlayColor] = useState("#000000");
+  const [bgOverlayOpacity, setBgOverlayOpacity] = useState(0);
 
   // Text overlay state
   const [showTextOverlay, setShowTextOverlay] = useState(false);
@@ -305,6 +307,8 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
           productUrl: transparentProductUrl,
           position: productPosition,
           scale: productScale,
+          overlayColor: bgOverlayOpacity > 0 ? bgOverlayColor : undefined,
+          overlayOpacity: bgOverlayOpacity,
         }),
       });
 
@@ -448,6 +452,8 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                 productUrl: transparentProductUrl,
                 position: productPosition,
                 scale: productScale,
+                overlayColor: bgOverlayOpacity > 0 ? bgOverlayColor : undefined,
+                overlayOpacity: bgOverlayOpacity,
               }),
             });
 
@@ -919,6 +925,42 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                         disabled={isGenerating}
                         className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-teal-500"
                       />
+                    </div>
+
+                    {/* Background Color Overlay */}
+                    <div className="pt-2 border-t border-slate-700/50">
+                      <label className="block text-xs font-medium text-slate-400 mb-2">
+                        Background Color Overlay
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={bgOverlayColor}
+                          onChange={(e) => setBgOverlayColor(e.target.value)}
+                          disabled={isGenerating}
+                          className="w-10 h-8 rounded border border-slate-700 bg-slate-800 cursor-pointer"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs text-slate-500">Opacity</span>
+                            <span className="text-xs text-slate-400">{Math.round(bgOverlayOpacity * 100)}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="80"
+                            value={bgOverlayOpacity * 100}
+                            onChange={(e) => setBgOverlayOpacity(parseInt(e.target.value) / 100)}
+                            disabled={isGenerating}
+                            className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-teal-500"
+                          />
+                        </div>
+                      </div>
+                      {bgOverlayOpacity > 0 && (
+                        <p className="text-xs text-slate-500 mt-1.5">
+                          A {bgOverlayColor} tint will be applied at {Math.round(bgOverlayOpacity * 100)}% opacity
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
