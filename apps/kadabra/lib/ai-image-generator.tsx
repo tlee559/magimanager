@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import {
   ArrowLeft,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -19,6 +20,7 @@ import {
 type Provider = "google-imagen" | "replicate-flux";
 type AspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
 type ViewMode = "generate" | "gallery";
+type PresetCategory = "custom" | "google" | "meta" | "display";
 
 interface GeneratedImage {
   id: string;
@@ -43,6 +45,53 @@ const ASPECT_RATIOS: { value: AspectRatio; label: string; icon: string }[] = [
   { value: "3:4", label: "Photo", icon: "▯" },
 ];
 
+// Ad platform presets with common sizes
+interface AdPreset {
+  id: string;
+  name: string;
+  aspectRatio: AspectRatio;
+  description: string;
+}
+
+const AD_PRESETS: Record<PresetCategory, { label: string; color: string; presets: AdPreset[] }> = {
+  custom: {
+    label: "Custom",
+    color: "slate",
+    presets: [
+      { id: "square", name: "Square", aspectRatio: "1:1", description: "Universal format" },
+      { id: "landscape", name: "Landscape", aspectRatio: "16:9", description: "Wide format" },
+      { id: "portrait", name: "Portrait", aspectRatio: "9:16", description: "Tall format" },
+    ],
+  },
+  google: {
+    label: "Google Ads",
+    color: "blue",
+    presets: [
+      { id: "google-square", name: "Square", aspectRatio: "1:1", description: "Responsive display" },
+      { id: "google-landscape", name: "Landscape", aspectRatio: "16:9", description: "YouTube, Display" },
+      { id: "google-portrait", name: "Portrait", aspectRatio: "9:16", description: "Demand Gen" },
+    ],
+  },
+  meta: {
+    label: "Meta Ads",
+    color: "indigo",
+    presets: [
+      { id: "meta-feed", name: "Feed", aspectRatio: "1:1", description: "FB/IG Feed" },
+      { id: "meta-story", name: "Story/Reel", aspectRatio: "9:16", description: "Stories & Reels" },
+      { id: "meta-carousel", name: "Carousel", aspectRatio: "1:1", description: "Multi-image ads" },
+    ],
+  },
+  display: {
+    label: "Display",
+    color: "emerald",
+    presets: [
+      { id: "display-leaderboard", name: "Leaderboard", aspectRatio: "16:9", description: "728x90 style" },
+      { id: "display-skyscraper", name: "Skyscraper", aspectRatio: "9:16", description: "160x600 style" },
+      { id: "display-rectangle", name: "Rectangle", aspectRatio: "4:3", description: "300x250 style" },
+    ],
+  },
+};
+
 export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("generate");
   const [prompt, setPrompt] = useState("");
@@ -56,6 +105,11 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
   const [error, setError] = useState<string | null>(null);
   const [savingIndex, setSavingIndex] = useState<number | null>(null);
   const [savedIndices, setSavedIndices] = useState<Set<number>>(new Set());
+
+  // Preset state
+  const [presetCategory, setPresetCategory] = useState<PresetCategory>("custom");
+  const [selectedPreset, setSelectedPreset] = useState<string>("square");
+  const [showPresetDropdown, setShowPresetDropdown] = useState(false);
 
   // Reference image state
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
@@ -120,6 +174,22 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
   const clearReferenceImage = () => {
     setReferenceImage(null);
     setReferenceMode(false);
+  };
+
+  // Get current preset details
+  const getCurrentPreset = (): AdPreset | undefined => {
+    return AD_PRESETS[presetCategory].presets.find((p) => p.id === selectedPreset);
+  };
+
+  // Handle preset selection
+  const handlePresetSelect = (category: PresetCategory, presetId: string) => {
+    const preset = AD_PRESETS[category].presets.find((p) => p.id === presetId);
+    if (preset) {
+      setPresetCategory(category);
+      setSelectedPreset(presetId);
+      setAspectRatio(preset.aspectRatio);
+      setShowPresetDropdown(false);
+    }
   };
 
   const handleGenerate = async () => {
@@ -480,25 +550,107 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
               </div>
             )}
 
-            {/* Aspect Ratio */}
+            {/* Ad Platform Presets */}
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                Aspect Ratio
+                Size Preset
               </label>
-              <div className="flex gap-2">
+              <div className="relative">
+                <button
+                  onClick={() => !isGenerating && setShowPresetDropdown(!showPresetDropdown)}
+                  disabled={isGenerating}
+                  className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg text-sm text-slate-200 hover:border-slate-600 transition disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`px-2 py-0.5 rounded text-xs font-medium ${
+                        presetCategory === "google"
+                          ? "bg-blue-500/20 text-blue-400"
+                          : presetCategory === "meta"
+                            ? "bg-indigo-500/20 text-indigo-400"
+                            : presetCategory === "display"
+                              ? "bg-emerald-500/20 text-emerald-400"
+                              : "bg-slate-600/50 text-slate-300"
+                      }`}
+                    >
+                      {AD_PRESETS[presetCategory].label}
+                    </span>
+                    <span>{getCurrentPreset()?.name}</span>
+                    <span className="text-slate-500 text-xs">({aspectRatio})</span>
+                  </div>
+                  <ChevronDown
+                    className={`w-4 h-4 text-slate-400 transition-transform ${showPresetDropdown ? "rotate-180" : ""}`}
+                  />
+                </button>
+
+                {showPresetDropdown && (
+                  <div className="absolute z-20 w-full mt-2 bg-slate-800 border border-slate-700 rounded-lg shadow-xl overflow-hidden">
+                    {(Object.keys(AD_PRESETS) as PresetCategory[]).map((category) => (
+                      <div key={category}>
+                        <div
+                          className={`px-3 py-1.5 text-xs font-medium ${
+                            category === "google"
+                              ? "bg-blue-500/10 text-blue-400"
+                              : category === "meta"
+                                ? "bg-indigo-500/10 text-indigo-400"
+                                : category === "display"
+                                  ? "bg-emerald-500/10 text-emerald-400"
+                                  : "bg-slate-700/50 text-slate-400"
+                          }`}
+                        >
+                          {AD_PRESETS[category].label}
+                        </div>
+                        {AD_PRESETS[category].presets.map((preset) => (
+                          <button
+                            key={preset.id}
+                            onClick={() => handlePresetSelect(category, preset.id)}
+                            className={`w-full flex items-center justify-between px-4 py-2 text-sm hover:bg-slate-700/50 transition ${
+                              selectedPreset === preset.id
+                                ? "bg-slate-700/30 text-slate-200"
+                                : "text-slate-300"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span>{preset.name}</span>
+                              <span className="text-xs text-slate-500">
+                                {preset.aspectRatio}
+                              </span>
+                            </div>
+                            <span className="text-xs text-slate-500">
+                              {preset.description}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Quick aspect ratio buttons */}
+              <div className="flex gap-2 mt-3">
                 {ASPECT_RATIOS.map((ar) => (
                   <button
                     key={ar.value}
-                    onClick={() => setAspectRatio(ar.value)}
+                    onClick={() => {
+                      setAspectRatio(ar.value);
+                      // Find matching preset or set to custom
+                      const matchingPreset = AD_PRESETS.custom.presets.find(
+                        (p) => p.aspectRatio === ar.value
+                      );
+                      if (matchingPreset) {
+                        setPresetCategory("custom");
+                        setSelectedPreset(matchingPreset.id);
+                      }
+                    }}
                     disabled={isGenerating}
-                    className={`flex-1 py-2 px-2 rounded-lg border transition text-xs font-medium flex flex-col items-center gap-1 ${
+                    className={`flex-1 py-1.5 px-2 rounded-lg border transition text-xs font-medium ${
                       aspectRatio === ar.value
                         ? "bg-slate-700 border-slate-500 text-slate-200"
                         : "bg-slate-900/50 border-slate-700 text-slate-500 hover:border-slate-600"
                     }`}
                   >
-                    <span className="text-lg">{ar.icon}</span>
-                    <span>{ar.value}</span>
+                    {ar.value}
                   </button>
                 ))}
               </div>
