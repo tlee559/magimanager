@@ -31,9 +31,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { segments, videoDuration } = body as {
+    const { segments, videoDuration, targetClipDuration = 30 } = body as {
       segments: TranscriptSegment[];
       videoDuration: number;
+      targetClipDuration?: number;
     };
 
     if (!segments || segments.length === 0) {
@@ -43,7 +44,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log('[VideoClipper] Analyzing', segments.length, 'segments');
+    // Calculate clip duration range based on target
+    const minDuration = Math.max(5, Math.floor(targetClipDuration * 0.7));
+    const maxDuration = Math.ceil(targetClipDuration * 1.3);
+
+    console.log('[VideoClipper] Analyzing', segments.length, 'segments, target duration:', targetClipDuration, 'seconds');
 
     // Format transcript for AI
     const formattedTranscript = segments
@@ -55,7 +60,10 @@ export async function POST(req: NextRequest) {
 
     const prompt = `You are an expert video editor specializing in creating short-form ad content and viral social media clips. Analyze this video transcript and identify 3-5 compelling moments that would make great ad clips or viral content.
 
-IMPORTANT: Each clip MUST be between 10-60 seconds long. Never suggest clips shorter than 10 seconds.
+CRITICAL DURATION REQUIREMENT:
+- Target clip duration: approximately ${targetClipDuration} seconds
+- Each clip MUST be between ${minDuration}-${maxDuration} seconds long
+- DO NOT suggest clips outside this range
 
 VIDEO DURATION: ${Math.round(videoDuration)} seconds
 
@@ -63,7 +71,7 @@ TRANSCRIPT:
 ${formattedTranscript}
 
 For each suggested clip, identify:
-1. The exact start and end timestamps (must be within the video duration)
+1. The exact start and end timestamps (must be within the video duration, and clip must be ${minDuration}-${maxDuration} seconds)
 2. The type of moment:
    - "hook" - Attention-grabbing opening statement
    - "testimonial" - Customer story or endorsement
@@ -79,7 +87,7 @@ Return ONLY valid JSON in this exact format (no markdown, no explanation):
   "suggestions": [
     {
       "startTime": 0,
-      "endTime": 15,
+      "endTime": ${targetClipDuration},
       "type": "hook",
       "reason": "Strong opening that grabs attention",
       "transcript": "The exact text from this segment"
@@ -111,12 +119,16 @@ Return ONLY valid JSON in this exact format (no markdown, no explanation):
       const parsed = JSON.parse(cleanJson);
       suggestions = parsed.suggestions || [];
 
-      // Validate and clamp timestamps
+      // Validate and clamp timestamps, filter by duration range
       suggestions = suggestions.map(s => ({
         ...s,
         startTime: Math.max(0, Math.min(s.startTime, videoDuration)),
         endTime: Math.max(0, Math.min(s.endTime, videoDuration)),
-      })).filter(s => s.endTime > s.startTime);
+      })).filter(s => {
+        const duration = s.endTime - s.startTime;
+        // Keep clips that are reasonably close to target (±50% tolerance for edge cases)
+        return duration >= minDuration * 0.5 && duration <= maxDuration * 1.5 && s.endTime > s.startTime;
+      });
 
     } catch (parseError) {
       console.error('[VideoClipper] Failed to parse Gemini response:', parseError);

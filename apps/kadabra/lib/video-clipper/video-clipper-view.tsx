@@ -80,6 +80,7 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
 
   // UI state
   const [showTranscript, setShowTranscript] = useState(false);
+  const [targetClipDuration, setTargetClipDuration] = useState<number>(30); // Default 30 seconds
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -397,6 +398,7 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
         body: JSON.stringify({
           segments: transcript.segments,
           videoDuration: video.duration || 0,
+          targetClipDuration,
         }),
       });
 
@@ -1247,25 +1249,44 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                       </span>
                     </button>
 
-                    {/* Analyze Button */}
-                    {suggestions.length === 0 && analyzeStatus !== 'analyzing' && (
-                      <button
-                        onClick={handleAnalyze}
-                        className="px-4 py-2 text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition text-sm flex items-center gap-2"
-                      >
-                        <Sparkles className="w-4 h-4" />
-                        Find Ad Moments
-                      </button>
-                    )}
+                    {/* Duration Selector + Analyze Button */}
+                    {suggestions.length === 0 && (
+                      <div className="flex items-center gap-3">
+                        {/* Clip Duration Selector */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500">Clip length:</span>
+                          <select
+                            value={targetClipDuration}
+                            onChange={(e) => setTargetClipDuration(Number(e.target.value))}
+                            disabled={analyzeStatus === 'analyzing'}
+                            className="px-2 py-1.5 text-sm bg-slate-700 border border-slate-600 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                          >
+                            <option value={10}>~10 sec</option>
+                            <option value={15}>~15 sec</option>
+                            <option value={30}>~30 sec</option>
+                            <option value={60}>~60 sec</option>
+                            <option value={90}>~90 sec</option>
+                          </select>
+                        </div>
 
-                    {analyzeStatus === 'analyzing' && (
-                      <button
-                        disabled
-                        className="px-4 py-2 text-white bg-emerald-500/50 rounded-lg flex items-center gap-2 cursor-not-allowed text-sm"
-                      >
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Analyzing...
-                      </button>
+                        {analyzeStatus !== 'analyzing' ? (
+                          <button
+                            onClick={handleAnalyze}
+                            className="px-4 py-2 text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition text-sm flex items-center gap-2"
+                          >
+                            <Sparkles className="w-4 h-4" />
+                            Find Ad Moments
+                          </button>
+                        ) : (
+                          <button
+                            disabled
+                            className="px-4 py-2 text-white bg-emerald-500/50 rounded-lg flex items-center gap-2 cursor-not-allowed text-sm"
+                          >
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Analyzing...
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
 
@@ -1466,10 +1487,26 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                           {/* Phase 7: 3x2 Export Grid */}
                           {generatedClip && (
                             <div className="mt-4 bg-slate-900/30 rounded-lg border border-slate-700/50 p-4">
-                              <h4 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
-                                <Maximize2 className="w-4 h-4 text-slate-400" />
-                                Export Formats
-                              </h4>
+                              <div className="flex items-center justify-between mb-3">
+                                <h4 className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                                  <Maximize2 className="w-4 h-4 text-slate-400" />
+                                  Export Formats
+                                </h4>
+                                {/* Background processing indicator */}
+                                {currentJobId && (() => {
+                                  const states = exportStates.get(index) || {};
+                                  const hasProcessing = Object.values(states).some(s => s?.status === 'generating');
+                                  if (hasProcessing) {
+                                    return (
+                                      <span className="text-xs text-violet-400 bg-violet-500/10 px-2 py-1 rounded-full flex items-center gap-1">
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                        Processing in background — you can navigate away
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </div>
 
                               {/* Grid Header */}
                               <div className="grid grid-cols-4 gap-2 mb-2">
