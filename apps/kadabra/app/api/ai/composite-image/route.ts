@@ -55,14 +55,38 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    console.log("Compositing with:", {
+      backgroundUrl: backgroundUrl.substring(0, 100),
+      productUrl: productUrl.substring(0, 100),
+      position,
+      scale,
+      overlayColor,
+      overlayOpacity,
+    });
+
     // Fetch both images
     const [backgroundResponse, productResponse] = await Promise.all([
       fetch(backgroundUrl),
       fetch(productUrl),
     ]);
 
+    if (!backgroundResponse.ok) {
+      console.error("Failed to fetch background:", backgroundResponse.status);
+      throw new Error("Failed to fetch background image");
+    }
+
+    if (!productResponse.ok) {
+      console.error("Failed to fetch product:", productResponse.status);
+      throw new Error("Failed to fetch product image");
+    }
+
     const backgroundBuffer = Buffer.from(await backgroundResponse.arrayBuffer());
     const productBuffer = Buffer.from(await productResponse.arrayBuffer());
+
+    console.log("Fetched images:", {
+      backgroundSize: backgroundBuffer.length,
+      productSize: productBuffer.length,
+    });
 
     // Get background dimensions
     const backgroundMeta = await sharp(backgroundBuffer).metadata();
@@ -112,7 +136,7 @@ export async function POST(req: NextRequest) {
     // Build composite layers
     const compositeLayers: sharp.OverlayOptions[] = [];
 
-    // Add color overlay if specified
+    // Add color overlay if specified (between background and product)
     if (overlayColor && overlayOpacity > 0) {
       // Parse hex color
       const hex = overlayColor.replace("#", "");
@@ -121,7 +145,7 @@ export async function POST(req: NextRequest) {
       const b = parseInt(hex.slice(4, 6), 16);
       const alpha = Math.round(overlayOpacity * 255);
 
-      // Create color overlay
+      // Create semi-transparent color overlay
       const colorOverlay = await sharp({
         create: {
           width: bgWidth,
@@ -135,7 +159,8 @@ export async function POST(req: NextRequest) {
 
       compositeLayers.push({
         input: colorOverlay,
-        blend: "over",
+        top: 0,
+        left: 0,
       });
     }
 
@@ -146,8 +171,9 @@ export async function POST(req: NextRequest) {
       top,
     });
 
-    // Composite the images
+    // Composite the images onto the background
     const composited = await sharp(backgroundBuffer)
+      .ensureAlpha()
       .composite(compositeLayers)
       .png()
       .toBuffer();
