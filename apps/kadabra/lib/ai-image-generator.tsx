@@ -227,10 +227,33 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
     }
 
     const reader = new FileReader();
-    reader.onload = (event) => {
-      setProductImage(event.target?.result as string);
+    reader.onload = async (event) => {
+      const imageData = event.target?.result as string;
+      setProductImage(imageData);
       setTransparentProductUrl(null);
       setError(null);
+
+      // Automatically remove background
+      setIsRemovingBackground(true);
+      try {
+        const response = await fetch("/api/ai/remove-background", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageUrl: imageData }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to remove background");
+        }
+
+        setTransparentProductUrl(data.transparentUrl);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Background removal failed");
+      } finally {
+        setIsRemovingBackground(false);
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -763,7 +786,11 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                         {/* Transparent */}
                         <div>
                           <p className="text-xs text-slate-500 mb-1">
-                            {transparentProductUrl ? "Background Removed" : "Processing..."}
+                            {transparentProductUrl
+                              ? "Background Removed"
+                              : isRemovingBackground
+                                ? "Removing background..."
+                                : "Failed"}
                           </p>
                           <div
                             className="aspect-square rounded-lg border overflow-hidden"
@@ -774,12 +801,17 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                               backgroundSize: "16px 16px",
                               backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
                               backgroundColor: transparentProductUrl ? "#1e293b" : "#0f172a80",
-                              borderColor: transparentProductUrl ? "#10b981" : "#334155",
+                              borderColor: transparentProductUrl
+                                ? "#10b981"
+                                : !isRemovingBackground && !transparentProductUrl
+                                  ? "#ef4444"
+                                  : "#334155",
                             }}
                           >
                             {isRemovingBackground ? (
-                              <div className="w-full h-full flex items-center justify-center">
-                                <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
+                              <div className="w-full h-full flex flex-col items-center justify-center gap-2">
+                                <Loader2 className="w-6 h-6 text-teal-400 animate-spin" />
+                                <span className="text-xs text-slate-400">Processing...</span>
                               </div>
                             ) : transparentProductUrl ? (
                               <img
@@ -788,21 +820,28 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                                 className="w-full h-full object-contain"
                               />
                             ) : (
-                              <div className="w-full h-full flex items-center justify-center">
-                                <span className="text-xs text-slate-500">Not processed</span>
+                              <div className="w-full h-full flex flex-col items-center justify-center gap-2">
+                                <X className="w-6 h-6 text-red-400" />
+                                <span className="text-xs text-red-400">Failed</span>
                               </div>
                             )}
                           </div>
                         </div>
                       </div>
                       <div className="flex gap-2 mt-3">
+                        {isRemovingBackground && (
+                          <div className="flex-1 py-2 px-3 bg-teal-600/20 border border-teal-500/30 rounded-lg text-sm font-medium text-teal-400 flex items-center justify-center gap-2">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Removing Background...
+                          </div>
+                        )}
                         {!transparentProductUrl && !isRemovingBackground && (
                           <button
                             onClick={handleRemoveBackground}
-                            className="flex-1 py-2 px-3 bg-teal-600 hover:bg-teal-500 rounded-lg text-sm font-medium text-white transition flex items-center justify-center gap-2"
+                            className="flex-1 py-2 px-3 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium text-white transition flex items-center justify-center gap-2"
                           >
                             <Sparkles className="w-4 h-4" />
-                            Remove Background
+                            Retry Background Removal
                           </button>
                         )}
                         {transparentProductUrl && (
@@ -814,7 +853,7 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                         <button
                           onClick={clearProductImage}
                           disabled={isRemovingBackground}
-                          className="py-2 px-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm text-slate-300 transition"
+                          className="py-2 px-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm text-slate-300 transition disabled:opacity-50"
                         >
                           Clear
                         </button>
