@@ -11,6 +11,8 @@ import {
   Download,
   Trash2,
   ChevronLeft,
+  ChevronDown,
+  ChevronRight,
   History,
   Plus,
   Check,
@@ -75,6 +77,9 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
   const [loadingJobs, setLoadingJobs] = useState(true);
   const [showJobHistory, setShowJobHistory] = useState(false);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+
+  // UI state
+  const [showTranscript, setShowTranscript] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -1052,17 +1057,25 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                 </div>
               )}
 
-              {/* Transcript Display */}
+              {/* Transcript Display - Collapsible */}
               {transcript && (
                 <div className="bg-slate-800/50 rounded-xl border border-slate-700/50">
-                  <div className="px-5 py-4 border-b border-slate-700/50 flex items-center justify-between">
-                    <h3 className="font-semibold text-slate-100 flex items-center gap-2">
+                  <div className="px-5 py-4 flex items-center justify-between">
+                    <button
+                      onClick={() => setShowTranscript(!showTranscript)}
+                      className="font-semibold text-slate-100 flex items-center gap-2 hover:text-slate-200 transition"
+                    >
+                      {showTranscript ? (
+                        <ChevronDown className="w-4 h-4 text-slate-400" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-slate-400" />
+                      )}
                       <FileVideo className="w-4 h-4 text-slate-400" />
                       Transcript
                       <span className="text-sm text-slate-500 font-normal">
                         ({transcript.segments.length} segments)
                       </span>
-                    </h3>
+                    </button>
 
                     {/* Analyze Button */}
                     {suggestions.length === 0 && analyzeStatus !== 'analyzing' && (
@@ -1086,27 +1099,29 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                     )}
                   </div>
 
-                  <div className="max-h-64 overflow-y-auto">
-                    {transcript.segments.length > 0 ? (
-                      <div className="divide-y divide-slate-700/50">
-                        {transcript.segments.map((segment, index) => (
-                          <div
-                            key={index}
-                            className="px-5 py-3 hover:bg-slate-700/30 transition"
-                          >
-                            <span className="text-xs font-mono text-violet-400 mr-3">
-                              {formatTimestamp(segment.start)}
-                            </span>
-                            <span className="text-slate-300">{segment.text}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-5 text-slate-500">
-                        {transcript.fullText || 'No transcript available'}
-                      </div>
-                    )}
-                  </div>
+                  {showTranscript && (
+                    <div className="max-h-64 overflow-y-auto border-t border-slate-700/50">
+                      {transcript.segments.length > 0 ? (
+                        <div className="divide-y divide-slate-700/50">
+                          {transcript.segments.map((segment, index) => (
+                            <div
+                              key={index}
+                              className="px-5 py-3 hover:bg-slate-700/30 transition"
+                            >
+                              <span className="text-xs font-mono text-violet-400 mr-3">
+                                {formatTimestamp(segment.start)}
+                              </span>
+                              <span className="text-slate-300">{segment.text}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-5 text-slate-500">
+                          {transcript.fullText || 'No transcript available'}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
