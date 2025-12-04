@@ -5,8 +5,8 @@ import { put } from '@vercel/blob';
 export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 minutes max for clipping
 
-// FFmpeg-based video trimming model
-const TRIM_MODEL = 'fofr/video-splitter:e06fe0d7d7f14c14e36d84a11c68c67fa6b2e819e8a6d7168824d97c5d7c6d0c';
+// Video trimming model - lucataco/trim-video
+const TRIM_MODEL = 'lucataco/trim-video:a58ed80215326cba0a80c77a11dd0d0968c567388228891b3c5c67de2a8d10cb';
 
 export async function POST(req: NextRequest) {
   console.log('[VideoClipper] Clip request received');
@@ -48,10 +48,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Format time as HH:MM:SS for the model
+    const formatTimeForModel = (seconds: number): string => {
+      const hrs = Math.floor(seconds / 3600);
+      const mins = Math.floor((seconds % 3600) / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    const formattedStart = formatTimeForModel(startTime);
+    const formattedEnd = formatTimeForModel(endTime);
+
     console.log('[VideoClipper] Clipping video:', {
       videoUrl: videoUrl.slice(0, 50) + '...',
-      startTime,
-      endTime,
+      startTime: formattedStart,
+      endTime: formattedEnd,
       duration: endTime - startTime,
     });
 
@@ -59,13 +70,15 @@ export async function POST(req: NextRequest) {
       auth: process.env.REPLICATE_API_TOKEN,
     });
 
-    // Run video splitter model
-    console.log('[VideoClipper] Calling video-splitter model...');
+    // Run trim-video model
+    console.log('[VideoClipper] Calling trim-video model...');
     const output = await replicate.run(TRIM_MODEL, {
       input: {
         video: videoUrl,
-        start_time: startTime,
-        end_time: endTime,
+        start_time: formattedStart,
+        end_time: formattedEnd,
+        quality: 'medium',
+        output_format: 'mp4',
       },
     });
 
