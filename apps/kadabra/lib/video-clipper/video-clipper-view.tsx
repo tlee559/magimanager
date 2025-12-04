@@ -20,9 +20,11 @@ import {
   Wand2,
   Save,
   Eye,
-  Film
+  Film,
+  Type,
+  MessageSquare
 } from 'lucide-react';
-import { UploadedVideo, UploadStatus, Transcript, TranscribeStatus, ClipSuggestion, AnalyzeStatus, GeneratedClip, SavedJob, SaveJobStatus } from './types';
+import { UploadedVideo, UploadStatus, Transcript, TranscribeStatus, ClipSuggestion, AnalyzeStatus, GeneratedClip, SavedJob, SaveJobStatus, CaptionState } from './types';
 import {
   MAX_FILE_SIZE,
   ALLOWED_TYPES,
@@ -56,6 +58,9 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
   const [generatedClips, setGeneratedClips] = useState<Map<number, GeneratedClip>>(new Map());
   const [clipGenerating, setClipGenerating] = useState<Set<number>>(new Set());
   const [clipErrors, setClipErrors] = useState<Map<number, string>>(new Map());
+
+  // Phase 6: Caption state
+  const [captionStates, setCaptionStates] = useState<Map<number, CaptionState>>(new Map());
 
   // Phase 5: Job state
   const [savedJobs, setSavedJobs] = useState<SavedJob[]>([]);
@@ -352,6 +357,68 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     }
   };
 
+  // Phase 6: Handle caption generation
+  const handleAddCaptions = async (index: number) => {
+    const clip = generatedClips.get(index);
+    const suggestion = suggestions[index];
+    if (!clip || !suggestion) return;
+
+    console.log('[VideoClipper] Adding captions to clip:', { index, clipUrl: clip.url });
+
+    // Mark as generating
+    setCaptionStates(prev => {
+      const next = new Map(prev);
+      next.set(index, { status: 'generating' });
+      return next;
+    });
+
+    try {
+      const response = await fetch('/api/video-clipper/caption', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clipUrl: clip.url,
+          transcript: suggestion.transcript,
+          startTime: suggestion.startTime,
+          endTime: suggestion.endTime,
+          style: {
+            fontSize: 'medium',
+            position: 'bottom',
+            fontColor: '#FFE135',
+          },
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Caption generation failed');
+      }
+
+      console.log('[VideoClipper] Captions added:', data.captionedClipUrl);
+
+      // Store the captioned URL
+      setCaptionStates(prev => {
+        const next = new Map(prev);
+        next.set(index, {
+          status: 'success',
+          captionedUrl: data.captionedClipUrl,
+        });
+        return next;
+      });
+    } catch (err) {
+      console.error('[VideoClipper] Caption error:', err);
+      setCaptionStates(prev => {
+        const next = new Map(prev);
+        next.set(index, {
+          status: 'error',
+          error: err instanceof Error ? err.message : 'Caption generation failed',
+        });
+        return next;
+      });
+    }
+  };
+
   // Phase 5: Save current session as a job
   const handleSaveJob = async () => {
     if (!video || generatedClips.size === 0) return;
@@ -510,6 +577,8 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     setGeneratedClips(new Map());
     setClipGenerating(new Set());
     setClipErrors(new Map());
+    // Reset caption state
+    setCaptionStates(new Map());
     // Reset job state
     setCurrentJobId(null);
     setSaveJobStatus('idle');
@@ -962,6 +1031,7 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                       const isGenerating = clipGenerating.has(index);
                       const generatedClip = generatedClips.get(index);
                       const clipError = clipErrors.get(index);
+                      const captionState = captionStates.get(index);
 
                       return (
                         <div key={index} className="p-5">
@@ -1052,15 +1122,79 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                                   <Clock className="w-3 h-3" />
                                   {Math.round(generatedClip.duration)}s
                                 </span>
+                                <div className="flex gap-2">
+                                  {/* Add Captions Button */}
+                                  {!captionState?.captionedUrl && captionState?.status !== 'generating' && (
+                                    <button
+                                      onClick={() => handleAddCaptions(index)}
+                                      className="px-3 py-1.5 text-sm text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded-lg transition flex items-center gap-1"
+                                    >
+                                      <Type className="w-3 h-3" />
+                                      Add Captions
+                                    </button>
+                                  )}
+                                  {captionState?.status === 'generating' && (
+                                    <button
+                                      disabled
+                                      className="px-3 py-1.5 text-sm text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center gap-1 cursor-not-allowed"
+                                    >
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                      Adding...
+                                    </button>
+                                  )}
+                                  <a
+                                    href={generatedClip.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    download={`clip-${index + 1}-${suggestion.type}.mp4`}
+                                    className="px-3 py-1.5 text-sm text-violet-400 hover:text-violet-300 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 rounded-lg transition flex items-center gap-1"
+                                  >
+                                    <Download className="w-3 h-3" />
+                                    Download
+                                  </a>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Caption Error */}
+                          {captionState?.status === 'error' && (
+                            <div className="mt-3 bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-start gap-2">
+                              <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                              <div>
+                                <p className="text-red-400 text-sm">{captionState.error}</p>
+                                <button
+                                  onClick={() => handleAddCaptions(index)}
+                                  className="text-red-400 hover:text-red-300 underline text-xs mt-1"
+                                >
+                                  Try again
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Captioned Clip Player */}
+                          {captionState?.captionedUrl && (
+                            <div className="mt-4 bg-gradient-to-br from-amber-500/10 to-amber-600/5 rounded-lg overflow-hidden border border-amber-500/20">
+                              <div className="px-4 py-2 border-b border-amber-500/20 flex items-center gap-2">
+                                <MessageSquare className="w-4 h-4 text-amber-400" />
+                                <span className="text-sm font-medium text-amber-400">With Captions</span>
+                              </div>
+                              <video
+                                src={captionState.captionedUrl}
+                                controls
+                                className="w-full max-h-[300px]"
+                              />
+                              <div className="flex items-center justify-end px-4 py-3 border-t border-amber-500/20">
                                 <a
-                                  href={generatedClip.url}
+                                  href={captionState.captionedUrl}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  download={`clip-${index + 1}-${suggestion.type}.mp4`}
-                                  className="px-3 py-1.5 text-sm text-violet-400 hover:text-violet-300 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 rounded-lg transition flex items-center gap-1"
+                                  download={`clip-${index + 1}-${suggestion.type}-captioned.mp4`}
+                                  className="px-3 py-1.5 text-sm text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded-lg transition flex items-center gap-1"
                                 >
                                   <Download className="w-3 h-3" />
-                                  Download
+                                  Download Captioned
                                 </a>
                               </div>
                             </div>

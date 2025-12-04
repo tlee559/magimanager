@@ -68,3 +68,18 @@ export interface SavedJob {
 }
 
 export type SaveJobStatus = 'idle' | 'saving' | 'success' | 'error';
+
+// Phase 6: Caption types
+export type CaptionStatus = 'idle' | 'generating' | 'success' | 'error';
+
+export interface CaptionStyle {
+  fontSize: 'small' | 'medium' | 'large';
+  position: 'bottom' | 'center' | 'top';
+  fontColor: string;
+}
+
+export interface CaptionState {
+  status: CaptionStatus;
+  captionedUrl?: string;
+  error?: string;
+}
