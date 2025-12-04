@@ -99,6 +99,26 @@ export type ExportStatesMap = {
   [K in ExportKey]?: ExportState;
 };
 
+// Background processing state (stored in DB)
+export interface ExportProcessingState {
+  status: 'processing' | 'completed' | 'failed';
+  predictionId?: string;
+  step?: 'resize' | 'caption';
+  error?: string;
+  result?: {
+    url: string;
+    width: number;
+    height: number;
+  };
+}
+
+// Extended ClipExports with processing states for DB storage
+export interface ClipExportsWithProcessing extends ClipExports {
+  _processing?: {
+    [K in ExportKey]?: ExportProcessingState;
+  };
+}
+
 // Legacy types for backwards compatibility
 export type FormatStatus = ExportStatus;
 
@@ -136,7 +156,7 @@ export interface SavedClip {
   whySelected: string | null;
   transcript: string | null;
   exports?: ClipExports | null;                     // New: all 6 export variants
-  platformRecommendations?: SavedFormatVariants | null; // Legacy: keep for backwards compat
+  platformRecommendations?: ClipExportsWithProcessing | SavedFormatVariants | null; // Can contain processing states
 }
 
 export interface SavedJob {

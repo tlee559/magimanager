@@ -27,7 +27,7 @@ import {
   MessageSquare,
   Maximize2,
 } from 'lucide-react';
-import { UploadedVideo, UploadStatus, Transcript, TranscribeStatus, ClipSuggestion, AnalyzeStatus, GeneratedClip, SavedJob, SaveJobStatus, ClipExports, ExportKey, ExportStatesMap } from './types';
+import { UploadedVideo, UploadStatus, Transcript, TranscribeStatus, ClipSuggestion, AnalyzeStatus, GeneratedClip, SavedJob, SaveJobStatus, ClipExports, ExportKey, ExportStatesMap, ClipExportsWithProcessing, ExportProcessingState } from './types';
 import {
   MAX_FILE_SIZE,
   ALLOWED_TYPES,
@@ -106,6 +106,121 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     } finally {
       setLoadingJobs(false);
     }
+  };
+
+  // Track clips being polled for background processing
+  const pollingClipsRef = useRef<Set<string>>(new Set());
+
+  // Poll for export completion when we have processing exports
+  useEffect(() => {
+    if (!currentJobId) return;
+
+    const savedJob = savedJobs.find(j => j.id === currentJobId);
+    if (!savedJob) return;
+
+    // Check if any clips have processing exports
+    const checkProcessingExports = async () => {
+      for (const savedClip of savedJob.clips) {
+        // Skip if already polling this clip
+        if (pollingClipsRef.current.has(savedClip.id)) continue;
+
+        const exports = savedClip.exports as ClipExportsWithProcessing | null;
+        if (!exports?._processing) continue;
+
+        // Check each processing export
+        for (const [exportKey, state] of Object.entries(exports._processing)) {
+          if (state?.status === 'processing') {
+            console.log('[VideoClipper] Found processing export, starting poll:', { clipId: savedClip.id, exportKey });
+            pollingClipsRef.current.add(savedClip.id);
+            pollClipStatus(savedClip.id, savedJob.clips.indexOf(savedClip));
+            break; // Only poll once per clip
+          }
+        }
+      }
+    };
+
+    checkProcessingExports();
+  }, [currentJobId, savedJobs]);
+
+  // Poll a single clip for status updates
+  const pollClipStatus = async (clipId: string, clipIndex: number) => {
+    const pollInterval = 3000; // 3 seconds
+    const maxAttempts = 120; // 6 minutes max
+    let attempts = 0;
+
+    const poll = async () => {
+      attempts++;
+      if (attempts > maxAttempts) {
+        console.log('[VideoClipper] Polling timed out for clip:', clipId);
+        pollingClipsRef.current.delete(clipId);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/video-clipper/clips/${clipId}`);
+        if (!response.ok) {
+          console.error('[VideoClipper] Poll failed:', response.status);
+          pollingClipsRef.current.delete(clipId);
+          return;
+        }
+
+        const data = await response.json();
+        const exports = data.clip?.exports as ClipExportsWithProcessing;
+
+        if (!exports?._processing) {
+          pollingClipsRef.current.delete(clipId);
+          return;
+        }
+
+        // Check if any exports are still processing
+        let stillProcessing = false;
+        for (const [exportKey, state] of Object.entries(exports._processing)) {
+          if (state?.status === 'processing') {
+            stillProcessing = true;
+          } else if (state?.status === 'completed' && state.result) {
+            // Update local state with completed export
+            console.log('[VideoClipper] Export completed:', { clipId, exportKey });
+
+            setClipExports(prev => {
+              const next = new Map(prev);
+              const current = next.get(clipIndex) || {};
+              next.set(clipIndex, { ...current, [exportKey]: state.result });
+              return next;
+            });
+
+            setExportStates(prev => {
+              const next = new Map(prev);
+              const states = next.get(clipIndex) || {};
+              next.set(clipIndex, { ...states, [exportKey]: { status: 'success' } });
+              return next;
+            });
+
+            // Refresh saved jobs to get updated data
+            loadJobs();
+          } else if (state?.status === 'failed') {
+            console.error('[VideoClipper] Export failed:', { clipId, exportKey, error: state.error });
+
+            setExportStates(prev => {
+              const next = new Map(prev);
+              const states = next.get(clipIndex) || {};
+              next.set(clipIndex, { ...states, [exportKey]: { status: 'error', error: state.error } });
+              return next;
+            });
+          }
+        }
+
+        if (stillProcessing) {
+          setTimeout(poll, pollInterval);
+        } else {
+          pollingClipsRef.current.delete(clipId);
+        }
+      } catch (err) {
+        console.error('[VideoClipper] Poll error:', err);
+        pollingClipsRef.current.delete(clipId);
+      }
+    };
+
+    poll();
   };
 
   // Validate file before upload
@@ -369,6 +484,7 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
   };
 
   // Phase 7: Generate an export variant (handles both resize and captions)
+  // If job is saved, uses background processing; otherwise runs synchronously
   const handleGenerateExport = async (clipIndex: number, exportKey: ExportKey) => {
     const clip = generatedClips.get(clipIndex);
     const suggestion = suggestions[clipIndex];
@@ -389,6 +505,49 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
       return next;
     });
 
+    // If job is saved, use async background processing
+    if (currentJobId) {
+      const savedClip = savedJobs.find(j => j.id === currentJobId)?.clips[clipIndex];
+      if (savedClip) {
+        try {
+          const response = await fetch('/api/video-clipper/export', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              clipId: savedClip.id,
+              exportKey,
+              sourceClipUrl: clip.url,
+              transcript: suggestion.transcript,
+              startTime: suggestion.startTime,
+              endTime: suggestion.endTime,
+            }),
+          });
+
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error || 'Failed to start export');
+          }
+
+          console.log('[VideoClipper] Background export started:', { clipId: savedClip.id, exportKey });
+
+          // Start polling for this clip
+          pollingClipsRef.current.add(savedClip.id);
+          pollClipStatus(savedClip.id, clipIndex);
+          return;
+        } catch (err) {
+          console.error('[VideoClipper] Failed to start background export:', err);
+          setExportStates(prev => {
+            const next = new Map(prev);
+            const states = next.get(clipIndex) || {};
+            next.set(clipIndex, { ...states, [exportKey]: { status: 'error', error: err instanceof Error ? err.message : 'Export failed' } });
+            return next;
+          });
+          return;
+        }
+      }
+    }
+
+    // Fallback: synchronous processing (when job is not saved)
     try {
       // Step 1: Get the source video for this aspect ratio
       // If we don't have this format yet (no captions version), we need to resize first
@@ -433,11 +592,6 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
             next.set(clipIndex, { ...states, [exportKey]: { status: 'success' } });
             return next;
           });
-
-          // Auto-save to database if job is saved
-          if (currentJobId) {
-            await autoSaveExport(clipIndex, exportKey, exportData);
-          }
 
           console.log('[VideoClipper] Export complete (resize only):', exportKey);
           return;
@@ -485,11 +639,6 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
           next.set(clipIndex, { ...states, [exportKey]: { status: 'success' } });
           return next;
         });
-
-        // Auto-save to database if job is saved
-        if (currentJobId) {
-          await autoSaveExport(clipIndex, exportKey, exportData);
-        }
 
         console.log('[VideoClipper] Export complete (with captions):', exportKey);
       }
@@ -646,19 +795,40 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
 
       // Load export variants from platformRecommendations (now contains ClipExports structure)
       if (clip.platformRecommendations && typeof clip.platformRecommendations === 'object') {
-        const exports = clip.platformRecommendations as ClipExports;
+        const exportsWithProcessing = clip.platformRecommendations as ClipExportsWithProcessing;
         const states: ExportStatesMap = {};
 
-        // Mark each saved export as success
-        Object.keys(exports).forEach((key) => {
-          const exportKey = key as ExportKey;
-          if (exports[exportKey]) {
-            states[exportKey] = { status: 'success' };
+        // Separate processing state from actual exports
+        const cleanExports: ClipExports = {};
+
+        Object.keys(exportsWithProcessing).forEach((key) => {
+          if (key === '_processing') {
+            // Handle processing states
+            const processing = exportsWithProcessing._processing;
+            if (processing) {
+              Object.entries(processing).forEach(([exportKey, state]) => {
+                if (state?.status === 'processing') {
+                  states[exportKey as ExportKey] = { status: 'generating' };
+                } else if (state?.status === 'completed' && state.result) {
+                  cleanExports[exportKey as ExportKey] = state.result;
+                  states[exportKey as ExportKey] = { status: 'success' };
+                } else if (state?.status === 'failed') {
+                  states[exportKey as ExportKey] = { status: 'error', error: state.error };
+                }
+              });
+            }
+          } else {
+            // Regular export - mark as success
+            const exportKey = key as ExportKey;
+            if (exportsWithProcessing[exportKey]) {
+              cleanExports[exportKey] = exportsWithProcessing[exportKey];
+              states[exportKey] = { status: 'success' };
+            }
           }
         });
 
-        if (Object.keys(exports).length > 0) {
-          loadedExports.set(index, exports);
+        if (Object.keys(cleanExports).length > 0 || Object.keys(states).length > 0) {
+          loadedExports.set(index, cleanExports);
           loadedExportStates.set(index, states);
         }
       }
