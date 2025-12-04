@@ -64,14 +64,12 @@ export interface CaptionState {
 
 // Phase 7: Format Variation types
 export type FormatStatus = 'idle' | 'generating' | 'success' | 'error';
-export type CropMode = 'pad' | 'crop';
 
 export interface FormatVariant {
   format: PlatformFormat;
   url: string;
   width: number;
   height: number;
-  cropMode: CropMode;
 }
 
 export interface FormatState {
@@ -86,7 +84,6 @@ export interface SavedFormatVariants {
     url: string;
     width: number;
     height: number;
-    cropMode: CropMode;
   };
 }
 

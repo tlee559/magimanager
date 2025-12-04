@@ -6,10 +6,15 @@ import { PLATFORM_FORMATS, type PlatformFormat } from '@/lib/video-clipper/const
 export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 minutes max for resizing
 
-// Using magpai-app/cog-ffmpeg for video transformations
-const FFMPEG_MODEL = 'magpai-app/cog-ffmpeg:efd0b79b577bcd58ae7d035bce9de5c4659a59e09faafac4d426d61c04249251';
+// Using luma/reframe-video for aspect ratio transformations
+const REFRAME_MODEL = 'luma/reframe-video:7a27619ccb64e4f1942e9a53e503142be08d505587313afa1da037b631a6760e';
 
-type CropMode = 'pad' | 'crop';
+// Map our format names to luma's aspect ratio options
+const ASPECT_RATIO_MAP: Record<PlatformFormat, string> = {
+  vertical: '9:16',
+  square: '1:1',
+  horizontal: '16:9',
+};
 
 export async function POST(req: NextRequest) {
   console.log('========================================');
@@ -28,10 +33,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     console.log('[VideoClipper] Resize request body:', JSON.stringify(body));
 
-    const { clipUrl, targetFormat, cropMode = 'pad' } = body as {
+    const { clipUrl, targetFormat } = body as {
       clipUrl: string;
       targetFormat: PlatformFormat;
-      cropMode?: CropMode;
     };
 
     if (!clipUrl) {
@@ -51,45 +55,29 @@ export async function POST(req: NextRequest) {
     }
 
     const config = PLATFORM_FORMATS[targetFormat];
+    const aspectRatio = ASPECT_RATIO_MAP[targetFormat];
+
     console.log('[VideoClipper] Target format:', {
       format: targetFormat,
+      aspectRatio,
       width: config.width,
       height: config.height,
-      aspectRatio: config.aspectRatio,
-      cropMode,
     });
 
     const replicate = new Replicate({
       auth: process.env.REPLICATE_API_TOKEN,
     });
 
-    // Build FFmpeg command based on crop mode
-    let vfCommand: string;
-    if (cropMode === 'crop') {
-      // Crop mode: scale up and center crop to fit exactly
-      vfCommand = `scale=${config.width}:${config.height}:force_original_aspect_ratio=increase,crop=${config.width}:${config.height}`;
-    } else {
-      // Pad mode (default): scale down and add black bars
-      vfCommand = `scale=${config.width}:${config.height}:force_original_aspect_ratio=decrease,pad=${config.width}:${config.height}:(ow-iw)/2:(oh-ih)/2:black`;
-    }
-
-    // FFmpeg command for the magpai-app/cog-ffmpeg model
-    // Note: this model uses 'file1' as input and expects full ffmpeg command with input/output references
-    const ffmpegCommand = `ffmpeg -i /tmp/file1.mp4 -vf "${vfCommand}" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k /tmp/output1.mp4`;
-
-    console.log('[VideoClipper] FFmpeg command:', ffmpegCommand);
-
-    // Create prediction
-    console.log('[VideoClipper] Creating resize prediction...');
+    // Create prediction using luma/reframe-video
+    console.log('[VideoClipper] Creating reframe prediction...');
 
     let prediction;
     try {
       prediction = await replicate.predictions.create({
-        version: 'efd0b79b577bcd58ae7d035bce9de5c4659a59e09faafac4d426d61c04249251',
+        version: '7a27619ccb64e4f1942e9a53e503142be08d505587313afa1da037b631a6760e',
         input: {
-          file1: clipUrl,
-          command: ffmpegCommand,
-          output1: 'resized.mp4',
+          video_url: clipUrl,
+          aspect_ratio: aspectRatio,
         },
       });
       console.log('[VideoClipper] Prediction created:', JSON.stringify(prediction, null, 2));
@@ -153,7 +141,7 @@ export async function POST(req: NextRequest) {
     const output = finalPrediction.output;
     console.log('[VideoClipper] Resize output:', output);
 
-    // Get the resized video URL - magpai-app/cog-ffmpeg returns { files: [url1, url2, ...] }
+    // Get the resized video URL
     let resizedUrl: string | null = null;
 
     if (typeof output === 'string') {
@@ -161,12 +149,8 @@ export async function POST(req: NextRequest) {
     } else if (Array.isArray(output) && output.length > 0) {
       resizedUrl = output[0];
     } else if (output && typeof output === 'object') {
-      // Handle { files: [...] } format from magpai-app/cog-ffmpeg
-      if ('files' in output && Array.isArray((output as { files: string[] }).files)) {
-        const files = (output as { files: string[] }).files;
-        if (files.length > 0) {
-          resizedUrl = files[0];
-        }
+      if ('video' in output) {
+        resizedUrl = (output as { video: string }).video;
       } else if ('output' in output) {
         resizedUrl = (output as { output: string }).output;
       } else if ('url' in output) {
@@ -194,7 +178,7 @@ export async function POST(req: NextRequest) {
     const resizedBuffer = await resizedResponse.arrayBuffer();
     console.log('[VideoClipper] Downloaded resized video size:', resizedBuffer.byteLength, 'bytes');
 
-    const filename = `${targetFormat}-${cropMode}-${Date.now()}.mp4`;
+    const filename = `${targetFormat}-${Date.now()}.mp4`;
 
     console.log('[VideoClipper] Uploading to Vercel Blob as:', filename);
     const blob = await put(`video-clipper/resized/${filename}`, resizedBuffer, {
@@ -213,7 +197,6 @@ export async function POST(req: NextRequest) {
       width: config.width,
       height: config.height,
       format: targetFormat,
-      cropMode,
     });
   } catch (error) {
     console.error('========================================');
