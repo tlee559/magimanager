@@ -2,6 +2,26 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { upload } from '@vercel/blob/client';
+import {
+  Upload,
+  Play,
+  Clock,
+  FileVideo,
+  Sparkles,
+  Download,
+  Trash2,
+  ChevronLeft,
+  History,
+  Plus,
+  Check,
+  AlertCircle,
+  Loader2,
+  Scissors,
+  Wand2,
+  Save,
+  Eye,
+  Film
+} from 'lucide-react';
 import { UploadedVideo, UploadStatus, Transcript, TranscribeStatus, ClipSuggestion, AnalyzeStatus, GeneratedClip, SavedJob, SaveJobStatus } from './types';
 import {
   MAX_FILE_SIZE,
@@ -320,6 +340,18 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     }
   };
 
+  // Generate all clips at once
+  const handleGenerateAllClips = async () => {
+    if (!video || suggestions.length === 0) return;
+
+    // Generate clips that haven't been generated yet
+    for (let i = 0; i < suggestions.length; i++) {
+      if (!generatedClips.has(i) && !clipGenerating.has(i)) {
+        await handleGenerateClip(i, suggestions[i]);
+      }
+    }
+  };
+
   // Phase 5: Save current session as a job
   const handleSaveJob = async () => {
     if (!video || generatedClips.size === 0) return;
@@ -446,18 +478,18 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     setShowJobHistory(false);
   };
 
-  // Get label color for clip type
+  // Get label color for clip type (dark theme)
   const getTypeColor = (type: ClipSuggestion['type']) => {
     const colors = {
-      hook: 'bg-purple-100 text-purple-700',
-      testimonial: 'bg-green-100 text-green-700',
-      benefit: 'bg-blue-100 text-blue-700',
-      cta: 'bg-orange-100 text-orange-700',
-      problem: 'bg-red-100 text-red-700',
-      solution: 'bg-teal-100 text-teal-700',
-      viral: 'bg-pink-100 text-pink-700',
+      hook: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+      testimonial: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+      benefit: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+      cta: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+      problem: 'bg-red-500/20 text-red-400 border-red-500/30',
+      solution: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
+      viral: 'bg-pink-500/20 text-pink-400 border-pink-500/30',
     };
-    return colors[type] || 'bg-gray-100 text-gray-700';
+    return colors[type] || 'bg-slate-500/20 text-slate-400 border-slate-500/30';
   };
 
   // Reset to upload another
@@ -487,116 +519,147 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     }
   };
 
+  // Calculate progress stats
+  const clipsGenerated = generatedClips.size;
+  const clipsTotal = suggestions.length;
+  const isGeneratingAny = clipGenerating.size > 0;
+
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
           <button
             onClick={onBack}
-            className="text-gray-600 hover:text-gray-900 mb-4 flex items-center gap-2"
+            className="p-2 hover:bg-slate-800 rounded-lg transition text-slate-400 hover:text-slate-200"
           >
-            ← Back
+            <ChevronLeft className="w-5 h-5" />
           </button>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Video Clipper</h1>
-              <p className="text-gray-600 mt-1">
-                {showJobHistory ? 'View your saved clip jobs' : 'Upload a video to get started'}
-              </p>
-            </div>
-            <button
-              onClick={() => setShowJobHistory(!showJobHistory)}
-              className={`px-4 py-2 rounded-lg transition-colors ${
-                showJobHistory
-                  ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {showJobHistory ? 'New Clip' : `History (${savedJobs.length})`}
-            </button>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-100">Video Clipper</h1>
+            <p className="text-sm text-slate-500 mt-1">
+              {showJobHistory
+                ? 'View your saved clip jobs'
+                : 'AI-powered video clipping for ads and viral content'}
+            </p>
           </div>
         </div>
+        <button
+          onClick={() => setShowJobHistory(!showJobHistory)}
+          className={`px-4 py-2 rounded-lg transition flex items-center gap-2 ${
+            showJobHistory
+              ? 'bg-violet-600 text-white hover:bg-violet-500'
+              : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+          }`}
+        >
+          {showJobHistory ? (
+            <>
+              <Plus className="w-4 h-4" />
+              New Clip
+            </>
+          ) : (
+            <>
+              <History className="w-4 h-4" />
+              History
+              {savedJobs.length > 0 && (
+                <span className="bg-violet-500 text-white text-xs px-2 py-0.5 rounded-full">
+                  {savedJobs.length}
+                </span>
+              )}
+            </>
+          )}
+        </button>
+      </div>
 
-        {/* Job History View */}
-        {showJobHistory && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Saved Jobs</h2>
+      {/* Job History View */}
+      {showJobHistory && (
+        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6">
+          <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
+            <History className="w-5 h-5 text-slate-400" />
+            Saved Jobs
+          </h2>
 
-            {loadingJobs ? (
-              <div className="text-center py-8">
-                <svg className="animate-spin h-8 w-8 mx-auto text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <p className="text-gray-500 mt-2">Loading jobs...</p>
-              </div>
-            ) : savedJobs.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500">No saved jobs yet.</p>
-                <button
-                  onClick={() => setShowJobHistory(false)}
-                  className="mt-4 px-4 py-2 text-blue-600 hover:text-blue-700 underline"
+          {loadingJobs ? (
+            <div className="text-center py-12">
+              <Loader2 className="w-8 h-8 mx-auto text-violet-400 animate-spin" />
+              <p className="text-slate-500 mt-3">Loading jobs...</p>
+            </div>
+          ) : savedJobs.length === 0 ? (
+            <div className="text-center py-12">
+              <Film className="w-12 h-12 mx-auto text-slate-600 mb-4" />
+              <p className="text-slate-400">No saved jobs yet.</p>
+              <button
+                onClick={() => setShowJobHistory(false)}
+                className="mt-4 px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-lg transition"
+              >
+                Create your first clip
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {savedJobs.map((job) => (
+                <div
+                  key={job.id}
+                  className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-4 hover:border-slate-600 transition"
                 >
-                  Create your first clip
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {savedJobs.map((job) => (
-                  <div
-                    key={job.id}
-                    className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h3 className="font-medium text-gray-900">{job.name}</h3>
-                        <p className="text-sm text-gray-500 mt-1">
-                          {job.clips.length} clip{job.clips.length !== 1 ? 's' : ''} •
-                          {job.videoDuration ? ` ${formatDuration(job.videoDuration)} video • ` : ' '}
-                          {new Date(job.createdAt).toLocaleDateString()}
-                        </p>
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {job.clips.slice(0, 5).map((clip, idx) => (
-                            <span
-                              key={clip.id}
-                              className={`px-2 py-0.5 rounded text-xs font-medium ${getTypeColor(clip.momentType as ClipSuggestion['type'])}`}
-                            >
-                              {clip.momentType}
-                            </span>
-                          ))}
-                          {job.clips.length > 5 && (
-                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
-                              +{job.clips.length - 5} more
-                            </span>
-                          )}
-                        </div>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-slate-100 truncate">{job.name}</h3>
+                      <div className="flex items-center gap-3 mt-1 text-sm text-slate-500">
+                        <span className="flex items-center gap-1">
+                          <Scissors className="w-3 h-3" />
+                          {job.clips.length} clip{job.clips.length !== 1 ? 's' : ''}
+                        </span>
+                        {job.videoDuration && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {formatDuration(job.videoDuration)}
+                          </span>
+                        )}
+                        <span>{new Date(job.createdAt).toLocaleDateString()}</span>
                       </div>
-                      <div className="flex gap-2 ml-4">
-                        <button
-                          onClick={() => handleLoadJob(job)}
-                          className="px-3 py-1.5 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-                        >
-                          View
-                        </button>
-                        <button
-                          onClick={() => handleDeleteJob(job.id)}
-                          className="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 border border-red-200 hover:border-red-300 rounded-lg transition-colors"
-                        >
-                          Delete
-                        </button>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {job.clips.slice(0, 5).map((clip) => (
+                          <span
+                            key={clip.id}
+                            className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide border ${getTypeColor(clip.momentType as ClipSuggestion['type'])}`}
+                          >
+                            {clip.momentType}
+                          </span>
+                        ))}
+                        {job.clips.length > 5 && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-700/50 text-slate-400">
+                            +{job.clips.length - 5} more
+                          </span>
+                        )}
                       </div>
                     </div>
+                    <div className="flex gap-2 ml-4">
+                      <button
+                        onClick={() => handleLoadJob(job)}
+                        className="px-3 py-1.5 text-sm text-white bg-violet-600 hover:bg-violet-500 rounded-lg transition flex items-center gap-1"
+                      >
+                        <Eye className="w-3 h-3" />
+                        View
+                      </button>
+                      <button
+                        onClick={() => handleDeleteJob(job.id)}
+                        className="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-        {/* Main Content */}
-        {!showJobHistory && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      {/* Main Content */}
+      {!showJobHistory && (
+        <div className="space-y-6">
           {/* Upload Zone - shown when no video */}
           {!video && status !== 'uploading' && (
             <div
@@ -605,11 +668,10 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
               className={`
-                border-2 border-dashed rounded-lg p-12 text-center cursor-pointer
-                transition-colors
+                bg-slate-800/50 rounded-xl border-2 border-dashed p-12 text-center cursor-pointer transition
                 ${isDragging
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                  ? 'border-violet-500 bg-violet-500/10'
+                  : 'border-slate-700 hover:border-slate-600 hover:bg-slate-800/70'
                 }
               `}
             >
@@ -620,25 +682,15 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                 onChange={handleFileSelect}
                 className="hidden"
               />
-              <div className="text-gray-400 mb-4">
-                <svg
-                  className="mx-auto h-12 w-12"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.5}
-                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                  />
-                </svg>
+              <div className={`mx-auto w-16 h-16 rounded-xl flex items-center justify-center mb-4 ${
+                isDragging ? 'bg-violet-500/20' : 'bg-slate-700/50'
+              }`}>
+                <Upload className={`w-8 h-8 ${isDragging ? 'text-violet-400' : 'text-slate-400'}`} />
               </div>
-              <p className="text-lg font-medium text-gray-700">
+              <p className="text-lg font-medium text-slate-200">
                 Drop video here or click to browse
               </p>
-              <p className="text-sm text-gray-500 mt-2">
+              <p className="text-sm text-slate-500 mt-2">
                 MP4, MOV, WebM (max 1GB, 30 minutes)
               </p>
             </div>
@@ -646,37 +698,31 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
 
           {/* Upload Progress */}
           {status === 'uploading' && (
-            <div className="py-12">
-              <div className="text-center mb-4">
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-8">
+              <div className="text-center mb-6">
                 {progress < 100 ? (
                   <>
-                    <p className="text-lg font-medium text-gray-700">
-                      Uploading video...
-                    </p>
-                    <p className="text-3xl font-bold text-blue-600 mt-2">
-                      {progress}%
-                    </p>
+                    <div className="w-16 h-16 mx-auto rounded-xl bg-violet-500/20 flex items-center justify-center mb-4">
+                      <Upload className="w-8 h-8 text-violet-400" />
+                    </div>
+                    <p className="text-lg font-medium text-slate-200">Uploading video...</p>
+                    <p className="text-3xl font-bold text-violet-400 mt-2">{progress}%</p>
                   </>
                 ) : (
                   <>
-                    <div className="flex justify-center mb-3">
-                      <svg className="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
+                    <div className="w-16 h-16 mx-auto rounded-xl bg-violet-500/20 flex items-center justify-center mb-4">
+                      <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
                     </div>
-                    <p className="text-lg font-medium text-gray-700">
-                      Processing video...
-                    </p>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Almost done
-                    </p>
+                    <p className="text-lg font-medium text-slate-200">Processing video...</p>
+                    <p className="text-sm text-slate-500 mt-1">Almost done</p>
                   </>
                 )}
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-3">
+              <div className="w-full bg-slate-700 rounded-full h-2">
                 <div
-                  className={`h-3 rounded-full transition-all duration-300 ${progress >= 100 ? 'bg-blue-600 animate-pulse' : 'bg-blue-600'}`}
+                  className={`h-2 rounded-full transition-all duration-300 ${
+                    progress >= 100 ? 'bg-violet-500 animate-pulse' : 'bg-violet-500'
+                  }`}
                   style={{ width: `${progress}%` }}
                 />
               </div>
@@ -685,205 +731,265 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
 
           {/* Error Message */}
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-              <p className="text-red-700">{error}</p>
-              <button
-                onClick={handleReset}
-                className="text-red-600 underline mt-2 text-sm"
-              >
-                Try again
-              </button>
+            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-red-400">{error}</p>
+                <button
+                  onClick={handleReset}
+                  className="text-red-400 hover:text-red-300 underline mt-2 text-sm"
+                >
+                  Try again
+                </button>
+              </div>
             </div>
           )}
 
           {/* Video Player - shown after upload */}
           {video && status === 'success' && (
-            <div>
-              {/* Video Element */}
-              <div className="bg-black rounded-lg overflow-hidden mb-4">
-                <video
-                  ref={videoRef}
-                  src={video.url}
-                  controls
-                  className="w-full max-h-[500px]"
-                >
-                  Your browser does not support the video tag.
-                </video>
-              </div>
-
-              {/* Video Info */}
-              <div className="flex items-center justify-between text-sm text-gray-600 mb-6">
-                <div className="flex items-center gap-4">
-                  <span className="font-medium text-gray-900">
-                    {video.filename}
-                  </span>
-                  <span>{formatFileSize(video.size)}</span>
-                  {video.duration && (
-                    <span>{formatDuration(video.duration)}</span>
-                  )}
+            <div className="space-y-6">
+              {/* Video Card */}
+              <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
+                {/* Video Element */}
+                <div className="bg-black">
+                  <video
+                    ref={videoRef}
+                    src={video.url}
+                    controls
+                    className="w-full max-h-[500px]"
+                  >
+                    Your browser does not support the video tag.
+                  </video>
                 </div>
-              </div>
 
-              {/* Actions */}
-              <div className="flex gap-3">
-                <button
-                  onClick={handleReset}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                >
-                  Upload Another
-                </button>
+                {/* Video Info Bar */}
+                <div className="px-5 py-4 border-t border-slate-700/50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 bg-slate-700/50 rounded-lg">
+                        <FileVideo className="w-5 h-5 text-slate-400" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-slate-200">{video.filename}</p>
+                        <div className="flex items-center gap-3 text-sm text-slate-500 mt-0.5">
+                          <span>{formatFileSize(video.size)}</span>
+                          {video.duration && (
+                            <>
+                              <span>•</span>
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {formatDuration(video.duration)}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
 
-                {/* Phase 2: Transcribe Button */}
-                {!transcript && transcribeStatus !== 'transcribing' && (
-                  <button
-                    onClick={handleTranscribe}
-                    className="px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-                  >
-                    Transcribe Video
-                  </button>
-                )}
+                    {/* Actions */}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleReset}
+                        className="px-4 py-2 text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition text-sm"
+                      >
+                        Upload Another
+                      </button>
 
-                {/* Transcribing State */}
-                {transcribeStatus === 'transcribing' && (
-                  <button
-                    disabled
-                    className="px-4 py-2 text-white bg-blue-400 rounded-lg flex items-center gap-2 cursor-not-allowed"
-                  >
-                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Transcribing...
-                  </button>
-                )}
+                      {/* Transcribe Button */}
+                      {!transcript && transcribeStatus !== 'transcribing' && (
+                        <button
+                          onClick={handleTranscribe}
+                          className="px-4 py-2 text-white bg-violet-600 hover:bg-violet-500 rounded-lg transition text-sm flex items-center gap-2"
+                        >
+                          <Wand2 className="w-4 h-4" />
+                          Transcribe Video
+                        </button>
+                      )}
+
+                      {/* Transcribing State */}
+                      {transcribeStatus === 'transcribing' && (
+                        <button
+                          disabled
+                          className="px-4 py-2 text-white bg-violet-500/50 rounded-lg flex items-center gap-2 cursor-not-allowed text-sm"
+                        >
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Transcribing...
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Transcription Error */}
               {transcribeError && (
-                <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
-                  <p className="text-red-700">{transcribeError}</p>
-                  <button
-                    onClick={() => {
-                      setTranscribeError(null);
-                      setTranscribeStatus('idle');
-                    }}
-                    className="text-red-600 underline mt-2 text-sm"
-                  >
-                    Try again
-                  </button>
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-red-400">{transcribeError}</p>
+                    <button
+                      onClick={() => {
+                        setTranscribeError(null);
+                        setTranscribeStatus('idle');
+                      }}
+                      className="text-red-400 hover:text-red-300 underline mt-2 text-sm"
+                    >
+                      Try again
+                    </button>
+                  </div>
                 </div>
               )}
 
-              {/* Phase 2: Transcript Display */}
+              {/* Transcript Display */}
               {transcript && (
-                <div className="mt-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">
-                    Transcript
-                  </h3>
-                  <div className="bg-gray-50 rounded-lg border border-gray-200 max-h-64 overflow-y-auto">
+                <div className="bg-slate-800/50 rounded-xl border border-slate-700/50">
+                  <div className="px-5 py-4 border-b border-slate-700/50 flex items-center justify-between">
+                    <h3 className="font-semibold text-slate-100 flex items-center gap-2">
+                      <FileVideo className="w-4 h-4 text-slate-400" />
+                      Transcript
+                      <span className="text-sm text-slate-500 font-normal">
+                        ({transcript.segments.length} segments)
+                      </span>
+                    </h3>
+
+                    {/* Analyze Button */}
+                    {suggestions.length === 0 && analyzeStatus !== 'analyzing' && (
+                      <button
+                        onClick={handleAnalyze}
+                        className="px-4 py-2 text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition text-sm flex items-center gap-2"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        Find Ad Moments
+                      </button>
+                    )}
+
+                    {analyzeStatus === 'analyzing' && (
+                      <button
+                        disabled
+                        className="px-4 py-2 text-white bg-emerald-500/50 rounded-lg flex items-center gap-2 cursor-not-allowed text-sm"
+                      >
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Analyzing...
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-64 overflow-y-auto">
                     {transcript.segments.length > 0 ? (
-                      <div className="divide-y divide-gray-200">
+                      <div className="divide-y divide-slate-700/50">
                         {transcript.segments.map((segment, index) => (
                           <div
                             key={index}
-                            className="p-3 hover:bg-gray-100 transition-colors"
+                            className="px-5 py-3 hover:bg-slate-700/30 transition"
                           >
-                            <span className="text-xs font-mono text-blue-600 mr-3">
+                            <span className="text-xs font-mono text-violet-400 mr-3">
                               {formatTimestamp(segment.start)}
                             </span>
-                            <span className="text-gray-700">{segment.text}</span>
+                            <span className="text-slate-300">{segment.text}</span>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="p-4 text-gray-500">
+                      <div className="p-5 text-slate-500">
                         {transcript.fullText || 'No transcript available'}
                       </div>
                     )}
                   </div>
-
-                  {/* Phase 3: Analyze Button */}
-                  {suggestions.length === 0 && analyzeStatus !== 'analyzing' && (
-                    <button
-                      onClick={handleAnalyze}
-                      className="mt-4 px-4 py-2 text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
-                    >
-                      Find Ad Moments
-                    </button>
-                  )}
-
-                  {/* Analyzing State */}
-                  {analyzeStatus === 'analyzing' && (
-                    <button
-                      disabled
-                      className="mt-4 px-4 py-2 text-white bg-green-400 rounded-lg flex items-center gap-2 cursor-not-allowed"
-                    >
-                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Analyzing...
-                    </button>
-                  )}
-
-                  {/* Analysis Error */}
-                  {analyzeError && (
-                    <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
-                      <p className="text-red-700">{analyzeError}</p>
-                      <button
-                        onClick={() => {
-                          setAnalyzeError(null);
-                          setAnalyzeStatus('idle');
-                        }}
-                        className="text-red-600 underline mt-2 text-sm"
-                      >
-                        Try again
-                      </button>
-                    </div>
-                  )}
                 </div>
               )}
 
-              {/* Phase 3: Clip Suggestions */}
+              {/* Analysis Error */}
+              {analyzeError && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-red-400">{analyzeError}</p>
+                    <button
+                      onClick={() => {
+                        setAnalyzeError(null);
+                        setAnalyzeStatus('idle');
+                      }}
+                      className="text-red-400 hover:text-red-300 underline mt-2 text-sm"
+                    >
+                      Try again
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Clip Suggestions */}
               {suggestions.length > 0 && (
-                <div className="mt-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">
-                    Suggested Clips ({suggestions.length})
-                  </h3>
-                  <div className="space-y-4">
+                <div className="bg-slate-800/50 rounded-xl border border-slate-700/50">
+                  <div className="px-5 py-4 border-b border-slate-700/50 flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold text-slate-100 flex items-center gap-2">
+                        <Scissors className="w-4 h-4 text-slate-400" />
+                        Suggested Clips
+                        <span className="text-sm text-slate-500 font-normal">
+                          ({clipsGenerated}/{clipsTotal} generated)
+                        </span>
+                      </h3>
+                    </div>
+
+                    {/* Generate All Button */}
+                    {clipsGenerated < clipsTotal && (
+                      <button
+                        onClick={handleGenerateAllClips}
+                        disabled={isGeneratingAny}
+                        className={`px-4 py-2 rounded-lg transition text-sm flex items-center gap-2 ${
+                          isGeneratingAny
+                            ? 'bg-violet-500/50 text-white cursor-not-allowed'
+                            : 'bg-violet-600 hover:bg-violet-500 text-white'
+                        }`}
+                      >
+                        {isGeneratingAny ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Scissors className="w-4 h-4" />
+                            Generate All Clips
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="divide-y divide-slate-700/50">
                     {suggestions.map((suggestion, index) => {
                       const isGenerating = clipGenerating.has(index);
                       const generatedClip = generatedClips.get(index);
                       const clipError = clipErrors.get(index);
 
                       return (
-                        <div
-                          key={index}
-                          className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm"
-                        >
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-lg font-semibold text-gray-900">
+                        <div key={index} className="p-5">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <span className="text-lg font-bold text-slate-300">
                                 #{index + 1}
                               </span>
-                              <span className={`px-2 py-1 rounded text-xs font-medium ${getTypeColor(suggestion.type)}`}>
+                              <span className={`px-2 py-1 rounded text-xs font-medium uppercase tracking-wide border ${getTypeColor(suggestion.type)}`}>
                                 {suggestion.type}
                               </span>
-                              <span className="text-sm text-gray-500">
+                              <span className="text-sm text-slate-500 flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
                                 {formatTimestamp(suggestion.startTime)} - {formatTimestamp(suggestion.endTime)}
                               </span>
-                              <span className="text-xs text-gray-400">
+                              <span className="text-xs text-slate-600">
                                 ({Math.round(suggestion.endTime - suggestion.startTime)}s)
                               </span>
                             </div>
 
-                            {/* Phase 4: Generate Clip Button */}
+                            {/* Generate Clip Button */}
                             {!generatedClip && !isGenerating && (
                               <button
                                 onClick={() => handleGenerateClip(index, suggestion)}
-                                className="px-3 py-1.5 text-sm text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+                                className="px-3 py-1.5 text-sm text-white bg-violet-600 hover:bg-violet-500 rounded-lg transition flex items-center gap-1"
                               >
-                                Generate Clip
+                                <Scissors className="w-3 h-3" />
+                                Generate
                               </button>
                             )}
 
@@ -891,59 +997,69 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                             {isGenerating && (
                               <button
                                 disabled
-                                className="px-3 py-1.5 text-sm text-white bg-indigo-400 rounded-lg flex items-center gap-2 cursor-not-allowed"
+                                className="px-3 py-1.5 text-sm text-white bg-violet-500/50 rounded-lg flex items-center gap-1 cursor-not-allowed"
                               >
-                                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
+                                <Loader2 className="w-3 h-3 animate-spin" />
                                 Generating...
                               </button>
                             )}
+
+                            {/* Generated Badge */}
+                            {generatedClip && (
+                              <span className="px-3 py-1.5 text-sm text-emerald-400 bg-emerald-500/10 rounded-lg flex items-center gap-1 border border-emerald-500/20">
+                                <Check className="w-3 h-3" />
+                                Generated
+                              </span>
+                            )}
                           </div>
 
-                          <p className="text-gray-700 text-sm mb-2">
+                          <p className="text-slate-300 text-sm mb-2">
                             {suggestion.reason}
                           </p>
 
                           {suggestion.transcript && (
-                            <p className="text-gray-500 text-xs italic border-l-2 border-gray-200 pl-3 mb-3">
+                            <p className="text-slate-500 text-xs italic border-l-2 border-slate-700 pl-3">
                               "{suggestion.transcript}"
                             </p>
                           )}
 
                           {/* Clip Error */}
                           {clipError && (
-                            <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3">
-                              <p className="text-red-700 text-sm">{clipError}</p>
-                              <button
-                                onClick={() => handleGenerateClip(index, suggestion)}
-                                className="text-red-600 underline text-xs mt-1"
-                              >
-                                Try again
-                              </button>
+                            <div className="mt-3 bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-start gap-2">
+                              <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                              <div>
+                                <p className="text-red-400 text-sm">{clipError}</p>
+                                <button
+                                  onClick={() => handleGenerateClip(index, suggestion)}
+                                  className="text-red-400 hover:text-red-300 underline text-xs mt-1"
+                                >
+                                  Try again
+                                </button>
+                              </div>
                             </div>
                           )}
 
                           {/* Generated Clip Player */}
                           {generatedClip && (
-                            <div className="mt-3 bg-gray-50 rounded-lg p-3">
+                            <div className="mt-4 bg-slate-900/50 rounded-lg overflow-hidden border border-slate-700/50">
                               <video
                                 src={generatedClip.url}
                                 controls
-                                className="w-full rounded-lg max-h-[300px]"
+                                className="w-full max-h-[300px]"
                               />
-                              <div className="flex items-center justify-between mt-2">
-                                <span className="text-xs text-gray-500">
-                                  Duration: {Math.round(generatedClip.duration)}s
+                              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700/50">
+                                <span className="text-xs text-slate-500 flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {Math.round(generatedClip.duration)}s
                                 </span>
                                 <a
                                   href={generatedClip.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   download={`clip-${index + 1}-${suggestion.type}.mp4`}
-                                  className="px-3 py-1.5 text-sm text-indigo-600 hover:text-indigo-700 border border-indigo-600 hover:border-indigo-700 rounded-lg transition-colors"
+                                  className="px-3 py-1.5 text-sm text-violet-400 hover:text-violet-300 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 rounded-lg transition flex items-center gap-1"
                                 >
+                                  <Download className="w-3 h-3" />
                                   Download
                                 </a>
                               </div>
@@ -956,56 +1072,69 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                 </div>
               )}
 
-              {/* Phase 5: Save Job Section */}
+              {/* Save Job Section */}
               {generatedClips.size > 0 && (
-                <div className="mt-8 pt-6 border-t border-gray-200">
+                <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 rounded-xl border border-emerald-500/20 p-5">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">Save This Job</h3>
-                      <p className="text-sm text-gray-500 mt-1">
-                        {currentJobId
-                          ? 'This job is already saved'
-                          : `Save ${generatedClips.size} generated clip${generatedClips.size !== 1 ? 's' : ''} for later`}
-                      </p>
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 bg-emerald-500/20 rounded-lg">
+                        <Save className="w-5 h-5 text-emerald-400" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-slate-100">Save This Job</h3>
+                        <p className="text-sm text-slate-500 mt-0.5">
+                          {currentJobId
+                            ? 'This job is already saved'
+                            : `Save ${generatedClips.size} generated clip${generatedClips.size !== 1 ? 's' : ''} for later`}
+                        </p>
+                      </div>
                     </div>
                     {!currentJobId && (
                       <button
                         onClick={handleSaveJob}
                         disabled={saveJobStatus === 'saving'}
-                        className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                        className={`px-4 py-2 rounded-lg transition flex items-center gap-2 ${
                           saveJobStatus === 'saving'
-                            ? 'bg-gray-400 text-white cursor-not-allowed'
-                            : 'bg-green-600 hover:bg-green-700 text-white'
+                            ? 'bg-emerald-500/50 text-white cursor-not-allowed'
+                            : 'bg-emerald-600 hover:bg-emerald-500 text-white'
                         }`}
                       >
-                        {saveJobStatus === 'saving' && (
-                          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
+                        {saveJobStatus === 'saving' ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4" />
+                            Save Job
+                          </>
                         )}
-                        {saveJobStatus === 'saving' ? 'Saving...' : 'Save Job'}
                       </button>
                     )}
                     {currentJobId && (
-                      <span className="text-green-600 flex items-center gap-1">
-                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
+                      <span className="text-emerald-400 flex items-center gap-2 px-4 py-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                        <Check className="w-4 h-4" />
                         Saved
                       </span>
                     )}
                   </div>
 
                   {saveJobStatus === 'success' && !currentJobId && (
-                    <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3">
-                      <p className="text-green-700 text-sm">Job saved successfully!</p>
+                    <div className="mt-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
+                      <p className="text-emerald-400 text-sm flex items-center gap-2">
+                        <Check className="w-4 h-4" />
+                        Job saved successfully!
+                      </p>
                     </div>
                   )}
 
                   {saveJobError && (
-                    <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3">
-                      <p className="text-red-700 text-sm">{saveJobError}</p>
+                    <div className="mt-3 bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+                      <p className="text-red-400 text-sm flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4" />
+                        {saveJobError}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -1013,19 +1142,7 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
             </div>
           )}
         </div>
-        )}
-
-        {/* Debug Info (development only) */}
-        {process.env.NODE_ENV === 'development' && video && !showJobHistory && (
-          <div className="mt-4 p-4 bg-gray-100 rounded-lg text-xs font-mono">
-            <p className="font-bold mb-2">Debug Info:</p>
-            <p>URL: {video.url}</p>
-            <p>Size: {video.size} bytes</p>
-            <p>Duration: {video.duration} seconds</p>
-            <p>Current Job ID: {currentJobId || 'none'}</p>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
