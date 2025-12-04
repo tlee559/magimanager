@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       .join('\n');
 
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     const prompt = `You are an expert video editor specializing in creating short-form ad content. Analyze this video transcript and identify 3-5 compelling moments that would make great ad clips (15-60 seconds each).
 
