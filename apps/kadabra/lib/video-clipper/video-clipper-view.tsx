@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { upload } from '@vercel/blob/client';
-import { UploadedVideo, UploadStatus, Transcript, TranscribeStatus } from './types';
+import { UploadedVideo, UploadStatus, Transcript, TranscribeStatus, ClipSuggestion, AnalyzeStatus } from './types';
 import {
   MAX_FILE_SIZE,
   ALLOWED_TYPES,
@@ -26,6 +26,11 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [transcribeStatus, setTranscribeStatus] = useState<TranscribeStatus>('idle');
   const [transcribeError, setTranscribeError] = useState<string | null>(null);
+
+  // Phase 3: Analysis state
+  const [suggestions, setSuggestions] = useState<ClipSuggestion[]>([]);
+  const [analyzeStatus, setAnalyzeStatus] = useState<AnalyzeStatus>('idle');
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -189,16 +194,67 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Phase 3: Handle AI analysis
+  const handleAnalyze = async () => {
+    if (!transcript || !video) return;
+
+    console.log('[VideoClipper] Starting AI analysis...');
+    setAnalyzeStatus('analyzing');
+    setAnalyzeError(null);
+
+    try {
+      const response = await fetch('/api/video-clipper/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          segments: transcript.segments,
+          videoDuration: video.duration || 0,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Analysis failed');
+      }
+
+      console.log('[VideoClipper] Analysis complete:', data.suggestions);
+      setSuggestions(data.suggestions);
+      setAnalyzeStatus('success');
+    } catch (err) {
+      console.error('[VideoClipper] Analysis error:', err);
+      setAnalyzeError(err instanceof Error ? err.message : 'Analysis failed');
+      setAnalyzeStatus('error');
+    }
+  };
+
+  // Get label color for clip type
+  const getTypeColor = (type: ClipSuggestion['type']) => {
+    const colors = {
+      hook: 'bg-purple-100 text-purple-700',
+      testimonial: 'bg-green-100 text-green-700',
+      benefit: 'bg-blue-100 text-blue-700',
+      cta: 'bg-orange-100 text-orange-700',
+      problem: 'bg-red-100 text-red-700',
+      solution: 'bg-teal-100 text-teal-700',
+    };
+    return colors[type] || 'bg-gray-100 text-gray-700';
+  };
+
   // Reset to upload another
   const handleReset = () => {
     setVideo(null);
     setStatus('idle');
     setProgress(0);
     setError(null);
-    // Reset transcription state too
+    // Reset transcription state
     setTranscript(null);
     setTranscribeStatus('idle');
     setTranscribeError(null);
+    // Reset analysis state
+    setSuggestions([]);
+    setAnalyzeStatus('idle');
+    setAnalyzeError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -427,7 +483,86 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                       </div>
                     )}
                   </div>
-                  {/* Placeholder for Phase 3 - Analyze button will go here */}
+
+                  {/* Phase 3: Analyze Button */}
+                  {suggestions.length === 0 && analyzeStatus !== 'analyzing' && (
+                    <button
+                      onClick={handleAnalyze}
+                      className="mt-4 px-4 py-2 text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+                    >
+                      Find Ad Moments
+                    </button>
+                  )}
+
+                  {/* Analyzing State */}
+                  {analyzeStatus === 'analyzing' && (
+                    <button
+                      disabled
+                      className="mt-4 px-4 py-2 text-white bg-green-400 rounded-lg flex items-center gap-2 cursor-not-allowed"
+                    >
+                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Analyzing...
+                    </button>
+                  )}
+
+                  {/* Analysis Error */}
+                  {analyzeError && (
+                    <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
+                      <p className="text-red-700">{analyzeError}</p>
+                      <button
+                        onClick={() => {
+                          setAnalyzeError(null);
+                          setAnalyzeStatus('idle');
+                        }}
+                        className="text-red-600 underline mt-2 text-sm"
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Phase 3: Clip Suggestions */}
+              {suggestions.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                    Suggested Clips ({suggestions.length})
+                  </h3>
+                  <div className="space-y-4">
+                    {suggestions.map((suggestion, index) => (
+                      <div
+                        key={index}
+                        className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg font-semibold text-gray-900">
+                              #{index + 1}
+                            </span>
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${getTypeColor(suggestion.type)}`}>
+                              {suggestion.type}
+                            </span>
+                            <span className="text-sm text-gray-500">
+                              {formatTimestamp(suggestion.startTime)} - {formatTimestamp(suggestion.endTime)}
+                            </span>
+                          </div>
+                          {/* Placeholder for Phase 4 - Generate Clip button */}
+                        </div>
+                        <p className="text-gray-700 text-sm mb-2">
+                          {suggestion.reason}
+                        </p>
+                        {suggestion.transcript && (
+                          <p className="text-gray-500 text-xs italic border-l-2 border-gray-200 pl-3">
+                            "{suggestion.transcript}"
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
