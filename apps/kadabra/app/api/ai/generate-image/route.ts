@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@magimanager/auth";
+import { put } from "@vercel/blob";
 
-export const maxDuration = 60;
+export const maxDuration = 120; // Increased for reference image processing
 
 type Provider = "google-imagen" | "replicate-flux";
 type AspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
@@ -13,9 +14,35 @@ interface GenerateImageRequest {
   aspectRatio?: AspectRatio;
   imageCount?: number;
   rawMode?: boolean; // FLUX only - more photorealistic
+  referenceImageUrl?: string; // URL or base64 of reference image
 }
 
-// Google Imagen 4 API
+// Upload base64 image to Vercel Blob and return URL
+async function uploadReferenceImage(base64OrUrl: string, userId: string): Promise<string> {
+  // If already a URL, return as-is
+  if (base64OrUrl.startsWith("http")) {
+    return base64OrUrl;
+  }
+
+  // Upload base64 to Vercel Blob
+  if (base64OrUrl.startsWith("data:")) {
+    const base64Data = base64OrUrl.split(",")[1];
+    const buffer = Buffer.from(base64Data, "base64");
+    const blob = await put(
+      `ai-images/references/${userId}/${Date.now()}.png`,
+      buffer,
+      {
+        access: "public",
+        contentType: "image/png",
+      }
+    );
+    return blob.url;
+  }
+
+  throw new Error("Invalid reference image format");
+}
+
+// Google Imagen 4 API - text-to-image only (reference not supported via simple API)
 async function generateWithGoogleImagen(
   prompt: string,
   aspectRatio: AspectRatio = "1:1",
@@ -37,7 +64,7 @@ async function generateWithGoogleImagen(
     body: JSON.stringify({
       instances: [{ prompt }],
       parameters: {
-        sampleCount: Math.min(imageCount, 4), // Max 4 images
+        sampleCount: Math.min(imageCount, 4),
         aspectRatio,
       },
     }),
@@ -54,13 +81,12 @@ async function generateWithGoogleImagen(
     throw new Error("No image data in response");
   }
 
-  // Return all images as data URLs
   return data.predictions
     .filter((p: { bytesBase64Encoded?: string }) => p.bytesBase64Encoded)
     .map((p: { bytesBase64Encoded: string }) => `data:image/png;base64,${p.bytesBase64Encoded}`);
 }
 
-// Replicate FLUX 1.1 Pro API
+// Replicate FLUX 1.1 Pro API - text-to-image
 async function generateWithReplicateFlux(
   prompt: string,
   aspectRatio: AspectRatio = "1:1",
@@ -72,13 +98,11 @@ async function generateWithReplicateFlux(
     throw new Error("REPLICATE_API_TOKEN not configured");
   }
 
-  // Use Ultra model for raw mode (more photorealistic)
   const model = rawMode
     ? "black-forest-labs/flux-1.1-pro-ultra"
     : "black-forest-labs/flux-1.1-pro";
   const endpoint = `https://api.replicate.com/v1/models/${model}/predictions`;
 
-  // Generate images sequentially (FLUX doesn't support batch in one call)
   const images: string[] = [];
 
   for (let i = 0; i < Math.min(imageCount, 4); i++) {
@@ -87,7 +111,7 @@ async function generateWithReplicateFlux(
       headers: {
         Authorization: `Bearer ${apiToken}`,
         "Content-Type": "application/json",
-        Prefer: "wait", // Wait for result synchronously
+        Prefer: "wait",
       },
       body: JSON.stringify({
         input: {
@@ -95,7 +119,7 @@ async function generateWithReplicateFlux(
           aspect_ratio: aspectRatio,
           output_format: "png",
           output_quality: 90,
-          ...(rawMode && { raw: true }), // Enable raw mode for ultra model
+          ...(rawMode && { raw: true }),
         },
       }),
     });
@@ -107,14 +131,12 @@ async function generateWithReplicateFlux(
 
     const data = await response.json();
 
-    // If prediction completed immediately
     if (data.status === "succeeded" && data.output) {
       const url = typeof data.output === "string" ? data.output : data.output[0];
       images.push(url);
       continue;
     }
 
-    // If still processing, poll for result
     if (data.status === "processing" || data.status === "starting") {
       let result = data;
       let attempts = 0;
@@ -156,11 +178,100 @@ async function generateWithReplicateFlux(
   return images;
 }
 
+// FLUX Redux - Generate variations from a reference image
+async function generateWithFluxRedux(
+  referenceImageUrl: string,
+  aspectRatio: AspectRatio = "1:1",
+  imageCount: number = 1
+): Promise<string[]> {
+  const apiToken = process.env.REPLICATE_API_TOKEN;
+  if (!apiToken) {
+    throw new Error("REPLICATE_API_TOKEN not configured");
+  }
+
+  const model = "black-forest-labs/flux-redux-dev";
+  const endpoint = `https://api.replicate.com/v1/models/${model}/predictions`;
+
+  const images: string[] = [];
+
+  for (let i = 0; i < Math.min(imageCount, 4); i++) {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+        "Content-Type": "application/json",
+        Prefer: "wait",
+      },
+      body: JSON.stringify({
+        input: {
+          redux_image: referenceImageUrl,
+          aspect_ratio: aspectRatio,
+          num_inference_steps: 28,
+          guidance: 3,
+          output_format: "png",
+          output_quality: 90,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || "Replicate FLUX Redux API error");
+    }
+
+    const data = await response.json();
+
+    if (data.status === "succeeded" && data.output) {
+      const urls = Array.isArray(data.output) ? data.output : [data.output];
+      images.push(...urls);
+      continue;
+    }
+
+    if (data.status === "processing" || data.status === "starting") {
+      let result = data;
+      let attempts = 0;
+      const maxAttempts = 90;
+
+      while (
+        result.status !== "succeeded" &&
+        result.status !== "failed" &&
+        attempts < maxAttempts
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        attempts++;
+
+        const pollResponse = await fetch(
+          `https://api.replicate.com/v1/predictions/${data.id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${apiToken}`,
+            },
+          }
+        );
+        result = await pollResponse.json();
+      }
+
+      if (result.status === "succeeded" && result.output) {
+        const urls = Array.isArray(result.output) ? result.output : [result.output];
+        images.push(...urls);
+        continue;
+      }
+
+      throw new Error(result.error || "Generation timed out");
+    }
+  }
+
+  if (images.length === 0) {
+    throw new Error("No images generated");
+  }
+
+  return images;
+}
+
 const VALID_ASPECT_RATIOS: AspectRatio[] = ["1:1", "16:9", "9:16", "4:3", "3:4"];
 
 export async function POST(req: NextRequest) {
   try {
-    // Check authentication
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -172,9 +283,33 @@ export async function POST(req: NextRequest) {
       provider,
       aspectRatio = "1:1",
       imageCount = 1,
-      rawMode = false
+      rawMode = false,
+      referenceImageUrl,
     } = body;
 
+    // Reference image mode - use FLUX Redux
+    if (referenceImageUrl) {
+      // Upload reference image if it's base64
+      const uploadedRefUrl = await uploadReferenceImage(referenceImageUrl, session.user.id);
+
+      const imageUrls = await generateWithFluxRedux(
+        uploadedRefUrl,
+        aspectRatio,
+        Math.min(Math.max(1, imageCount), 4)
+      );
+
+      return NextResponse.json({
+        success: true,
+        imageUrls,
+        provider: "replicate-flux-redux",
+        prompt: "Reference image variation",
+        aspectRatio,
+        imageCount: imageUrls.length,
+        referenceMode: true,
+      });
+    }
+
+    // Normal text-to-image mode
     if (!prompt || typeof prompt !== "string") {
       return NextResponse.json(
         { error: "Prompt is required" },
@@ -196,7 +331,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const count = Math.min(Math.max(1, imageCount), 4); // Clamp between 1-4
+    const count = Math.min(Math.max(1, imageCount), 4);
 
     let imageUrls: string[];
 

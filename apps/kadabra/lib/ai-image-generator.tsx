@@ -12,6 +12,7 @@ import {
   Save,
   Sparkles,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 
@@ -56,6 +57,10 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
   const [savingIndex, setSavingIndex] = useState<number | null>(null);
   const [savedIndices, setSavedIndices] = useState<Set<number>>(new Set());
 
+  // Reference image state
+  const [referenceImage, setReferenceImage] = useState<string | null>(null);
+  const [referenceMode, setReferenceMode] = useState(false);
+
   // Gallery state
   const [galleryImages, setGalleryImages] = useState<GeneratedImage[]>([]);
   const [galleryLoading, setGalleryLoading] = useState(false);
@@ -89,8 +94,38 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
     }
   };
 
+  const handleReferenceImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("Please upload an image file");
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setError("Image must be less than 10MB");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setReferenceImage(event.target?.result as string);
+      setReferenceMode(true);
+      setError(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearReferenceImage = () => {
+    setReferenceImage(null);
+    setReferenceMode(false);
+  };
+
   const handleGenerate = async () => {
-    if (!prompt.trim()) return;
+    // Reference mode doesn't require prompt, text mode does
+    if (!referenceMode && !prompt.trim()) return;
+    if (referenceMode && !referenceImage) return;
 
     setIsGenerating(true);
     setError(null);
@@ -99,18 +134,26 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
     setSavedIndices(new Set());
 
     try {
+      const requestBody = referenceMode
+        ? {
+            referenceImageUrl: referenceImage,
+            aspectRatio,
+            imageCount,
+          }
+        : {
+            prompt: prompt.trim(),
+            provider,
+            aspectRatio,
+            imageCount,
+            rawMode: provider === "replicate-flux" ? rawMode : undefined,
+          };
+
       const response = await fetch("/api/ai/generate-image", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          prompt: prompt.trim(),
-          provider,
-          aspectRatio,
-          imageCount,
-          rawMode: provider === "replicate-flux" ? rawMode : undefined,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
@@ -137,10 +180,10 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt,
-          provider,
+          prompt: referenceMode ? "Reference image variation" : prompt,
+          provider: referenceMode ? "replicate-flux-redux" : provider,
           aspectRatio,
-          rawMode: provider === "replicate-flux" ? rawMode : false,
+          rawMode: !referenceMode && provider === "replicate-flux" ? rawMode : false,
           imageUrl,
         }),
       });
@@ -270,7 +313,9 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
               AI Image Generator
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              Generate images from text descriptions
+              {referenceMode
+                ? "Generate variations from a reference image"
+                : "Generate images from text descriptions"}
             </p>
           </div>
         </div>
@@ -305,50 +350,135 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Input Section */}
           <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6 space-y-5">
-            {/* Prompt */}
+            {/* Mode Toggle */}
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                Describe your image
-              </label>
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="A professional business woman in a modern office, natural lighting, corporate photography style..."
-                className="w-full h-28 bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-3 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 resize-none"
-                disabled={isGenerating}
-              />
-            </div>
-
-            {/* Provider */}
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Provider
+                Generation Mode
               </label>
               <div className="flex gap-3">
                 <button
-                  onClick={() => setProvider("google-imagen")}
+                  onClick={() => {
+                    setReferenceMode(false);
+                    setReferenceImage(null);
+                  }}
                   disabled={isGenerating}
                   className={`flex-1 py-2.5 px-4 rounded-lg border transition text-sm font-medium ${
-                    provider === "google-imagen"
-                      ? "bg-blue-600/20 border-blue-500/50 text-blue-400"
+                    !referenceMode
+                      ? "bg-slate-700 border-slate-500 text-slate-200"
                       : "bg-slate-900/50 border-slate-700 text-slate-400 hover:border-slate-600"
                   }`}
                 >
-                  Google Imagen 4
+                  Text to Image
                 </button>
                 <button
-                  onClick={() => setProvider("replicate-flux")}
+                  onClick={() => setReferenceMode(true)}
                   disabled={isGenerating}
                   className={`flex-1 py-2.5 px-4 rounded-lg border transition text-sm font-medium ${
-                    provider === "replicate-flux"
-                      ? "bg-purple-600/20 border-purple-500/50 text-purple-400"
+                    referenceMode
+                      ? "bg-orange-600/20 border-orange-500/50 text-orange-400"
                       : "bg-slate-900/50 border-slate-700 text-slate-400 hover:border-slate-600"
                   }`}
                 >
-                  FLUX 1.1 Pro
+                  Reference Image
                 </button>
               </div>
             </div>
+
+            {/* Reference Image Upload (when in reference mode) */}
+            {referenceMode ? (
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Upload Reference Image
+                </label>
+                {referenceImage ? (
+                  <div className="relative">
+                    <div className="aspect-video bg-slate-900/50 rounded-lg border border-slate-700 overflow-hidden">
+                      <img
+                        src={referenceImage}
+                        alt="Reference"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <button
+                      onClick={clearReferenceImage}
+                      disabled={isGenerating}
+                      className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 rounded-full transition"
+                    >
+                      <X className="w-4 h-4 text-white" />
+                    </button>
+                    <p className="text-xs text-slate-500 mt-2">
+                      FLUX Redux will generate variations of this image
+                    </p>
+                  </div>
+                ) : (
+                  <label className="block cursor-pointer">
+                    <div className="flex flex-col items-center justify-center h-32 bg-slate-900/50 border-2 border-dashed border-slate-700 rounded-lg hover:border-slate-600 transition">
+                      <Upload className="w-8 h-8 text-slate-500 mb-2" />
+                      <span className="text-sm text-slate-400">
+                        Click to upload or drag & drop
+                      </span>
+                      <span className="text-xs text-slate-500 mt-1">
+                        PNG, JPG up to 10MB
+                      </span>
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleReferenceImageUpload}
+                      className="hidden"
+                      disabled={isGenerating}
+                    />
+                  </label>
+                )}
+              </div>
+            ) : (
+              /* Prompt (when in text mode) */
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Describe your image
+                </label>
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="A professional business woman in a modern office, natural lighting, corporate photography style..."
+                  className="w-full h-28 bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-3 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 resize-none"
+                  disabled={isGenerating}
+                />
+              </div>
+            )}
+
+            {/* Provider (only show in text mode) */}
+            {!referenceMode && (
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Provider
+                </label>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setProvider("google-imagen")}
+                    disabled={isGenerating}
+                    className={`flex-1 py-2.5 px-4 rounded-lg border transition text-sm font-medium ${
+                      provider === "google-imagen"
+                        ? "bg-blue-600/20 border-blue-500/50 text-blue-400"
+                        : "bg-slate-900/50 border-slate-700 text-slate-400 hover:border-slate-600"
+                    }`}
+                  >
+                    Google Imagen 4
+                  </button>
+                  <button
+                    onClick={() => setProvider("replicate-flux")}
+                    disabled={isGenerating}
+                    className={`flex-1 py-2.5 px-4 rounded-lg border transition text-sm font-medium ${
+                      provider === "replicate-flux"
+                        ? "bg-purple-600/20 border-purple-500/50 text-purple-400"
+                        : "bg-slate-900/50 border-slate-700 text-slate-400 hover:border-slate-600"
+                    }`}
+                  >
+                    FLUX 1.1 Pro
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Aspect Ratio */}
             <div>
@@ -397,8 +527,8 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
               </div>
             </div>
 
-            {/* Raw Mode (FLUX only) */}
-            {provider === "replicate-flux" && (
+            {/* Raw Mode (FLUX only, text mode only) */}
+            {!referenceMode && provider === "replicate-flux" && (
               <div>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <div
@@ -428,18 +558,29 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
             {/* Generate Button */}
             <button
               onClick={handleGenerate}
-              disabled={!prompt.trim() || isGenerating}
-              className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed rounded-lg font-medium text-white transition flex items-center justify-center gap-2"
+              disabled={
+                isGenerating ||
+                (referenceMode ? !referenceImage : !prompt.trim())
+              }
+              className={`w-full py-3 px-4 ${
+                referenceMode
+                  ? "bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500"
+                  : "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500"
+              } disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed rounded-lg font-medium text-white transition flex items-center justify-center gap-2`}
             >
               {isGenerating ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Generating {imageCount > 1 ? `${imageCount} images` : "image"}...
+                  {referenceMode
+                    ? `Generating ${imageCount > 1 ? `${imageCount} variations` : "variation"}...`
+                    : `Generating ${imageCount > 1 ? `${imageCount} images` : "image"}...`}
                 </>
               ) : (
                 <>
                   <Sparkles className="w-5 h-5" />
-                  Generate {imageCount > 1 ? `${imageCount} Images` : "Image"}
+                  {referenceMode
+                    ? `Generate ${imageCount > 1 ? `${imageCount} Variations` : "Variation"}`
+                    : `Generate ${imageCount > 1 ? `${imageCount} Images` : "Image"}`}
                 </>
               )}
             </button>
@@ -447,7 +588,7 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
             {error && (
               <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
                 <p className="text-sm text-red-400">{error}</p>
-                {provider === "google-imagen" && (
+                {!referenceMode && provider === "google-imagen" && (
                   <button
                     onClick={() => setProvider("replicate-flux")}
                     className="mt-2 text-xs text-blue-400 hover:text-blue-300 underline"
@@ -455,7 +596,7 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                     Try with FLUX instead
                   </button>
                 )}
-                {provider === "replicate-flux" && (
+                {!referenceMode && provider === "replicate-flux" && (
                   <button
                     onClick={() => setProvider("google-imagen")}
                     className="mt-2 text-xs text-blue-400 hover:text-blue-300 underline"
