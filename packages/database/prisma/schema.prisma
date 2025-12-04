@@ -53,6 +53,7 @@ model IdentityProfile {
   adAccounts AdAccount[]
   gologinProfile GoLoginProfile?
   activities IdentityActivity[]
+  authenticators Authenticator[]
 }
 
 model IdentityDocument {
@@ -63,6 +64,40 @@ model IdentityDocument {
   uploadedAt        DateTime @default(now())
 
   profile IdentityProfile @relation(fields: [identityProfileId], references: [id])
+}
+
+// ============================================================================
+// TOTP AUTHENTICATOR (2FA codes for ad platform accounts)
+// ============================================================================
+
+model Authenticator {
+  id                String   @id @default(cuid())
+  identityProfileId String
+
+  // Display info
+  name              String   // Display name (e.g., "Google Ads - john@gmail.com")
+  platform          String?  // "google" | "meta" | "tiktok" | "microsoft" | "other"
+
+  // TOTP Details (from otpauth:// URI)
+  issuer            String?  // Issuer from QR (e.g., "Google", "Meta")
+  accountName       String?  // Account name from QR
+  secret            String   // Encrypted TOTP secret (base32)
+  algorithm         String   @default("SHA1")  // SHA1, SHA256, SHA512
+  digits            Int      @default(6)       // Number of digits (usually 6)
+  period            Int      @default(30)      // Time period in seconds
+
+  // Optional notes
+  notes             String?
+
+  // Timestamps
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  lastUsedAt        DateTime? // When code was last copied
+
+  // Relations
+  identityProfile   IdentityProfile @relation(fields: [identityProfileId], references: [id], onDelete: Cascade)
+
+  @@index([identityProfileId])
 }
 
 model AdAccount {

@@ -200,7 +200,7 @@ type Notification = {
   createdAt: Date;
 };
 
-export type View = "dashboard" | "identities" | "create-identity" | "identity-detail" | "edit-identity" | "ad-accounts" | "team" | "settings" | "my-accounts" | "requests" | "admin-requests" | "system" | "sms-dashboard";
+export type View = "dashboard" | "identities" | "create-identity" | "identity-detail" | "edit-identity" | "ad-accounts" | "team" | "settings" | "my-accounts" | "requests" | "admin-requests" | "system" | "sms-dashboard" | "authenticator";
 
 // ============================================================================
 // LOGO COMPONENT
@@ -242,6 +242,7 @@ const VIEW_TO_PATH: Record<View, string> = {
   "admin-requests": "/admin/requests",
   "system": "/admin/system",
   "sms-dashboard": "/admin/sms",
+  "authenticator": "/admin/authenticator",
 };
 
 const PATH_TO_VIEW: Record<string, View> = {
@@ -259,6 +260,7 @@ const PATH_TO_VIEW: Record<string, View> = {
   "/admin/requests": "admin-requests",
   "/admin/system": "system",
   "/admin/sms": "sms-dashboard",
+  "/admin/authenticator": "authenticator",
 };
 
 function getViewFromPath(pathname: string): View {
@@ -514,6 +516,13 @@ export function AdminApp({
       );
     }
 
+    // Authenticator - for admins and managers
+    if (userRole === "SUPER_ADMIN" || userRole === "ADMIN" || userRole === "MANAGER") {
+      items.push(
+        { id: "authenticator" as View, label: "Authenticator", icon: "🔐" }
+      );
+    }
+
     // Only Super Admin gets the System view
     if (userRole === "SUPER_ADMIN") {
       items.push(
@@ -649,6 +658,7 @@ export function AdminApp({
                 <span className="px-2 py-0.5 text-xs font-bold bg-red-500/20 text-red-400 rounded uppercase">Coming Soon</span>
               </div>
             )}
+            {view === "authenticator" && <h1 className="text-lg font-semibold text-slate-50">2FA Authenticator</h1>}
           </div>
           <div className="flex items-center gap-6">
             {/* Notification Bell */}
@@ -867,6 +877,12 @@ export function AdminApp({
                   We&apos;re working hard to bring you this feature. Stay tuned!
                 </p>
               </div>
+            )}
+            {view === "authenticator" && (
+              <AuthenticatorStandaloneView onNavigateToIdentity={(id) => {
+                setSelectedIdentity(identities.find(i => i.id === id) || null);
+                setView("identity-detail");
+              }} />
             )}
           </div>
         </div>
@@ -3990,6 +4006,9 @@ function IdentityDetailView({
         </div>
       )}
 
+      {/* TOTP Authenticator Section */}
+      <AuthenticatorSection identityId={identity.id} />
+
       {/* Add Account Modal */}
       {showAddAccountModal && (
         <AddAccountModal
@@ -4117,8 +4136,798 @@ function IdentityDetailView({
 }
 
 // ============================================================================
-// PLACEHOLDER VIEW
+// AUTHENTICATOR TYPES
 // ============================================================================
+
+type AuthenticatorPlatform = "google" | "meta" | "tiktok" | "microsoft" | "other";
+
+type AuthenticatorEntry = {
+  id: string;
+  identityProfileId: string;
+  name: string;
+  platform: AuthenticatorPlatform | null;
+  issuer: string | null;
+  accountName: string | null;
+  algorithm: string;
+  digits: number;
+  period: number;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  lastUsedAt: Date | null;
+};
+
+type AuthenticatorWithCode = AuthenticatorEntry & {
+  code: string;
+  remainingSeconds: number;
+};
+
+// ============================================================================
+// AUTHENTICATOR SECTION (for Identity Detail View)
+// ============================================================================
+
+function AuthenticatorSection({ identityId }: { identityId: string }) {
+  const { showConfirm, showSuccess, showError } = useModal();
+  const [authenticators, setAuthenticators] = useState<AuthenticatorWithCode[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchAuthenticators();
+    // Set up auto-refresh for codes
+    const interval = setInterval(fetchAuthenticators, 10000); // Refresh every 10 seconds
+    return () => clearInterval(interval);
+  }, [identityId]);
+
+  async function fetchAuthenticators() {
+    try {
+      const res = await fetch(`/api/identities/${identityId}/authenticators/with-codes`);
+      if (res.ok) {
+        const data = await res.json();
+        setAuthenticators(data.authenticators || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch authenticators:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDelete(auth: AuthenticatorEntry) {
+    const confirmed = await showConfirm(
+      "Delete Authenticator",
+      `Are you sure you want to delete "${auth.name}"? This cannot be undone.`,
+      { confirmText: "Delete", cancelText: "Cancel" }
+    );
+    if (!confirmed) return;
+
+    setDeleting(auth.id);
+    try {
+      const res = await fetch(`/api/identities/${identityId}/authenticators/${auth.id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        await showSuccess("Deleted", "Authenticator has been removed.");
+        fetchAuthenticators();
+      } else {
+        const data = await res.json();
+        await showError("Delete Failed", data.error || "Failed to delete authenticator");
+      }
+    } catch (error) {
+      console.error("Delete error:", error);
+      await showError("Network Error", "Failed to connect to server");
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  async function copyCode(code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+    } catch (error) {
+      console.error("Copy failed:", error);
+    }
+  }
+
+  const platformIcons: Record<string, string> = {
+    google: "🔵",
+    meta: "🔷",
+    tiktok: "🎵",
+    microsoft: "🟦",
+    other: "🔐",
+  };
+
+  if (loading) {
+    return (
+      <div className="mt-6 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+        <div className="animate-pulse flex items-center gap-2">
+          <div className="h-4 w-4 bg-slate-700 rounded"></div>
+          <div className="h-4 w-32 bg-slate-700 rounded"></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6 rounded-xl border border-cyan-800/50 bg-cyan-950/20 p-4">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
+          <span className="text-lg">🔐</span>
+          2FA Authenticator
+        </h3>
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="px-2.5 py-1 text-[10px] font-medium rounded bg-cyan-600 text-white hover:bg-cyan-500 transition"
+        >
+          + Add
+        </button>
+      </div>
+
+      {authenticators.length === 0 ? (
+        <p className="text-xs text-slate-400">
+          No authenticators set up for this identity. Click "Add" to set up 2FA codes.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {authenticators.map((auth) => (
+            <div
+              key={auth.id}
+              className="flex items-center justify-between bg-slate-950/40 rounded-lg p-3"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-lg">{platformIcons[auth.platform || "other"]}</span>
+                <div>
+                  <div className="text-xs font-medium text-slate-100">{auth.name}</div>
+                  {auth.issuer && (
+                    <div className="text-[10px] text-slate-500">{auth.issuer}</div>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <div
+                    className="font-mono text-lg font-bold text-cyan-400 cursor-pointer hover:text-cyan-300 transition"
+                    onClick={() => copyCode(auth.code)}
+                    title="Click to copy"
+                  >
+                    {auth.code.slice(0, 3)} {auth.code.slice(3)}
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    {auth.remainingSeconds}s remaining
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleDelete(auth)}
+                  disabled={deleting === auth.id}
+                  className="p-1.5 text-slate-500 hover:text-rose-400 transition disabled:opacity-50"
+                  title="Delete"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add Authenticator Modal */}
+      {showAddModal && (
+        <AddAuthenticatorModal
+          identityId={identityId}
+          onClose={() => setShowAddModal(false)}
+          onSuccess={() => {
+            setShowAddModal(false);
+            fetchAuthenticators();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// ADD AUTHENTICATOR MODAL
+// ============================================================================
+
+function AddAuthenticatorModal({
+  identityId,
+  onClose,
+  onSuccess,
+}: {
+  identityId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const { showSuccess, showError } = useModal();
+  const [mode, setMode] = useState<"choose" | "manual" | "capture">("choose");
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    name: "",
+    secret: "",
+    platform: "google" as AuthenticatorPlatform,
+    issuer: "",
+    accountName: "",
+    notes: "",
+  });
+
+  // Screen capture state
+  const [capturing, setCapturing] = useState(false);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null);
+  const [selectionEnd, setSelectionEnd] = useState<{ x: number; y: number } | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
+
+  async function handleScreenCapture() {
+    setCapturing(true);
+    try {
+      // Request screen capture
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: "monitor" } as MediaTrackConstraints,
+      });
+
+      // Create video element to capture frame
+      const video = document.createElement("video");
+      video.srcObject = stream;
+      await video.play();
+
+      // Wait for video to be ready
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Create canvas and capture frame
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(video, 0, 0);
+
+      // Stop the stream
+      stream.getTracks().forEach((track) => track.stop());
+
+      // Convert to data URL
+      const dataUrl = canvas.toDataURL("image/png");
+      setCapturedImage(dataUrl);
+      setMode("capture");
+    } catch (error) {
+      console.error("Screen capture error:", error);
+      await showError("Capture Failed", "Failed to capture screen. Please try again or use manual entry.");
+    } finally {
+      setCapturing(false);
+    }
+  }
+
+  async function handleProcessSelection() {
+    if (!capturedImage || !selectionStart || !selectionEnd) return;
+
+    setSaving(true);
+    try {
+      // Create canvas with selected region
+      const img = new Image();
+      img.src = capturedImage;
+      await new Promise((resolve) => { img.onload = resolve; });
+
+      const x = Math.min(selectionStart.x, selectionEnd.x);
+      const y = Math.min(selectionStart.y, selectionEnd.y);
+      const width = Math.abs(selectionEnd.x - selectionStart.x);
+      const height = Math.abs(selectionEnd.y - selectionStart.y);
+
+      if (width < 50 || height < 50) {
+        await showError("Selection Too Small", "Please select a larger area around the QR code.");
+        setSaving(false);
+        return;
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, x, y, width, height, 0, 0, width, height);
+
+      // Get image data for QR decoding
+      const imageData = ctx.getImageData(0, 0, width, height);
+
+      // Dynamic import jsQR
+      const jsQR = (await import("jsqr")).default;
+      const qrCode = jsQR(imageData.data, width, height);
+
+      if (!qrCode) {
+        await showError("No QR Code Found", "Could not detect a QR code in the selected area. Try selecting a different region or use manual entry.");
+        setSaving(false);
+        return;
+      }
+
+      // Parse otpauth:// URI
+      const res = await fetch("/api/authenticators/parse-uri", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uri: qrCode.data }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        await showError("Invalid QR Code", data.error || "The QR code does not contain valid authenticator data.");
+        setSaving(false);
+        return;
+      }
+
+      const parsed = await res.json();
+
+      // Pre-fill form with parsed data
+      setFormData({
+        name: parsed.issuer ? `${parsed.issuer} - ${parsed.accountName || ""}` : parsed.accountName || "Authenticator",
+        secret: parsed.secret,
+        platform: detectPlatform(parsed.issuer),
+        issuer: parsed.issuer || "",
+        accountName: parsed.accountName || "",
+        notes: "",
+      });
+
+      setCapturedImage(null);
+      setSelectionStart(null);
+      setSelectionEnd(null);
+      setMode("manual"); // Switch to manual mode with pre-filled data
+
+      await showSuccess("QR Code Scanned", "Authenticator details extracted. Review and save.");
+    } catch (error) {
+      console.error("QR processing error:", error);
+      await showError("Processing Error", "Failed to process the QR code. Please try manual entry.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function detectPlatform(issuer: string | null): AuthenticatorPlatform {
+    if (!issuer) return "other";
+    const lower = issuer.toLowerCase();
+    if (lower.includes("google")) return "google";
+    if (lower.includes("facebook") || lower.includes("meta") || lower.includes("instagram")) return "meta";
+    if (lower.includes("tiktok")) return "tiktok";
+    if (lower.includes("microsoft") || lower.includes("outlook") || lower.includes("azure")) return "microsoft";
+    return "other";
+  }
+
+  async function handleSave() {
+    if (!formData.name || !formData.secret) {
+      await showError("Missing Fields", "Name and Secret are required.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/identities/${identityId}/authenticators`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formData.name,
+          secret: formData.secret.replace(/\s/g, "").toUpperCase(),
+          platform: formData.platform,
+          issuer: formData.issuer || null,
+          accountName: formData.accountName || null,
+          notes: formData.notes || null,
+        }),
+      });
+
+      if (res.ok) {
+        await showSuccess("Authenticator Added", "2FA codes will now be available for this identity.");
+        onSuccess();
+      } else {
+        const data = await res.json();
+        await showError("Save Failed", data.error || "Failed to save authenticator");
+      }
+    } catch (error) {
+      console.error("Save error:", error);
+      await showError("Network Error", "Failed to connect to server");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-lg mx-4 shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-100">Add Authenticator</h2>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-200 transition"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6">
+          {mode === "choose" && (
+            <div className="space-y-4">
+              <p className="text-sm text-slate-400 mb-4">
+                Choose how to add your authenticator:
+              </p>
+              <button
+                onClick={handleScreenCapture}
+                disabled={capturing}
+                className="w-full p-4 rounded-lg border border-cyan-700 bg-cyan-950/30 hover:bg-cyan-900/40 transition text-left flex items-center gap-4"
+              >
+                <span className="text-2xl">📷</span>
+                <div>
+                  <div className="text-sm font-medium text-slate-100">
+                    {capturing ? "Starting capture..." : "Capture QR Code"}
+                  </div>
+                  <div className="text-xs text-slate-400">
+                    Share your screen and select the QR code area
+                  </div>
+                </div>
+              </button>
+              <button
+                onClick={() => setMode("manual")}
+                className="w-full p-4 rounded-lg border border-slate-700 bg-slate-800/30 hover:bg-slate-700/40 transition text-left flex items-center gap-4"
+              >
+                <span className="text-2xl">⌨️</span>
+                <div>
+                  <div className="text-sm font-medium text-slate-100">Enter Manually</div>
+                  <div className="text-xs text-slate-400">
+                    Type or paste the secret key directly
+                  </div>
+                </div>
+              </button>
+            </div>
+          )}
+
+          {mode === "capture" && capturedImage && (
+            <div className="space-y-4">
+              <p className="text-sm text-slate-400">
+                Click and drag to select the QR code area:
+              </p>
+              <div
+                className="relative border border-slate-700 rounded-lg overflow-hidden cursor-crosshair"
+                style={{ maxHeight: "400px" }}
+                onMouseDown={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  const y = e.clientY - rect.top;
+                  setSelectionStart({ x, y });
+                  setSelectionEnd({ x, y });
+                  setIsSelecting(true);
+                }}
+                onMouseMove={(e) => {
+                  if (!isSelecting) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  const y = e.clientY - rect.top;
+                  setSelectionEnd({ x, y });
+                }}
+                onMouseUp={() => setIsSelecting(false)}
+                onMouseLeave={() => setIsSelecting(false)}
+              >
+                <img
+                  src={capturedImage}
+                  alt="Screen capture"
+                  className="w-full h-auto"
+                  draggable={false}
+                />
+                {selectionStart && selectionEnd && (
+                  <div
+                    className="absolute border-2 border-cyan-400 bg-cyan-400/20"
+                    style={{
+                      left: Math.min(selectionStart.x, selectionEnd.x),
+                      top: Math.min(selectionStart.y, selectionEnd.y),
+                      width: Math.abs(selectionEnd.x - selectionStart.x),
+                      height: Math.abs(selectionEnd.y - selectionStart.y),
+                    }}
+                  />
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setCapturedImage(null);
+                    setSelectionStart(null);
+                    setSelectionEnd(null);
+                    setMode("choose");
+                  }}
+                  className="flex-1 py-2 rounded-lg border border-slate-700 text-slate-300 text-sm hover:bg-slate-800 transition"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={handleProcessSelection}
+                  disabled={!selectionStart || !selectionEnd || saving}
+                  className="flex-1 py-2 rounded-lg bg-cyan-600 text-white text-sm hover:bg-cyan-500 transition disabled:opacity-50"
+                >
+                  {saving ? "Processing..." : "Scan Selection"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {mode === "manual" && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Name *
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="e.g., Google Ads - john@example.com"
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 focus:outline-none focus:border-cyan-600"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Secret Key *
+                </label>
+                <input
+                  type="text"
+                  value={formData.secret}
+                  onChange={(e) => setFormData({ ...formData, secret: e.target.value })}
+                  placeholder="JBSWY3DPEHPK3PXP"
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 font-mono focus:outline-none focus:border-cyan-600"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Base32 secret from your 2FA setup (spaces will be removed)
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Platform
+                </label>
+                <select
+                  value={formData.platform}
+                  onChange={(e) => setFormData({ ...formData, platform: e.target.value as AuthenticatorPlatform })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 focus:outline-none focus:border-cyan-600"
+                >
+                  <option value="google">Google (Google Ads, Gmail)</option>
+                  <option value="meta">Meta (Facebook, Instagram)</option>
+                  <option value="tiktok">TikTok</option>
+                  <option value="microsoft">Microsoft (Outlook, Azure)</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Notes (optional)
+                </label>
+                <input
+                  type="text"
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  placeholder="Any additional notes..."
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 focus:outline-none focus:border-cyan-600"
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => {
+                    setFormData({ name: "", secret: "", platform: "google", issuer: "", accountName: "", notes: "" });
+                    setMode("choose");
+                  }}
+                  className="flex-1 py-2 rounded-lg border border-slate-700 text-slate-300 text-sm hover:bg-slate-800 transition"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving || !formData.name || !formData.secret}
+                  className="flex-1 py-2 rounded-lg bg-cyan-600 text-white text-sm hover:bg-cyan-500 transition disabled:opacity-50"
+                >
+                  {saving ? "Saving..." : "Save Authenticator"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// STANDALONE AUTHENTICATOR VIEW
+// ============================================================================
+
+type AuthenticatorWithIdentity = AuthenticatorWithCode & {
+  identityProfile: {
+    id: string;
+    fullName: string;
+    email: string | null;
+  };
+};
+
+function AuthenticatorStandaloneView({ onNavigateToIdentity }: { onNavigateToIdentity: (id: string) => void }) {
+  const { showSuccess } = useModal();
+  const [authenticators, setAuthenticators] = useState<AuthenticatorWithIdentity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    fetchAllAuthenticators();
+    // Auto-refresh codes every 10 seconds
+    const interval = setInterval(fetchAllAuthenticators, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function fetchAllAuthenticators() {
+    try {
+      // Get all authenticators with identity info
+      const res = await fetch("/api/authenticators");
+      if (res.ok) {
+        const data = await res.json();
+        // Now fetch codes for each authenticator
+        const withCodes: AuthenticatorWithIdentity[] = [];
+        for (const auth of data.authenticators || []) {
+          try {
+            const codeRes = await fetch(`/api/identities/${auth.identityProfileId}/authenticators/${auth.id}/code`);
+            if (codeRes.ok) {
+              const codeData = await codeRes.json();
+              withCodes.push({
+                ...auth,
+                code: codeData.code,
+                remainingSeconds: codeData.remainingSeconds,
+              });
+            }
+          } catch (e) {
+            // Skip if code fetch fails
+          }
+        }
+        setAuthenticators(withCodes);
+      }
+    } catch (error) {
+      console.error("Failed to fetch authenticators:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function copyCode(code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+      await showSuccess("Copied", "Code copied to clipboard");
+    } catch (error) {
+      console.error("Copy failed:", error);
+    }
+  }
+
+  const platformIcons: Record<string, string> = {
+    google: "🔵",
+    meta: "🔷",
+    tiktok: "🎵",
+    microsoft: "🟦",
+    other: "🔐",
+  };
+
+  // Filter authenticators by search
+  const filteredAuthenticators = authenticators.filter((auth) => {
+    if (!search) return true;
+    const searchLower = search.toLowerCase();
+    return (
+      auth.name.toLowerCase().includes(searchLower) ||
+      auth.identityProfile.fullName.toLowerCase().includes(searchLower) ||
+      (auth.identityProfile.email && auth.identityProfile.email.toLowerCase().includes(searchLower)) ||
+      (auth.issuer && auth.issuer.toLowerCase().includes(searchLower))
+    );
+  });
+
+  // Group by identity
+  const groupedByIdentity = filteredAuthenticators.reduce((acc, auth) => {
+    const identityId = auth.identityProfile.id;
+    if (!acc[identityId]) {
+      acc[identityId] = {
+        identity: auth.identityProfile,
+        authenticators: [],
+      };
+    }
+    acc[identityId].authenticators.push(auth);
+    return acc;
+  }, {} as Record<string, { identity: { id: string; fullName: string; email: string | null }; authenticators: AuthenticatorWithIdentity[] }>);
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-10 w-64 bg-slate-800 rounded-lg"></div>
+          <div className="h-32 bg-slate-800 rounded-xl"></div>
+          <div className="h-32 bg-slate-800 rounded-xl"></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 max-w-4xl mx-auto">
+      {/* Search */}
+      <div className="mb-6">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name, identity, or email..."
+          className="w-full max-w-md px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-600"
+        />
+      </div>
+
+      {authenticators.length === 0 ? (
+        <div className="text-center py-12">
+          <div className="text-5xl mb-4 opacity-50">🔐</div>
+          <h3 className="text-lg font-medium text-slate-300 mb-2">No Authenticators Yet</h3>
+          <p className="text-sm text-slate-500 max-w-md mx-auto">
+            2FA authenticators are added through Identity Profiles. Go to an identity and click &quot;Add&quot; in the Authenticator section.
+          </p>
+        </div>
+      ) : filteredAuthenticators.length === 0 ? (
+        <div className="text-center py-12">
+          <div className="text-5xl mb-4 opacity-50">🔍</div>
+          <h3 className="text-lg font-medium text-slate-300 mb-2">No Results</h3>
+          <p className="text-sm text-slate-500">No authenticators match your search.</p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {Object.values(groupedByIdentity).map(({ identity, authenticators: auths }) => (
+            <div
+              key={identity.id}
+              className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden"
+            >
+              {/* Identity Header */}
+              <button
+                onClick={() => onNavigateToIdentity(identity.id)}
+                className="w-full px-5 py-3 flex items-center justify-between bg-slate-800/50 hover:bg-slate-800 transition text-left"
+              >
+                <div>
+                  <div className="text-sm font-medium text-slate-100">{identity.fullName}</div>
+                  {identity.email && (
+                    <div className="text-xs text-slate-500">{identity.email}</div>
+                  )}
+                </div>
+                <div className="text-xs text-slate-500">
+                  {auths.length} code{auths.length !== 1 ? "s" : ""}
+                </div>
+              </button>
+
+              {/* Authenticators */}
+              <div className="divide-y divide-slate-800">
+                {auths.map((auth) => (
+                  <div
+                    key={auth.id}
+                    className="px-5 py-3 flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg">{platformIcons[auth.platform || "other"]}</span>
+                      <div>
+                        <div className="text-sm font-medium text-slate-200">{auth.name}</div>
+                        {auth.issuer && (
+                          <div className="text-[10px] text-slate-500">{auth.issuer}</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <button
+                          onClick={() => copyCode(auth.code)}
+                          className="font-mono text-xl font-bold text-cyan-400 hover:text-cyan-300 transition tracking-wider"
+                          title="Click to copy"
+                        >
+                          {auth.code.slice(0, 3)} {auth.code.slice(3)}
+                        </button>
+                        <div className="text-[10px] text-slate-500">
+                          {auth.remainingSeconds}s
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ============================================================================
 // THREAD CONVERSATION MODAL

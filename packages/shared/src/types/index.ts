@@ -68,6 +68,53 @@ export interface IdentityDocument {
   uploadedAt: Date;
 }
 
+// ============================================================================
+// AUTHENTICATOR (TOTP 2FA)
+// ============================================================================
+
+export type AuthenticatorPlatform = "google" | "meta" | "tiktok" | "microsoft" | "other";
+
+export interface Authenticator {
+  id: string;
+  identityProfileId: string;
+  name: string;
+  platform: AuthenticatorPlatform | null;
+  issuer: string | null;
+  accountName: string | null;
+  // Note: secret is never sent to frontend - only used server-side
+  algorithm: string;
+  digits: number;
+  period: number;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  lastUsedAt: Date | null;
+}
+
+export interface AuthenticatorWithCode extends Omit<Authenticator, 'secret'> {
+  code: string;
+  remainingSeconds: number;
+}
+
+export interface AuthenticatorCreateInput {
+  identityProfileId: string;
+  name: string;
+  platform?: AuthenticatorPlatform | null;
+  issuer?: string | null;
+  accountName?: string | null;
+  secret: string; // base32 encoded secret
+  algorithm?: string;
+  digits?: number;
+  period?: number;
+  notes?: string | null;
+}
+
+export interface AuthenticatorUpdateInput {
+  name?: string;
+  platform?: AuthenticatorPlatform | null;
+  notes?: string | null;
+}
+
 export interface Identity {
   id: string;
   fullName: string;
@@ -447,7 +494,8 @@ export type AdminView =
   | "requests"
   | "admin-requests"
   | "system"
-  | "sms-dashboard";
+  | "sms-dashboard"
+  | "authenticator";
 
 // ============================================================================
 // CAMPAIGN & AUTOMATION TYPES

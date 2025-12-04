@@ -20,3 +20,7 @@ export type { UserFindOptions, UserWithRelations } from "./user.repository";
 // Media buyer repository
 export { mediaBuyerRepository } from "./media-buyer.repository";
 export type { MediaBuyerFindOptions, MediaBuyerWithRelations } from "./media-buyer.repository";
+
+// Authenticator repository
+export { authenticatorRepository } from "./authenticator.repository";
+export type { AuthenticatorFindOptions, AuthenticatorPublic } from "./authenticator.repository";

@@ -38,3 +38,16 @@ export {
   profileGetHandler,
   profilePatchHandler,
 } from "./team.handler";
+
+// Authenticator handlers
+export {
+  authenticatorsGetAllHandler,
+  authenticatorsGetHandler,
+  authenticatorsWithCodesHandler,
+  authenticatorPostHandler,
+  authenticatorGetByIdHandler,
+  authenticatorPutHandler,
+  authenticatorDeleteHandler,
+  authenticatorCodeHandler,
+  parseOtpUriHandler,
+} from "./authenticators.handler";
