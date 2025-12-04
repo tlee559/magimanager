@@ -3,12 +3,14 @@
 import { useState, useEffect } from "react";
 import {
   ArrowLeft,
+  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
   Heart,
   Image as ImageIcon,
+  Layers,
   Loader2,
   Save,
   Sparkles,
@@ -21,6 +23,8 @@ type Provider = "google-imagen" | "replicate-flux";
 type AspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
 type ViewMode = "generate" | "gallery";
 type PresetCategory = "custom" | "google" | "meta" | "display";
+type GenerationMode = "text" | "reference" | "composite";
+type ProductPosition = "center" | "bottom" | "bottom-left" | "bottom-right";
 
 interface GeneratedImage {
   id: string;
@@ -111,9 +115,19 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
   const [selectedPreset, setSelectedPreset] = useState<string>("square");
   const [showPresetDropdown, setShowPresetDropdown] = useState(false);
 
-  // Reference image state
+  // Generation mode state
+  const [generationMode, setGenerationMode] = useState<GenerationMode>("text");
+
+  // Reference image state (for reference mode)
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
-  const [referenceMode, setReferenceMode] = useState(false);
+
+  // Product composite state
+  const [productImage, setProductImage] = useState<string | null>(null);
+  const [transparentProductUrl, setTransparentProductUrl] = useState<string | null>(null);
+  const [isRemovingBackground, setIsRemovingBackground] = useState(false);
+  const [productPosition, setProductPosition] = useState<ProductPosition>("center");
+  const [productScale, setProductScale] = useState(0.6);
+  const [isCompositing, setIsCompositing] = useState(false);
 
   // Gallery state
   const [galleryImages, setGalleryImages] = useState<GeneratedImage[]>([]);
@@ -165,7 +179,7 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
     const reader = new FileReader();
     reader.onload = (event) => {
       setReferenceImage(event.target?.result as string);
-      setReferenceMode(true);
+      setGenerationMode("reference");
       setError(null);
     };
     reader.readAsDataURL(file);
@@ -173,7 +187,95 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
 
   const clearReferenceImage = () => {
     setReferenceImage(null);
-    setReferenceMode(false);
+  };
+
+  const handleProductImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("Please upload an image file");
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setError("Image must be less than 10MB");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setProductImage(event.target?.result as string);
+      setTransparentProductUrl(null);
+      setError(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveBackground = async () => {
+    if (!productImage) return;
+
+    setIsRemovingBackground(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/ai/remove-background", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: productImage }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to remove background");
+      }
+
+      setTransparentProductUrl(data.transparentUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Background removal failed");
+    } finally {
+      setIsRemovingBackground(false);
+    }
+  };
+
+  const clearProductImage = () => {
+    setProductImage(null);
+    setTransparentProductUrl(null);
+  };
+
+  const handleComposite = async (backgroundUrl: string) => {
+    if (!transparentProductUrl) return;
+
+    setIsCompositing(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/ai/composite-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          backgroundUrl,
+          productUrl: transparentProductUrl,
+          position: productPosition,
+          scale: productScale,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to composite image");
+      }
+
+      // Add composite to generated images
+      setGeneratedImages((prev) => [...prev, data.compositeUrl]);
+      setCurrentImageIndex(generatedImages.length);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Compositing failed");
+    } finally {
+      setIsCompositing(false);
+    }
   };
 
   // Get current preset details
@@ -193,30 +295,35 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
   };
 
   const handleGenerate = async () => {
-    // Reference mode doesn't require prompt, text mode does
-    if (!referenceMode && !prompt.trim()) return;
-    if (referenceMode && !referenceImage) return;
+    // Validate based on mode
+    if (generationMode === "text" && !prompt.trim()) return;
+    if (generationMode === "reference" && !referenceImage) return;
+    if (generationMode === "composite" && !prompt.trim()) return;
 
     setIsGenerating(true);
     setError(null);
-    setGeneratedImages([]);
-    setCurrentImageIndex(0);
-    setSavedIndices(new Set());
+    // Don't clear images in composite mode - we append
+    if (generationMode !== "composite") {
+      setGeneratedImages([]);
+      setCurrentImageIndex(0);
+      setSavedIndices(new Set());
+    }
 
     try {
-      const requestBody = referenceMode
-        ? {
-            referenceImageUrl: referenceImage,
-            aspectRatio,
-            imageCount,
-          }
-        : {
-            prompt: prompt.trim(),
-            provider,
-            aspectRatio,
-            imageCount,
-            rawMode: provider === "replicate-flux" ? rawMode : undefined,
-          };
+      const requestBody =
+        generationMode === "reference"
+          ? {
+              referenceImageUrl: referenceImage,
+              aspectRatio,
+              imageCount,
+            }
+          : {
+              prompt: prompt.trim(),
+              provider,
+              aspectRatio,
+              imageCount,
+              rawMode: provider === "replicate-flux" ? rawMode : undefined,
+            };
 
       const response = await fetch("/api/ai/generate-image", {
         method: "POST",
@@ -232,11 +339,47 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
         throw new Error(data.error || "Failed to generate image");
       }
 
-      setGeneratedImages(data.imageUrls || []);
+      const newImages = data.imageUrls || [];
+
+      // In composite mode, auto-composite each generated background
+      if (generationMode === "composite" && transparentProductUrl && newImages.length > 0) {
+        setIsCompositing(true);
+        const composites: string[] = [];
+
+        for (const bgUrl of newImages) {
+          try {
+            const compositeResponse = await fetch("/api/ai/composite-image", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                backgroundUrl: bgUrl,
+                productUrl: transparentProductUrl,
+                position: productPosition,
+                scale: productScale,
+              }),
+            });
+
+            const compositeData = await compositeResponse.json();
+            if (compositeResponse.ok && compositeData.compositeUrl) {
+              composites.push(compositeData.compositeUrl);
+            }
+          } catch {
+            // Continue with other images if one fails
+          }
+        }
+
+        setGeneratedImages(composites);
+        setCurrentImageIndex(0);
+        setSavedIndices(new Set());
+        setIsCompositing(false);
+      } else {
+        setGeneratedImages(newImages);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setIsGenerating(false);
+      setIsCompositing(false);
     }
   };
 
@@ -246,14 +389,24 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
 
     setSavingIndex(index);
     try {
+      let savePrompt = prompt;
+      let saveProvider = provider;
+
+      if (generationMode === "reference") {
+        savePrompt = "Reference image variation";
+        saveProvider = "replicate-flux-redux" as Provider;
+      } else if (generationMode === "composite") {
+        savePrompt = `Product composite: ${prompt}`;
+      }
+
       const response = await fetch("/api/ai/images", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: referenceMode ? "Reference image variation" : prompt,
-          provider: referenceMode ? "replicate-flux-redux" : provider,
+          prompt: savePrompt,
+          provider: saveProvider,
           aspectRatio,
-          rawMode: !referenceMode && provider === "replicate-flux" ? rawMode : false,
+          rawMode: generationMode === "text" && provider === "replicate-flux" ? rawMode : false,
           imageUrl,
         }),
       });
@@ -383,9 +536,11 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
               AI Image Generator
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              {referenceMode
+              {generationMode === "reference"
                 ? "Generate variations from a reference image"
-                : "Generate images from text descriptions"}
+                : generationMode === "composite"
+                  ? "Place product on AI-generated backgrounds"
+                  : "Generate images from text descriptions"}
             </p>
           </div>
         </div>
@@ -425,15 +580,15 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
               <label className="block text-sm font-medium text-slate-300 mb-2">
                 Generation Mode
               </label>
-              <div className="flex gap-3">
+              <div className="flex gap-2">
                 <button
                   onClick={() => {
-                    setReferenceMode(false);
+                    setGenerationMode("text");
                     setReferenceImage(null);
                   }}
                   disabled={isGenerating}
-                  className={`flex-1 py-2.5 px-4 rounded-lg border transition text-sm font-medium ${
-                    !referenceMode
+                  className={`flex-1 py-2 px-3 rounded-lg border transition text-sm font-medium ${
+                    generationMode === "text"
                       ? "bg-slate-700 border-slate-500 text-slate-200"
                       : "bg-slate-900/50 border-slate-700 text-slate-400 hover:border-slate-600"
                   }`}
@@ -441,21 +596,33 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                   Text to Image
                 </button>
                 <button
-                  onClick={() => setReferenceMode(true)}
+                  onClick={() => setGenerationMode("reference")}
                   disabled={isGenerating}
-                  className={`flex-1 py-2.5 px-4 rounded-lg border transition text-sm font-medium ${
-                    referenceMode
+                  className={`flex-1 py-2 px-3 rounded-lg border transition text-sm font-medium ${
+                    generationMode === "reference"
                       ? "bg-orange-600/20 border-orange-500/50 text-orange-400"
                       : "bg-slate-900/50 border-slate-700 text-slate-400 hover:border-slate-600"
                   }`}
                 >
-                  Reference Image
+                  Reference
+                </button>
+                <button
+                  onClick={() => setGenerationMode("composite")}
+                  disabled={isGenerating}
+                  className={`flex-1 py-2 px-3 rounded-lg border transition text-sm font-medium flex items-center justify-center gap-1.5 ${
+                    generationMode === "composite"
+                      ? "bg-teal-600/20 border-teal-500/50 text-teal-400"
+                      : "bg-slate-900/50 border-slate-700 text-slate-400 hover:border-slate-600"
+                  }`}
+                >
+                  <Layers className="w-4 h-4" />
+                  Product
                 </button>
               </div>
             </div>
 
             {/* Reference Image Upload (when in reference mode) */}
-            {referenceMode ? (
+            {generationMode === "reference" && (
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
                   Upload Reference Image
@@ -501,8 +668,171 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                   </label>
                 )}
               </div>
-            ) : (
-              /* Prompt (when in text mode) */
+            )}
+
+            {/* Product Composite Mode */}
+            {generationMode === "composite" && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    1. Upload Product Image
+                  </label>
+                  {productImage ? (
+                    <div className="relative">
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Original */}
+                        <div>
+                          <p className="text-xs text-slate-500 mb-1">Original</p>
+                          <div className="aspect-square bg-slate-900/50 rounded-lg border border-slate-700 overflow-hidden">
+                            <img
+                              src={productImage}
+                              alt="Product"
+                              className="w-full h-full object-contain"
+                            />
+                          </div>
+                        </div>
+                        {/* Transparent */}
+                        <div>
+                          <p className="text-xs text-slate-500 mb-1">
+                            {transparentProductUrl ? "Background Removed" : "Processing..."}
+                          </p>
+                          <div
+                            className="aspect-square rounded-lg border overflow-hidden"
+                            style={{
+                              backgroundImage: transparentProductUrl
+                                ? "linear-gradient(45deg, #334155 25%, transparent 25%), linear-gradient(-45deg, #334155 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #334155 75%), linear-gradient(-45deg, transparent 75%, #334155 75%)"
+                                : "none",
+                              backgroundSize: "16px 16px",
+                              backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
+                              backgroundColor: transparentProductUrl ? "#1e293b" : "#0f172a80",
+                              borderColor: transparentProductUrl ? "#10b981" : "#334155",
+                            }}
+                          >
+                            {isRemovingBackground ? (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
+                              </div>
+                            ) : transparentProductUrl ? (
+                              <img
+                                src={transparentProductUrl}
+                                alt="Transparent"
+                                className="w-full h-full object-contain"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <span className="text-xs text-slate-500">Not processed</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 mt-3">
+                        {!transparentProductUrl && !isRemovingBackground && (
+                          <button
+                            onClick={handleRemoveBackground}
+                            className="flex-1 py-2 px-3 bg-teal-600 hover:bg-teal-500 rounded-lg text-sm font-medium text-white transition flex items-center justify-center gap-2"
+                          >
+                            <Sparkles className="w-4 h-4" />
+                            Remove Background
+                          </button>
+                        )}
+                        {transparentProductUrl && (
+                          <div className="flex-1 py-2 px-3 bg-green-600/20 border border-green-500/30 rounded-lg text-sm font-medium text-green-400 flex items-center justify-center gap-2">
+                            <Check className="w-4 h-4" />
+                            Background Removed
+                          </div>
+                        )}
+                        <button
+                          onClick={clearProductImage}
+                          disabled={isRemovingBackground}
+                          className="py-2 px-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm text-slate-300 transition"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <label className="block cursor-pointer">
+                      <div className="flex flex-col items-center justify-center h-28 bg-slate-900/50 border-2 border-dashed border-slate-700 rounded-lg hover:border-teal-500/50 transition">
+                        <Upload className="w-6 h-6 text-slate-500 mb-2" />
+                        <span className="text-sm text-slate-400">
+                          Upload product image
+                        </span>
+                        <span className="text-xs text-slate-500 mt-1">
+                          PNG, JPG up to 10MB
+                        </span>
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleProductImageUpload}
+                        className="hidden"
+                        disabled={isGenerating || isRemovingBackground}
+                      />
+                    </label>
+                  )}
+                </div>
+
+                {/* Position & Scale (only show after background is removed) */}
+                {transparentProductUrl && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-2">
+                        Product Position
+                      </label>
+                      <div className="flex gap-2">
+                        {(["center", "bottom", "bottom-left", "bottom-right"] as ProductPosition[]).map((pos) => (
+                          <button
+                            key={pos}
+                            onClick={() => setProductPosition(pos)}
+                            disabled={isGenerating}
+                            className={`flex-1 py-1.5 px-2 rounded text-xs font-medium transition ${
+                              productPosition === pos
+                                ? "bg-teal-600/20 border border-teal-500/50 text-teal-400"
+                                : "bg-slate-900/50 border border-slate-700 text-slate-500 hover:border-slate-600"
+                            }`}
+                          >
+                            {pos.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-2">
+                        Product Size: {Math.round(productScale * 100)}%
+                      </label>
+                      <input
+                        type="range"
+                        min="20"
+                        max="90"
+                        value={productScale * 100}
+                        onChange={(e) => setProductScale(parseInt(e.target.value) / 100)}
+                        disabled={isGenerating}
+                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-teal-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Background prompt */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    2. Describe Background
+                  </label>
+                  <textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="Modern kitchen countertop with soft natural lighting, lifestyle product photography..."
+                    className="w-full h-20 bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-3 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500/50 resize-none text-sm"
+                    disabled={isGenerating || !transparentProductUrl}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Prompt (when in text mode) */}
+            {generationMode === "text" && (
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
                   Describe your image
@@ -518,7 +848,7 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
             )}
 
             {/* Provider (only show in text mode) */}
-            {!referenceMode && (
+            {generationMode === "text" && (
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
                   Provider
@@ -680,7 +1010,7 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
             </div>
 
             {/* Raw Mode (FLUX only, text mode only) */}
-            {!referenceMode && provider === "replicate-flux" && (
+            {generationMode === "text" && provider === "replicate-flux" && (
               <div>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <div
@@ -712,27 +1042,38 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
               onClick={handleGenerate}
               disabled={
                 isGenerating ||
-                (referenceMode ? !referenceImage : !prompt.trim())
+                isCompositing ||
+                isRemovingBackground ||
+                (generationMode === "reference" ? !referenceImage : !prompt.trim()) ||
+                (generationMode === "composite" && !transparentProductUrl)
               }
               className={`w-full py-3 px-4 ${
-                referenceMode
+                generationMode === "reference"
                   ? "bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500"
-                  : "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500"
+                  : generationMode === "composite"
+                    ? "bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-500 hover:to-cyan-500"
+                    : "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500"
               } disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed rounded-lg font-medium text-white transition flex items-center justify-center gap-2`}
             >
-              {isGenerating ? (
+              {isGenerating || isCompositing ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  {referenceMode
-                    ? `Generating ${imageCount > 1 ? `${imageCount} variations` : "variation"}...`
-                    : `Generating ${imageCount > 1 ? `${imageCount} images` : "image"}...`}
+                  {isCompositing
+                    ? "Compositing..."
+                    : generationMode === "reference"
+                      ? `Generating ${imageCount > 1 ? `${imageCount} variations` : "variation"}...`
+                      : generationMode === "composite"
+                        ? `Generating ${imageCount > 1 ? `${imageCount} composites` : "composite"}...`
+                        : `Generating ${imageCount > 1 ? `${imageCount} images` : "image"}...`}
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-5 h-5" />
-                  {referenceMode
+                  {generationMode === "composite" ? <Layers className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
+                  {generationMode === "reference"
                     ? `Generate ${imageCount > 1 ? `${imageCount} Variations` : "Variation"}`
-                    : `Generate ${imageCount > 1 ? `${imageCount} Images` : "Image"}`}
+                    : generationMode === "composite"
+                      ? `Generate ${imageCount > 1 ? `${imageCount} Composites` : "Composite"}`
+                      : `Generate ${imageCount > 1 ? `${imageCount} Images` : "Image"}`}
                 </>
               )}
             </button>
@@ -740,7 +1081,7 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
             {error && (
               <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
                 <p className="text-sm text-red-400">{error}</p>
-                {!referenceMode && provider === "google-imagen" && (
+                {generationMode === "text" && provider === "google-imagen" && (
                   <button
                     onClick={() => setProvider("replicate-flux")}
                     className="mt-2 text-xs text-blue-400 hover:text-blue-300 underline"
@@ -748,7 +1089,7 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                     Try with FLUX instead
                   </button>
                 )}
-                {!referenceMode && provider === "replicate-flux" && (
+                {generationMode === "text" && provider === "replicate-flux" && (
                   <button
                     onClick={() => setProvider("google-imagen")}
                     className="mt-2 text-xs text-blue-400 hover:text-blue-300 underline"
