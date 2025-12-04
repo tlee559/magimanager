@@ -268,6 +268,7 @@ model User {
   notifications        Notification[]
   accountActivities    AccountActivity[]   @relation("AccountActivities")
   identityActivities   IdentityActivity[]  @relation("IdentityActivities")
+  generatedImages      GeneratedImage[]
 }
 
 // ============================================================================
@@ -1292,6 +1293,33 @@ model AdImage {
   @@index([projectId])
   @@index([isFavorite])
   @@index([overallScore])
+}
+
+// Simple AI-generated image storage (for AI Image Generator tool)
+model GeneratedImage {
+  id            String   @id @default(cuid())
+  userId        String
+
+  // Generation inputs
+  prompt        String   @db.Text
+  provider      String              // "google-imagen" | "replicate-flux"
+  aspectRatio   String   @default("1:1")
+  rawMode       Boolean  @default(false)
+
+  // Output
+  imageUrl      String   @db.Text   // Vercel Blob URL
+
+  // User actions
+  isFavorite    Boolean  @default(false)
+
+  createdAt     DateTime @default(now())
+
+  // Relations
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isFavorite])
+  @@index([createdAt])
 }
 
 model AdTemplate {
