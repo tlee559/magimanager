@@ -12,17 +12,19 @@ async function removeBackground(imageUrl: string): Promise<string> {
     throw new Error("REPLICATE_API_TOKEN not configured");
   }
 
-  const model = "cjwbw/rembg";
-  const endpoint = `https://api.replicate.com/v1/models/${model}/predictions`;
+  // Use the predictions endpoint with model version
+  // cjwbw/rembg version: fb8af171cfa1616ddcf1242c093f9c46bcada5ad4cf6f2fbe8b81b330ec5c003
+  const endpoint = "https://api.replicate.com/v1/predictions";
 
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiToken}`,
       "Content-Type": "application/json",
-      Prefer: "wait",
+      Prefer: "wait=60",
     },
     body: JSON.stringify({
+      version: "fb8af171cfa1616ddcf1242c093f9c46bcada5ad4cf6f2fbe8b81b330ec5c003",
       input: {
         image: imageUrl,
       },
@@ -30,18 +32,26 @@ async function removeBackground(imageUrl: string): Promise<string> {
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Background removal failed");
+    const errorText = await response.text();
+    console.error("Replicate API error:", response.status, errorText);
+    let errorMessage = "Background removal failed";
+    try {
+      const error = JSON.parse(errorText);
+      errorMessage = error.detail || error.error || errorMessage;
+    } catch {
+      // Use default message
+    }
+    throw new Error(errorMessage);
   }
 
   const data = await response.json();
 
-  // If completed immediately
+  // If completed immediately (sync mode with Prefer: wait)
   if (data.status === "succeeded" && data.output) {
     return data.output;
   }
 
-  // Poll for completion
+  // Poll for completion if not done yet
   if (data.status === "processing" || data.status === "starting") {
     let result = data;
     let attempts = 0;
@@ -73,7 +83,12 @@ async function removeBackground(imageUrl: string): Promise<string> {
     throw new Error(result.error || "Background removal timed out");
   }
 
-  throw new Error("Background removal failed");
+  // If failed
+  if (data.status === "failed") {
+    throw new Error(data.error || "Background removal failed");
+  }
+
+  throw new Error("Background removal failed - unexpected response");
 }
 
 export async function POST(req: NextRequest) {
