@@ -72,17 +72,28 @@ export async function POST(req: NextRequest) {
 
     // Run trim-video model
     console.log('[VideoClipper] Calling trim-video model...');
-    const output = await replicate.run(TRIM_MODEL, {
-      input: {
-        video: videoUrl,
-        start_time: formattedStart,
-        end_time: formattedEnd,
-        quality: 'medium',
-        output_format: 'mp4',
-      },
-    });
+    let output;
+    try {
+      output = await replicate.run(TRIM_MODEL, {
+        input: {
+          video: videoUrl,
+          start_time: formattedStart,
+          end_time: formattedEnd,
+          quality: 'medium',
+          output_format: 'mp4',
+        },
+      });
+    } catch (replicateError) {
+      console.error('[VideoClipper] Replicate API error:', replicateError);
+      const errorMessage = replicateError instanceof Error ? replicateError.message : 'Replicate API failed';
+      return NextResponse.json(
+        { error: `Clip generation failed: ${errorMessage}` },
+        { status: 500 }
+      );
+    }
 
-    console.log('[VideoClipper] Replicate response:', output);
+    console.log('[VideoClipper] Replicate response type:', typeof output);
+    console.log('[VideoClipper] Replicate response:', JSON.stringify(output));
 
     // The model returns a URL to the clipped video
     let clipUrl: string | null = null;
@@ -96,9 +107,9 @@ export async function POST(req: NextRequest) {
     }
 
     if (!clipUrl) {
-      console.error('[VideoClipper] No clip URL in response:', output);
+      console.error('[VideoClipper] No clip URL in response. Output was:', JSON.stringify(output));
       return NextResponse.json(
-        { error: 'Failed to generate clip' },
+        { error: `Failed to generate clip. Unexpected response format: ${JSON.stringify(output)}` },
         { status: 500 }
       );
     }
