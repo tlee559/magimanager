@@ -254,7 +254,8 @@ class AuthenticatorService {
       return { success: true, data: authenticator };
     } catch (error) {
       console.error("AuthenticatorService.create error:", error);
-      return { success: false, error: "Failed to create authenticator" };
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      return { success: false, error: `Failed to create authenticator: ${errorMessage}` };
     }
   }
 

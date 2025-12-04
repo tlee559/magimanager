@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, FormEvent, ChangeEvent, useMemo } from "react";
+import { useState, useEffect, useRef, FormEvent, ChangeEvent, useMemo } from "react";
 import { GEO_OPTIONS, formatDateForDisplay, formatDateToInputString, formatCid } from "@magimanager/shared";
 import { useRealtimeNotifications } from "@magimanager/realtime";
 import { signOut, useSession } from "next-auth/react";
@@ -338,6 +338,7 @@ export function AdminApp({
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const [alertsCount, setAlertsCount] = useState(0);
   const [criticalAlertsCount, setCriticalAlertsCount] = useState(0);
   // Get user role from session (type-safe via @magimanager/auth declarations)
@@ -595,36 +596,8 @@ export function AdminApp({
           ))}
         </nav>
 
-        <div className="flex-shrink-0 w-full px-4 py-3 border-t border-slate-800 space-y-2">
-          {/* User Profile Button */}
-          <button
-            onClick={() => setShowProfileModal(true)}
-            className="w-full px-3 py-2 bg-slate-800/80 rounded-lg hover:bg-slate-700 transition text-left"
-          >
-            <div className="text-sm font-medium text-slate-100">{session?.user?.name || "User"}</div>
-            <div className="text-xs text-slate-400">{session?.user?.email || "No email"}</div>
-          </button>
-
-          {/* MagiManager Ads Console Button - Green */}
-          <a
-            href={`${kadabraUrl}/admin`}
-            className="block w-full px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-500 hover:to-teal-500 transition text-sm text-center"
-          >
-            <span className="font-semibold">MagiManager Ads Console</span>
-          </a>
-
-          {/* Logout Button */}
-          <button
-            onClick={() => {
-              window.location.href = "/logout";
-            }}
-            className="w-full px-3 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition text-sm flex items-center justify-center gap-2"
-          >
-            <span>🚪</span>
-            <span>Logout</span>
-          </button>
-
-          {/* Version Info */}
+        {/* Version Info - Minimal footer */}
+        <div className="flex-shrink-0 w-full px-4 py-2 border-t border-slate-800">
           <div className="text-[10px] text-center text-slate-500">
             ABRA v{appVersion} · {buildSha?.slice(0, 7) || "local"}
           </div>
@@ -773,12 +746,83 @@ export function AdminApp({
             </div>
 
             <a
-              href="https://magimanager.com/admin"
+              href={`${kadabraUrl}/admin`}
               className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg transition flex flex-col items-center"
             >
               <span className="text-xs font-semibold">Kadabra</span>
               <span className="text-[9px] opacity-80">Ad Manager</span>
             </a>
+
+            {/* User Menu Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-800 transition"
+              >
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-sm font-semibold">
+                  {session?.user?.name?.charAt(0)?.toUpperCase() || "U"}
+                </div>
+                <div className="hidden sm:block text-left">
+                  <div className="text-sm font-medium text-slate-100">{session?.user?.name || "User"}</div>
+                  <div className="text-xs text-slate-400">{userRole.replace("_", " ")}</div>
+                </div>
+                <svg className={`w-4 h-4 text-slate-400 transition-transform ${showUserMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showUserMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-slate-900 border border-slate-800 rounded-lg shadow-2xl z-50 overflow-hidden">
+                    <div className="p-4 border-b border-slate-800">
+                      <div className="text-sm font-medium text-slate-100">{session?.user?.name || "User"}</div>
+                      <div className="text-xs text-slate-400">{session?.user?.email || "No email"}</div>
+                    </div>
+                    <div className="py-1">
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          setShowProfileModal(true);
+                        }}
+                        className="w-full px-4 py-2.5 text-left text-sm text-slate-200 hover:bg-slate-800 transition flex items-center gap-3"
+                      >
+                        <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        Profile Settings
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          setView("settings");
+                        }}
+                        className="w-full px-4 py-2.5 text-left text-sm text-slate-200 hover:bg-slate-800 transition flex items-center gap-3"
+                      >
+                        <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Settings
+                      </button>
+                    </div>
+                    <div className="border-t border-slate-800 py-1">
+                      <button
+                        onClick={() => {
+                          window.location.href = "/logout";
+                        }}
+                        className="w-full px-4 py-2.5 text-left text-sm text-rose-400 hover:bg-slate-800 transition flex items-center gap-3"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                        Sign Out
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </header>
 
@@ -4342,8 +4386,9 @@ function AddAuthenticatorModal({
   onSuccess: () => void;
 }) {
   const { showSuccess, showError } = useModal();
-  const [mode, setMode] = useState<"choose" | "manual" | "capture">("choose");
+  const [mode, setMode] = useState<"choose" | "manual" | "qr">("choose");
   const [saving, setSaving] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     secret: "",
@@ -4353,88 +4398,38 @@ function AddAuthenticatorModal({
     notes: "",
   });
 
-  // Screen capture state
-  const [capturing, setCapturing] = useState(false);
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null);
-  const [selectionEnd, setSelectionEnd] = useState<{ x: number; y: number } | null>(null);
-  const [isSelecting, setIsSelecting] = useState(false);
+  // QR image state
+  const [qrImage, setQrImage] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  async function handleScreenCapture() {
-    setCapturing(true);
+  // Process QR image
+  async function processQRImage(dataUrl: string) {
+    setProcessing(true);
     try {
-      // Request screen capture
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { displaySurface: "monitor" } as MediaTrackConstraints,
+      // Load image
+      const img = new Image();
+      img.src = dataUrl;
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
       });
 
-      // Create video element to capture frame
-      const video = document.createElement("video");
-      video.srcObject = stream;
-      await video.play();
-
-      // Wait for video to be ready
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // Create canvas and capture frame
+      // Create canvas and get image data
       const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      canvas.width = img.width;
+      canvas.height = img.height;
       const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(video, 0, 0);
+      ctx.drawImage(img, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-      // Stop the stream
-      stream.getTracks().forEach((track) => track.stop());
-
-      // Convert to data URL
-      const dataUrl = canvas.toDataURL("image/png");
-      setCapturedImage(dataUrl);
-      setMode("capture");
-    } catch (error) {
-      console.error("Screen capture error:", error);
-      await showError("Capture Failed", "Failed to capture screen. Please try again or use manual entry.");
-    } finally {
-      setCapturing(false);
-    }
-  }
-
-  async function handleProcessSelection() {
-    if (!capturedImage || !selectionStart || !selectionEnd) return;
-
-    setSaving(true);
-    try {
-      // Create canvas with selected region
-      const img = new Image();
-      img.src = capturedImage;
-      await new Promise((resolve) => { img.onload = resolve; });
-
-      const x = Math.min(selectionStart.x, selectionEnd.x);
-      const y = Math.min(selectionStart.y, selectionEnd.y);
-      const width = Math.abs(selectionEnd.x - selectionStart.x);
-      const height = Math.abs(selectionEnd.y - selectionStart.y);
-
-      if (width < 50 || height < 50) {
-        await showError("Selection Too Small", "Please select a larger area around the QR code.");
-        setSaving(false);
-        return;
-      }
-
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, x, y, width, height, 0, 0, width, height);
-
-      // Get image data for QR decoding
-      const imageData = ctx.getImageData(0, 0, width, height);
-
-      // Dynamic import jsQR
+      // Decode QR
       const jsQR = (await import("jsqr")).default;
-      const qrCode = jsQR(imageData.data, width, height);
+      const qrCode = jsQR(imageData.data, canvas.width, canvas.height);
 
       if (!qrCode) {
-        await showError("No QR Code Found", "Could not detect a QR code in the selected area. Try selecting a different region or use manual entry.");
-        setSaving(false);
+        await showError("No QR Code Found", "Could not detect a QR code in the image. Make sure the QR code is clearly visible.");
+        setQrImage(null);
         return;
       }
 
@@ -4448,7 +4443,7 @@ function AddAuthenticatorModal({
       if (!res.ok) {
         const data = await res.json();
         await showError("Invalid QR Code", data.error || "The QR code does not contain valid authenticator data.");
-        setSaving(false);
+        setQrImage(null);
         return;
       }
 
@@ -4456,7 +4451,7 @@ function AddAuthenticatorModal({
 
       // Pre-fill form with parsed data
       setFormData({
-        name: parsed.issuer ? `${parsed.issuer} - ${parsed.accountName || ""}` : parsed.accountName || "Authenticator",
+        name: parsed.issuer ? `${parsed.issuer} - ${parsed.accountName || ""}`.trim() : parsed.accountName || "Authenticator",
         secret: parsed.secret,
         platform: detectPlatform(parsed.issuer),
         issuer: parsed.issuer || "",
@@ -4464,17 +4459,74 @@ function AddAuthenticatorModal({
         notes: "",
       });
 
-      setCapturedImage(null);
-      setSelectionStart(null);
-      setSelectionEnd(null);
-      setMode("manual"); // Switch to manual mode with pre-filled data
-
+      setQrImage(null);
+      setMode("manual");
       await showSuccess("QR Code Scanned", "Authenticator details extracted. Review and save.");
     } catch (error) {
       console.error("QR processing error:", error);
-      await showError("Processing Error", "Failed to process the QR code. Please try manual entry.");
+      await showError("Processing Error", "Failed to process the QR code image.");
+      setQrImage(null);
     } finally {
-      setSaving(false);
+      setProcessing(false);
+    }
+  }
+
+  // Handle file selection
+  function handleFileSelect(file: File) {
+    if (!file.type.startsWith("image/")) {
+      showError("Invalid File", "Please select an image file.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      setQrImage(dataUrl);
+      processQRImage(dataUrl);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // Handle paste event
+  useEffect(() => {
+    if (mode !== "qr") return;
+
+    function handlePaste(e: ClipboardEvent) {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of items) {
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) {
+            handleFileSelect(file);
+            e.preventDefault();
+            break;
+          }
+        }
+      }
+    }
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [mode]);
+
+  // Handle drag and drop
+  function handleDrag(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileSelect(e.dataTransfer.files[0]);
     }
   }
 
@@ -4557,17 +4609,14 @@ function AddAuthenticatorModal({
                 Choose how to add your authenticator:
               </p>
               <button
-                onClick={handleScreenCapture}
-                disabled={capturing}
+                onClick={() => setMode("qr")}
                 className="w-full p-4 rounded-lg border border-cyan-700 bg-cyan-950/30 hover:bg-cyan-900/40 transition text-left flex items-center gap-4"
               >
                 <span className="text-2xl">📷</span>
                 <div>
-                  <div className="text-sm font-medium text-slate-100">
-                    {capturing ? "Starting capture..." : "Capture QR Code"}
-                  </div>
+                  <div className="text-sm font-medium text-slate-100">Scan QR Code</div>
                   <div className="text-xs text-slate-400">
-                    Share your screen and select the QR code area
+                    Paste or upload a screenshot of the QR code
                   </div>
                 </div>
               </button>
@@ -4586,68 +4635,71 @@ function AddAuthenticatorModal({
             </div>
           )}
 
-          {mode === "capture" && capturedImage && (
+          {mode === "qr" && (
             <div className="space-y-4">
               <p className="text-sm text-slate-400">
-                Click and drag to select the QR code area:
+                Take a screenshot of the QR code, then paste it here (Cmd/Ctrl+V) or drag & drop:
               </p>
+
+              {/* Drop zone */}
               <div
-                className="relative border border-slate-700 rounded-lg overflow-hidden cursor-crosshair"
-                style={{ maxHeight: "400px" }}
-                onMouseDown={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const x = e.clientX - rect.left;
-                  const y = e.clientY - rect.top;
-                  setSelectionStart({ x, y });
-                  setSelectionEnd({ x, y });
-                  setIsSelecting(true);
-                }}
-                onMouseMove={(e) => {
-                  if (!isSelecting) return;
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const x = e.clientX - rect.left;
-                  const y = e.clientY - rect.top;
-                  setSelectionEnd({ x, y });
-                }}
-                onMouseUp={() => setIsSelecting(false)}
-                onMouseLeave={() => setIsSelecting(false)}
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition ${
+                  dragActive
+                    ? "border-cyan-500 bg-cyan-500/10"
+                    : "border-slate-700 hover:border-slate-600"
+                }`}
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
               >
-                <img
-                  src={capturedImage}
-                  alt="Screen capture"
-                  className="w-full h-auto"
-                  draggable={false}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
                 />
-                {selectionStart && selectionEnd && (
-                  <div
-                    className="absolute border-2 border-cyan-400 bg-cyan-400/20"
-                    style={{
-                      left: Math.min(selectionStart.x, selectionEnd.x),
-                      top: Math.min(selectionStart.y, selectionEnd.y),
-                      width: Math.abs(selectionEnd.x - selectionStart.x),
-                      height: Math.abs(selectionEnd.y - selectionStart.y),
-                    }}
-                  />
+
+                {processing ? (
+                  <div className="text-slate-400">
+                    <div className="text-3xl mb-3 animate-pulse">🔍</div>
+                    <div className="text-sm">Processing QR code...</div>
+                  </div>
+                ) : qrImage ? (
+                  <img src={qrImage} alt="QR Code" className="max-h-48 mx-auto rounded" />
+                ) : (
+                  <div className="text-slate-400">
+                    <div className="text-3xl mb-3">📋</div>
+                    <div className="text-sm font-medium text-slate-300 mb-1">
+                      Paste screenshot or drop image here
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      or click to browse files
+                    </div>
+                  </div>
                 )}
               </div>
+
+              <div className="bg-slate-800/50 rounded-lg p-3 text-xs text-slate-400">
+                <div className="font-medium text-slate-300 mb-1">Quick steps:</div>
+                <ol className="list-decimal list-inside space-y-0.5">
+                  <li>Open the 2FA setup page showing the QR code</li>
+                  <li>Take a screenshot (Cmd+Shift+4 on Mac, Win+Shift+S on Windows)</li>
+                  <li>Come back here and paste (Cmd/Ctrl+V)</li>
+                </ol>
+              </div>
+
               <div className="flex gap-2">
                 <button
                   onClick={() => {
-                    setCapturedImage(null);
-                    setSelectionStart(null);
-                    setSelectionEnd(null);
+                    setQrImage(null);
                     setMode("choose");
                   }}
                   className="flex-1 py-2 rounded-lg border border-slate-700 text-slate-300 text-sm hover:bg-slate-800 transition"
                 >
                   Back
-                </button>
-                <button
-                  onClick={handleProcessSelection}
-                  disabled={!selectionStart || !selectionEnd || saving}
-                  className="flex-1 py-2 rounded-lg bg-cyan-600 text-white text-sm hover:bg-cyan-500 transition disabled:opacity-50"
-                >
-                  {saving ? "Processing..." : "Scan Selection"}
                 </button>
               </div>
             </div>
