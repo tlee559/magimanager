@@ -43,3 +43,28 @@ export interface GeneratedClip {
 }
 
 export type ClipStatus = 'idle' | 'generating' | 'success' | 'error';
+
+// Phase 5: Job types
+export interface SavedClip {
+  id: string;
+  startTime: number;
+  endTime: number;
+  duration: number;
+  momentType: string;
+  clipUrl: string | null;
+  whySelected: string | null;
+  transcript: string | null;
+}
+
+export interface SavedJob {
+  id: string;
+  name: string;
+  sourceType: string;
+  uploadedVideoUrl: string | null;
+  videoDuration: number | null;
+  status: string;
+  createdAt: string;
+  clips: SavedClip[];
+}
+
+export type SaveJobStatus = 'idle' | 'saving' | 'success' | 'error';

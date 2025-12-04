@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { upload } from '@vercel/blob/client';
-import { UploadedVideo, UploadStatus, Transcript, TranscribeStatus, ClipSuggestion, AnalyzeStatus, GeneratedClip } from './types';
+import { UploadedVideo, UploadStatus, Transcript, TranscribeStatus, ClipSuggestion, AnalyzeStatus, GeneratedClip, SavedJob, SaveJobStatus } from './types';
 import {
   MAX_FILE_SIZE,
   ALLOWED_TYPES,
@@ -37,8 +37,40 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
   const [clipGenerating, setClipGenerating] = useState<Set<number>>(new Set());
   const [clipErrors, setClipErrors] = useState<Map<number, string>>(new Map());
 
+  // Phase 5: Job state
+  const [savedJobs, setSavedJobs] = useState<SavedJob[]>([]);
+  const [saveJobStatus, setSaveJobStatus] = useState<SaveJobStatus>('idle');
+  const [saveJobError, setSaveJobError] = useState<string | null>(null);
+  const [loadingJobs, setLoadingJobs] = useState(true);
+  const [showJobHistory, setShowJobHistory] = useState(false);
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Phase 5: Load saved jobs on mount
+  useEffect(() => {
+    loadJobs();
+  }, []);
+
+  const loadJobs = async () => {
+    console.log('[VideoClipper] Loading saved jobs...');
+    setLoadingJobs(true);
+    try {
+      const response = await fetch('/api/video-clipper/jobs');
+      const data = await response.json();
+      if (response.ok) {
+        console.log('[VideoClipper] Loaded jobs:', data.jobs?.length || 0);
+        setSavedJobs(data.jobs || []);
+      } else {
+        console.error('[VideoClipper] Failed to load jobs:', data.error);
+      }
+    } catch (err) {
+      console.error('[VideoClipper] Error loading jobs:', err);
+    } finally {
+      setLoadingJobs(false);
+    }
+  };
 
   // Validate file before upload
   const validateFile = (file: File): string | null => {
@@ -288,6 +320,132 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     }
   };
 
+  // Phase 5: Save current session as a job
+  const handleSaveJob = async () => {
+    if (!video || generatedClips.size === 0) return;
+
+    console.log('[VideoClipper] Saving job...');
+    setSaveJobStatus('saving');
+    setSaveJobError(null);
+
+    try {
+      // Convert generated clips map to array with suggestion data
+      const clipsToSave = Array.from(generatedClips.entries()).map(([index, clip]) => {
+        const suggestion = suggestions[index];
+        return {
+          url: clip.url,
+          startTime: clip.startTime,
+          endTime: clip.endTime,
+          duration: clip.duration,
+          type: suggestion?.type || 'unknown',
+          reason: suggestion?.reason || '',
+          transcript: suggestion?.transcript || '',
+        };
+      });
+
+      const response = await fetch('/api/video-clipper/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: video.filename,
+          sourceVideoUrl: video.url,
+          videoDuration: video.duration,
+          transcript: transcript,
+          suggestions: suggestions,
+          generatedClips: clipsToSave,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to save job');
+      }
+
+      console.log('[VideoClipper] Job saved:', data.job?.id);
+      setCurrentJobId(data.job?.id || null);
+      setSaveJobStatus('success');
+
+      // Refresh jobs list
+      await loadJobs();
+    } catch (err) {
+      console.error('[VideoClipper] Save job error:', err);
+      setSaveJobError(err instanceof Error ? err.message : 'Failed to save job');
+      setSaveJobStatus('error');
+    }
+  };
+
+  // Phase 5: Delete a job
+  const handleDeleteJob = async (jobId: string) => {
+    if (!confirm('Are you sure you want to delete this job?')) return;
+
+    console.log('[VideoClipper] Deleting job:', jobId);
+
+    try {
+      const response = await fetch(`/api/video-clipper/jobs/${jobId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to delete job');
+      }
+
+      console.log('[VideoClipper] Job deleted');
+
+      // Refresh jobs list
+      await loadJobs();
+    } catch (err) {
+      console.error('[VideoClipper] Delete job error:', err);
+      alert(err instanceof Error ? err.message : 'Failed to delete job');
+    }
+  };
+
+  // Phase 5: Load a saved job
+  const handleLoadJob = (job: SavedJob) => {
+    console.log('[VideoClipper] Loading job:', job.id);
+
+    // Reset current state
+    setStatus('success');
+    setVideo({
+      url: job.uploadedVideoUrl || '',
+      filename: job.name,
+      size: 0,
+      duration: job.videoDuration,
+    });
+
+    // Set current job ID
+    setCurrentJobId(job.id);
+
+    // Load clips as generated clips
+    const clips = new Map<number, GeneratedClip>();
+    const loadedSuggestions: ClipSuggestion[] = [];
+
+    job.clips.forEach((clip, index) => {
+      clips.set(index, {
+        url: clip.clipUrl || '',
+        startTime: clip.startTime,
+        endTime: clip.endTime,
+        duration: clip.duration,
+      });
+
+      loadedSuggestions.push({
+        startTime: clip.startTime,
+        endTime: clip.endTime,
+        type: clip.momentType as ClipSuggestion['type'],
+        reason: clip.whySelected || '',
+        transcript: clip.transcript || '',
+      });
+    });
+
+    setGeneratedClips(clips);
+    setSuggestions(loadedSuggestions);
+    setAnalyzeStatus('success');
+    setTranscribeStatus('success');
+    setTranscript({ fullText: '', segments: [] });
+    setShowJobHistory(false);
+  };
+
   // Get label color for clip type
   const getTypeColor = (type: ClipSuggestion['type']) => {
     const colors = {
@@ -320,6 +478,10 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     setGeneratedClips(new Map());
     setClipGenerating(new Set());
     setClipErrors(new Map());
+    // Reset job state
+    setCurrentJobId(null);
+    setSaveJobStatus('idle');
+    setSaveJobError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -336,13 +498,104 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
           >
             ← Back
           </button>
-          <h1 className="text-2xl font-bold text-gray-900">Video Clipper</h1>
-          <p className="text-gray-600 mt-1">
-            Upload a video to get started
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Video Clipper</h1>
+              <p className="text-gray-600 mt-1">
+                {showJobHistory ? 'View your saved clip jobs' : 'Upload a video to get started'}
+              </p>
+            </div>
+            <button
+              onClick={() => setShowJobHistory(!showJobHistory)}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                showJobHistory
+                  ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {showJobHistory ? 'New Clip' : `History (${savedJobs.length})`}
+            </button>
+          </div>
         </div>
 
+        {/* Job History View */}
+        {showJobHistory && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Saved Jobs</h2>
+
+            {loadingJobs ? (
+              <div className="text-center py-8">
+                <svg className="animate-spin h-8 w-8 mx-auto text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p className="text-gray-500 mt-2">Loading jobs...</p>
+              </div>
+            ) : savedJobs.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">No saved jobs yet.</p>
+                <button
+                  onClick={() => setShowJobHistory(false)}
+                  className="mt-4 px-4 py-2 text-blue-600 hover:text-blue-700 underline"
+                >
+                  Create your first clip
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {savedJobs.map((job) => (
+                  <div
+                    key={job.id}
+                    className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h3 className="font-medium text-gray-900">{job.name}</h3>
+                        <p className="text-sm text-gray-500 mt-1">
+                          {job.clips.length} clip{job.clips.length !== 1 ? 's' : ''} •
+                          {job.videoDuration ? ` ${formatDuration(job.videoDuration)} video • ` : ' '}
+                          {new Date(job.createdAt).toLocaleDateString()}
+                        </p>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {job.clips.slice(0, 5).map((clip, idx) => (
+                            <span
+                              key={clip.id}
+                              className={`px-2 py-0.5 rounded text-xs font-medium ${getTypeColor(clip.momentType as ClipSuggestion['type'])}`}
+                            >
+                              {clip.momentType}
+                            </span>
+                          ))}
+                          {job.clips.length > 5 && (
+                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                              +{job.clips.length - 5} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 ml-4">
+                        <button
+                          onClick={() => handleLoadJob(job)}
+                          className="px-3 py-1.5 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                        >
+                          View
+                        </button>
+                        <button
+                          onClick={() => handleDeleteJob(job.id)}
+                          className="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 border border-red-200 hover:border-red-300 rounded-lg transition-colors"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Main Content */}
+        {!showJobHistory && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           {/* Upload Zone - shown when no video */}
           {!video && status !== 'uploading' && (
@@ -702,17 +955,74 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
                   </div>
                 </div>
               )}
+
+              {/* Phase 5: Save Job Section */}
+              {generatedClips.size > 0 && (
+                <div className="mt-8 pt-6 border-t border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">Save This Job</h3>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {currentJobId
+                          ? 'This job is already saved'
+                          : `Save ${generatedClips.size} generated clip${generatedClips.size !== 1 ? 's' : ''} for later`}
+                      </p>
+                    </div>
+                    {!currentJobId && (
+                      <button
+                        onClick={handleSaveJob}
+                        disabled={saveJobStatus === 'saving'}
+                        className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                          saveJobStatus === 'saving'
+                            ? 'bg-gray-400 text-white cursor-not-allowed'
+                            : 'bg-green-600 hover:bg-green-700 text-white'
+                        }`}
+                      >
+                        {saveJobStatus === 'saving' && (
+                          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                        )}
+                        {saveJobStatus === 'saving' ? 'Saving...' : 'Save Job'}
+                      </button>
+                    )}
+                    {currentJobId && (
+                      <span className="text-green-600 flex items-center gap-1">
+                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Saved
+                      </span>
+                    )}
+                  </div>
+
+                  {saveJobStatus === 'success' && !currentJobId && (
+                    <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3">
+                      <p className="text-green-700 text-sm">Job saved successfully!</p>
+                    </div>
+                  )}
+
+                  {saveJobError && (
+                    <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3">
+                      <p className="text-red-700 text-sm">{saveJobError}</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
+        )}
 
         {/* Debug Info (development only) */}
-        {process.env.NODE_ENV === 'development' && video && (
+        {process.env.NODE_ENV === 'development' && video && !showJobHistory && (
           <div className="mt-4 p-4 bg-gray-100 rounded-lg text-xs font-mono">
             <p className="font-bold mb-2">Debug Info:</p>
             <p>URL: {video.url}</p>
             <p>Size: {video.size} bytes</p>
             <p>Duration: {video.duration} seconds</p>
+            <p>Current Job ID: {currentJobId || 'none'}</p>
           </div>
         )}
       </div>
