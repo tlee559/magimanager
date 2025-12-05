@@ -5,6 +5,7 @@
 import { identityRepository, type IdentityFindOptions, type IdentityWithRelations } from "../repositories";
 import { getPrisma, type ServiceResult } from "../repositories/base.repository";
 import type { IdentityCreateInput, IdentityUpdateInput, IdentityDocument } from "@magimanager/shared";
+import { fireIdentityArchivedAlert } from "./decommission-alert.service";
 
 class IdentityService {
   async getById(id: string): Promise<ServiceResult<IdentityWithRelations>> {
@@ -106,6 +107,9 @@ class IdentityService {
 
       const identity = await identityRepository.archive(id);
       await this.logActivity(id, "ARCHIVED", "Identity archived", userId);
+
+      // Fire decommission alert for identity archive
+      await fireIdentityArchivedAlert(id);
 
       return { success: true, data: identity };
     } catch (error) {

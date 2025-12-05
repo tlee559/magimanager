@@ -36,7 +36,20 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { warmupTargetSpend, gologinApiKey, googleAdsApiKey, googleApiKey, textverifiedApiKey, telegramBotToken, telegramChatId } = body;
+    const {
+      warmupTargetSpend,
+      gologinApiKey,
+      googleAdsApiKey,
+      googleApiKey,
+      textverifiedApiKey,
+      telegramBotToken,
+      telegramChatId,
+      // Decommission alert settings
+      decommissionAlertOnAccountDeath,
+      decommissionAlertOnIdentityArchive,
+      decommissionAlertViaApp,
+      decommissionAlertViaTelegram,
+    } = body;
 
     if (warmupTargetSpend !== undefined && warmupTargetSpend < 1) {
       return NextResponse.json(
@@ -71,6 +84,11 @@ export async function PATCH(request: NextRequest) {
           ...(textverifiedApiKey !== undefined && { textverifiedApiKey: textverifiedApiKey || null }),
           ...(telegramBotToken !== undefined && { telegramBotToken: telegramBotToken || null }),
           ...(telegramChatId !== undefined && { telegramChatId: telegramChatId || null }),
+          // Decommission alert settings
+          ...(decommissionAlertOnAccountDeath !== undefined && { decommissionAlertOnAccountDeath }),
+          ...(decommissionAlertOnIdentityArchive !== undefined && { decommissionAlertOnIdentityArchive }),
+          ...(decommissionAlertViaApp !== undefined && { decommissionAlertViaApp }),
+          ...(decommissionAlertViaTelegram !== undefined && { decommissionAlertViaTelegram }),
         },
       });
     }

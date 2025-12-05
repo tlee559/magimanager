@@ -17,6 +17,7 @@ import type {
   NeedsAttentionAccount,
   AlertType,
 } from "@magimanager/shared";
+import { checkAndFireDecommissionAlert } from "./decommission-alert.service";
 
 class AccountService {
   async getById(
@@ -173,6 +174,11 @@ class AccountService {
           `Health changed to ${data.accountHealth}`,
           userId
         );
+
+        // Check for decommission alert if account became suspended/banned
+        if (data.accountHealth === "suspended" || data.accountHealth === "banned") {
+          await checkAndFireDecommissionAlert(id, existing.identityProfileId);
+        }
       }
 
       return { success: true, data: account };
@@ -189,7 +195,12 @@ class AccountService {
         return { success: false, error: "Account not found" };
       }
 
+      const identityId = existing.identityProfileId; // Save before delete
       await accountRepository.delete(id);
+
+      // Check for decommission alert
+      await checkAndFireDecommissionAlert(id, identityId);
+
       return { success: true };
     } catch (error) {
       console.error("AccountService.delete error:", error);
@@ -205,6 +216,10 @@ class AccountService {
       }
 
       const account = await accountRepository.archive(id, userId);
+
+      // Check for decommission alert
+      await checkAndFireDecommissionAlert(id, existing.identityProfileId);
+
       return { success: true, data: account };
     } catch (error) {
       console.error("AccountService.archive error:", error);

@@ -28,7 +28,8 @@ export type NotificationType =
   | "ACCOUNT_ASSIGNED"
   | "ACCOUNT_SUSPENDED"
   | "ACCOUNT_REACTIVATED"
-  | "SYSTEM_ALERT";
+  | "SYSTEM_ALERT"
+  | "IDENTITY_DECOMMISSIONED";
 
 export type AlertType = "suspended" | "banned" | "billing_failed" | "limited" | "no_checkin" | "cert_error" | "ready_handoff";
 export type AlertPriority = "critical" | "warning" | "info";
@@ -456,6 +457,11 @@ export interface AppSettings {
   textverifiedApiKey: string | null;
   telegramBotToken: string | null;
   telegramChatId: string | null;
+  // Decommission Alert Settings
+  decommissionAlertOnAccountDeath: boolean;
+  decommissionAlertOnIdentityArchive: boolean;
+  decommissionAlertViaApp: boolean;
+  decommissionAlertViaTelegram: boolean;
   updatedAt: Date;
 }
 

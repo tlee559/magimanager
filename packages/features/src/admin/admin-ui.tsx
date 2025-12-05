@@ -6316,6 +6316,11 @@ function SettingsView() {
   const [textverifiedApiKey, setTextverifiedApiKey] = useState<string>("");
   const [telegramBotToken, setTelegramBotToken] = useState<string>("");
   const [telegramChatId, setTelegramChatId] = useState<string>("");
+  // Decommission alert settings
+  const [decommissionAlertOnAccountDeath, setDecommissionAlertOnAccountDeath] = useState(true);
+  const [decommissionAlertOnIdentityArchive, setDecommissionAlertOnIdentityArchive] = useState(true);
+  const [decommissionAlertViaApp, setDecommissionAlertViaApp] = useState(true);
+  const [decommissionAlertViaTelegram, setDecommissionAlertViaTelegram] = useState(true);
   // Visibility toggles for API keys
   const [showGologinKey, setShowGologinKey] = useState(false);
   const [showGoogleAdsKey, setShowGoogleAdsKey] = useState(false);
@@ -6340,6 +6345,11 @@ function SettingsView() {
         setTextverifiedApiKey(data.textverifiedApiKey || "");
         setTelegramBotToken(data.telegramBotToken || "");
         setTelegramChatId(data.telegramChatId || "");
+        // Decommission alert settings
+        setDecommissionAlertOnAccountDeath(data.decommissionAlertOnAccountDeath ?? true);
+        setDecommissionAlertOnIdentityArchive(data.decommissionAlertOnIdentityArchive ?? true);
+        setDecommissionAlertViaApp(data.decommissionAlertViaApp ?? true);
+        setDecommissionAlertViaTelegram(data.decommissionAlertViaTelegram ?? true);
       }
     } catch (error) {
       console.error("Failed to fetch settings:", error);
@@ -6363,6 +6373,11 @@ function SettingsView() {
           textverifiedApiKey,
           telegramBotToken,
           telegramChatId,
+          // Decommission alert settings
+          decommissionAlertOnAccountDeath,
+          decommissionAlertOnIdentityArchive,
+          decommissionAlertViaApp,
+          decommissionAlertViaTelegram,
         }),
       });
 
@@ -6579,6 +6594,85 @@ function SettingsView() {
               <p className="text-xs text-slate-500 mt-1">
                 Chat or group ID where notifications will be sent (use @userinfobot to find it)
               </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Decommission Alerts Settings */}
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="text-sm font-semibold text-slate-100">
+              Decommission Alerts
+            </h2>
+            <div className="group relative">
+              <span className="text-slate-400 cursor-help text-sm">ⓘ</span>
+              <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-80 p-3 bg-slate-800 border border-slate-700 rounded-lg shadow-lg text-xs text-slate-300 z-10">
+                <p className="font-medium text-slate-100 mb-2">When are alerts sent?</p>
+                <ul className="space-y-1 list-disc list-inside">
+                  <li>When an identity&apos;s last active account is archived, deleted, or banned</li>
+                  <li>When an identity is archived directly</li>
+                </ul>
+                <p className="mt-2 text-slate-400">
+                  Alerts include the identity name and website (if available) so you can decommission external servers/websites.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide">
+                Triggers
+              </label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={decommissionAlertOnAccountDeath}
+                    onChange={(e) => setDecommissionAlertOnAccountDeath(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-200">Account archived/deleted/banned</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={decommissionAlertOnIdentityArchive}
+                    onChange={(e) => setDecommissionAlertOnIdentityArchive(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-200">Identity archived</span>
+                </label>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Alert fires when identity has no remaining active accounts
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide">
+                Notify via
+              </label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={decommissionAlertViaApp}
+                    onChange={(e) => setDecommissionAlertViaApp(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-200">In-app notification</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={decommissionAlertViaTelegram}
+                    onChange={(e) => setDecommissionAlertViaTelegram(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-200">Telegram bot</span>
+                </label>
+              </div>
             </div>
           </div>
         </div>

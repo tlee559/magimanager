@@ -219,6 +219,12 @@ model AppSettings {
   telegramBotToken      String?  // Telegram bot token from @BotFather
   telegramChatId        String?  // Telegram chat/group ID for notifications
 
+  // Decommission Alert Settings
+  decommissionAlertOnAccountDeath    Boolean @default(true)  // Alert when last account is archived/deleted/banned
+  decommissionAlertOnIdentityArchive Boolean @default(true)  // Alert when identity is archived directly
+  decommissionAlertViaApp            Boolean @default(true)  // Send in-app notification
+  decommissionAlertViaTelegram       Boolean @default(true)  // Send Telegram notification
+
   updatedAt             DateTime @updatedAt
 }
 
@@ -351,6 +357,7 @@ enum NotificationType {
   ACCOUNT_REACTIVATED
   SYSTEM_ALERT
   VIDEO_CLIP_COMPLETED
+  IDENTITY_DECOMMISSIONED
 }
 
 model Notification {

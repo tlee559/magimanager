@@ -13,3 +13,6 @@ export * from "./oauth.service";
 
 // Google Ads Service - All Google Ads API interactions
 export * from "./google-ads.service";
+
+// Decommission Alert Service - Alerts when identities lose all active accounts
+export * from "./decommission-alert.service";
