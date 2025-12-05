@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@magimanager/auth";
 import { put } from "@vercel/blob";
 import sharp from "sharp";
-import { createFontFaceCSS, type FontWeight } from "../../../../lib/fonts/inter-base64";
 import type { TextLayer } from "../../../../lib/text-overlay/types";
 
 export const maxDuration = 60;
@@ -38,7 +37,7 @@ function wrapText(
   fontSize: number,
   maxWidth: number
 ): string[] {
-  // Estimate character width (rough approximation for Inter font)
+  // Estimate character width (rough approximation for sans-serif)
   const avgCharWidth = fontSize * 0.55;
   const maxCharsPerLine = Math.floor(maxWidth / avgCharWidth);
 
@@ -85,7 +84,7 @@ function getTextAnchor(align: "left" | "center" | "right"): string {
   }
 }
 
-// Create SVG for a single text layer
+// Create SVG for a single text layer using system fonts (librsvg compatible)
 function createTextLayerSvg(
   layer: TextLayer,
   imageWidth: number,
@@ -107,15 +106,9 @@ function createTextLayerSvg(
   const boxWidth = Math.ceil(textWidth + padding * 2);
   const boxHeight = Math.ceil(textHeight + padding * 2);
 
-  // Get font CSS
-  const fontWeight = layer.fontWeight as FontWeight;
-  const fontCSS = createFontFaceCSS(fontWeight);
-
-  // Build SVG
+  // Build SVG - use system fonts that librsvg can render
+  // Note: librsvg doesn't support embedded base64 fonts, so we use standard system fonts
   let svg = `<svg width="${boxWidth}" height="${boxHeight}" xmlns="http://www.w3.org/2000/svg">`;
-
-  // Add font styles
-  svg += `<style>${fontCSS}</style>`;
 
   // Background rectangle
   if (layer.backgroundColor) {
@@ -123,14 +116,17 @@ function createTextLayerSvg(
     svg += `<rect x="0" y="0" width="${boxWidth}" height="${boxHeight}" rx="${layer.backgroundRadius}" ry="${layer.backgroundRadius}" fill="${bgColor}"/>`;
   }
 
-  // Text element
+  // Text element - use DejaVu Sans which is available on most Linux systems (including Vercel)
   const textColor = layer.color;
   const hasStroke = layer.strokeColor && layer.strokeWidth > 0;
 
+  // Map font weights to available weights
+  const fontWeightValue = layer.fontWeight >= 700 ? "bold" : "normal";
+
   svg += `<text
-    font-family="'Inter', system-ui, -apple-system, sans-serif"
+    font-family="DejaVu Sans, Liberation Sans, Arial, Helvetica, sans-serif"
     font-size="${scaledFontSize}"
-    font-weight="${layer.fontWeight}"
+    font-weight="${fontWeightValue}"
     text-anchor="${getTextAnchor(layer.textAlign)}"
     fill="${textColor}"
     ${hasStroke ? `stroke="${layer.strokeColor}" stroke-width="${layer.strokeWidth}" paint-order="stroke"` : ""}
