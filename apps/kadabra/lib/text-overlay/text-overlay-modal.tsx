@@ -42,18 +42,25 @@ export function TextOverlayModal({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
+  const wasOpenRef = useRef(false);
 
   // Layer state - initialize with existing layers if editing
   const [layers, setLayers] = useState<TextLayer[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Initialize layers when modal opens
+  // Initialize layers ONLY when modal transitions from closed to open
+  // This prevents resetting when parent re-renders while modal is open
   useEffect(() => {
-    if (isOpen) {
-      setLayers(initialLayers.length > 0 ? initialLayers : []);
+    if (isOpen && !wasOpenRef.current) {
+      // Modal just opened - initialize with provided layers
+      // We access initialLayers here but don't include it in deps
+      // because we only want to read it once when modal opens
+      setLayers(initialLayers.length > 0 ? [...initialLayers] : []);
       setSelectedId(initialLayers.length > 0 ? initialLayers[0].id : null);
     }
-  }, [isOpen, initialLayers]);
+    wasOpenRef.current = isOpen;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]); // Intentionally omit initialLayers - only read on open transition
 
   // Drag state
   const [isDragging, setIsDragging] = useState(false);
