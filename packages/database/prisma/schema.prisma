@@ -226,6 +226,12 @@ model AppSettings {
   decommissionAlertViaTelegram       Boolean @default(true)  // Send Telegram notification
   decommissionAlertCustomMessage     String? @db.Text        // Optional custom message to include in alerts
 
+  // MCC (Manager Account) Connection
+  mccCustomerId        String?   // MCC ID e.g., "7325688009" (no dashes, stored normalized)
+  mccConnectionId      String?   // FK to GoogleAdsConnection for MCC OAuth tokens
+  mccConnectedAt       DateTime? // When MCC was connected
+  mccConnectedByUserId String?   // SUPER_ADMIN who connected the MCC
+
   updatedAt             DateTime @updatedAt
 }
 

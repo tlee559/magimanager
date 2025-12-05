@@ -6305,8 +6305,11 @@ function SystemView() {
 // SETTINGS VIEW
 // ============================================================================
 
+type SettingsTab = "general" | "google-ads" | "integrations";
+
 function SettingsView() {
   const { showSuccess, showError } = useModal();
+  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -6328,9 +6331,34 @@ function SettingsView() {
   const [showGoogleKey, setShowGoogleKey] = useState(false);
   const [showTextverifiedKey, setShowTextverifiedKey] = useState(false);
   const [showTelegramToken, setShowTelegramToken] = useState(false);
+  // MCC Connection state
+  const [mccStatus, setMccStatus] = useState<{
+    connected: boolean;
+    mccCustomerId: string | null;
+    connectedEmail: string | null;
+    connectedAt: string | null;
+    connectedBy: { name: string; email: string } | null;
+  } | null>(null);
+  const [mccId, setMccId] = useState<string>("");
+  const [connectingMcc, setConnectingMcc] = useState(false);
+  const [disconnectingMcc, setDisconnectingMcc] = useState(false);
 
   useEffect(() => {
     fetchSettings();
+    fetchMccStatus();
+
+    // Listen for MCC connection result from OAuth popup
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type === 'mcc-connection-result') {
+        if (event.data.success) {
+          fetchMccStatus();
+          showSuccess("MCC Connected", `Successfully connected to MCC ${event.data.mccId}`);
+        }
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
   }, []);
 
   async function fetchSettings() {
@@ -6357,6 +6385,85 @@ function SettingsView() {
       console.error("Failed to fetch settings:", error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchMccStatus() {
+    try {
+      const res = await fetch("/api/settings/mcc");
+      if (res.ok) {
+        const data = await res.json();
+        setMccStatus(data);
+        if (data.mccCustomerId) {
+          setMccId(formatMccId(data.mccCustomerId));
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch MCC status:", error);
+    }
+  }
+
+  function formatMccId(cid: string): string {
+    // Format as XXX-XXX-XXXX
+    const normalized = cid.replace(/-/g, "");
+    if (normalized.length === 10) {
+      return `${normalized.slice(0, 3)}-${normalized.slice(3, 6)}-${normalized.slice(6)}`;
+    }
+    return cid;
+  }
+
+  function handleConnectMcc() {
+    if (!mccId.trim()) {
+      showError("MCC ID Required", "Please enter your MCC (Manager Account) ID");
+      return;
+    }
+
+    // Normalize and validate
+    const normalized = mccId.replace(/-/g, "");
+    if (!/^\d{10}$/.test(normalized)) {
+      showError("Invalid MCC ID", "MCC ID should be 10 digits (e.g., 732-568-8009)");
+      return;
+    }
+
+    setConnectingMcc(true);
+
+    // Open OAuth popup
+    const width = 600;
+    const height = 700;
+    const left = (window.screen.width - width) / 2;
+    const top = (window.screen.height - height) / 2;
+
+    window.open(
+      `/api/settings/mcc/authorize?mccId=${normalized}`,
+      "mcc-oauth",
+      `width=${width},height=${height},left=${left},top=${top}`
+    );
+
+    // Reset state after a delay (popup will send message on completion)
+    setTimeout(() => setConnectingMcc(false), 2000);
+  }
+
+  async function handleDisconnectMcc() {
+    if (!confirm("Are you sure you want to disconnect the MCC? You won't be able to create new accounts via API until you reconnect.")) {
+      return;
+    }
+
+    setDisconnectingMcc(true);
+    try {
+      const res = await fetch("/api/settings/mcc", { method: "DELETE" });
+      if (res.ok) {
+        setMccStatus({ connected: false, mccCustomerId: null, connectedEmail: null, connectedAt: null, connectedBy: null });
+        setMccId("");
+        await showSuccess("MCC Disconnected", "MCC has been disconnected.");
+      } else {
+        const data = await res.json();
+        await showError("Disconnect Failed", data.error || "Failed to disconnect MCC");
+      }
+    } catch (error) {
+      console.error("Disconnect error:", error);
+      await showError("Network Error", "Network error. Please try again.");
+    } finally {
+      setDisconnectingMcc(false);
     }
   }
 
@@ -6411,6 +6518,12 @@ function SettingsView() {
     );
   }
 
+  const tabs: { id: SettingsTab; label: string }[] = [
+    { id: "general", label: "General" },
+    { id: "google-ads", label: "Google Ads" },
+    { id: "integrations", label: "Integrations" },
+  ];
+
   return (
     <>
       <div className="mb-6">
@@ -6419,6 +6532,148 @@ function SettingsView() {
         </p>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-1 mb-6 border-b border-slate-800">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+              activeTab === tab.id
+                ? "text-emerald-400 border-emerald-400"
+                : "text-slate-400 border-transparent hover:text-slate-200"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Google Ads Tab */}
+      {activeTab === "google-ads" && (
+        <div className="max-w-2xl space-y-6">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
+            <h2 className="text-sm font-semibold text-slate-100 mb-4">
+              Manager Account (MCC) Connection
+            </h2>
+
+            {mccStatus?.connected ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-emerald-400">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                  <span className="text-sm font-medium">Connected</span>
+                </div>
+
+                <div className="grid gap-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">MCC ID:</span>
+                    <span className="text-slate-100 font-mono">{formatMccId(mccStatus.mccCustomerId || "")}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Connected as:</span>
+                    <span className="text-slate-100">{mccStatus.connectedEmail}</span>
+                  </div>
+                  {mccStatus.connectedAt && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Connected on:</span>
+                      <span className="text-slate-100">{new Date(mccStatus.connectedAt).toLocaleDateString()}</span>
+                    </div>
+                  )}
+                  {mccStatus.connectedBy && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Connected by:</span>
+                      <span className="text-slate-100">{mccStatus.connectedBy.name}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={handleConnectMcc}
+                    disabled={connectingMcc}
+                    className="px-4 py-2 text-sm font-medium rounded-lg bg-slate-800 text-slate-200 hover:bg-slate-700 transition disabled:opacity-50"
+                  >
+                    {connectingMcc ? "Connecting..." : "Reconnect"}
+                  </button>
+                  <button
+                    onClick={handleDisconnectMcc}
+                    disabled={disconnectingMcc}
+                    className="px-4 py-2 text-sm font-medium rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
+                  >
+                    {disconnectingMcc ? "Disconnecting..." : "Disconnect"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-amber-400">
+                  <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                  <span className="text-sm font-medium">Not Connected</span>
+                </div>
+
+                <p className="text-sm text-slate-400">
+                  Connect your Google Ads Manager Account (MCC) to enable account creation and full API access.
+                </p>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-slate-200">
+                    MCC Customer ID
+                  </label>
+                  <input
+                    type="text"
+                    value={mccId}
+                    onChange={(e) => setMccId(e.target.value)}
+                    placeholder="732-568-8009"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  />
+                  <p className="text-xs text-slate-500">
+                    Find this in your Google Ads Manager Account header (format: XXX-XXX-XXXX)
+                  </p>
+                </div>
+
+                <button
+                  onClick={handleConnectMcc}
+                  disabled={connectingMcc || !mccId.trim()}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"/>
+                  </svg>
+                  {connectingMcc ? "Connecting..." : "Connect MCC"}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* MCC Benefits Info */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
+            <h3 className="text-sm font-semibold text-slate-100 mb-3">
+              What MCC Connection Enables
+            </h3>
+            <ul className="space-y-2 text-sm text-slate-400">
+              <li className="flex items-start gap-2">
+                <span className="text-emerald-400 mt-0.5">✓</span>
+                <span>Create new ad accounts under your MCC via API</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-emerald-400 mt-0.5">✓</span>
+                <span>Pause/enable campaigns, ads, and keywords</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-emerald-400 mt-0.5">✓</span>
+                <span>Apply Google Ads recommendations</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-emerald-400 mt-0.5">✓</span>
+                <span>Full campaign management via API</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* General Tab */}
+      {activeTab === "general" && (
       <form
         onSubmit={handleSave}
         className="max-w-2xl space-y-6 rounded-xl border border-slate-800 bg-slate-900/60 p-6"
@@ -6712,9 +6967,11 @@ function SettingsView() {
           </p>
         )}
       </form>
+      )}
 
-      {/* Integration Tools Section */}
-      <div className="mt-8 max-w-2xl rounded-xl border border-slate-800 bg-slate-900/60 p-6">
+      {/* Integrations Tab */}
+      {activeTab === "integrations" && (
+      <div className="max-w-2xl rounded-xl border border-slate-800 bg-slate-900/60 p-6">
         <h2 className="text-sm font-semibold text-slate-100 mb-4">
           Integration Tools
         </h2>
@@ -6761,6 +7018,7 @@ function SettingsView() {
           </div>
         </div>
       </div>
+      )}
     </>
   );
 }

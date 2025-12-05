@@ -18,6 +18,9 @@ import type {
   AlertType,
 } from "@magimanager/shared";
 import { checkAndFireDecommissionAlert } from "./decommission-alert.service";
+import { createCustomerClient } from "./google-ads.service";
+import { decryptToken } from "./oauth.service";
+import { getPrisma } from "../repositories/base.repository";
 
 class AccountService {
   async getById(
@@ -127,8 +130,61 @@ class AccountService {
         identityId = identity.id;
       }
 
+      // For MCC-created accounts, try to create via Google Ads API
+      let googleCid = data.googleCid;
+      if (data.origin === "mcc-created" && !googleCid) {
+        const prisma = getPrisma();
+        const settings = await prisma.appSettings.findFirst({
+          select: {
+            mccCustomerId: true,
+            mccConnectionId: true,
+          },
+        });
+
+        if (settings?.mccConnectionId && settings?.mccCustomerId) {
+          // Get the MCC connection's access token
+          const connection = await prisma.googleAdsConnection.findUnique({
+            where: { id: settings.mccConnectionId },
+            select: { accessToken: true, status: true },
+          });
+
+          if (connection && connection.status === "active") {
+            try {
+              const accessToken = decryptToken(connection.accessToken);
+
+              // Get identity name for descriptive name
+              let accountName = "New Account";
+              if (identityId) {
+                const identity = await identityRepository.findById(identityId);
+                if (identity) {
+                  accountName = identity.fullName;
+                }
+              }
+
+              // Create the account via Google Ads API
+              const result = await createCustomerClient(accessToken, settings.mccCustomerId, {
+                descriptiveName: accountName,
+                currencyCode: "USD",
+                timeZone: "America/Los_Angeles",
+              });
+
+              if (result.success && result.customerId) {
+                googleCid = result.customerId;
+                console.log(`[AccountService] Created real Google Ads account: ${googleCid}`);
+              } else {
+                console.error(`[AccountService] Failed to create Google Ads account: ${result.error}`);
+                // Fall through to mock CID - the repository will generate one
+              }
+            } catch (error) {
+              console.error("[AccountService] Error creating Google Ads account:", error);
+              // Fall through to mock CID - the repository will generate one
+            }
+          }
+        }
+      }
+
       const account = await accountRepository.create(
-        { ...data, identityProfileId: identityId },
+        { ...data, identityProfileId: identityId, googleCid },
         userId
       );
 

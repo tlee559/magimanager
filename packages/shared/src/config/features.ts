@@ -81,7 +81,7 @@ export const FEATURE_FLAGS: Record<FeatureFlag, FeatureConfig> = {
     description: 'Edit campaign settings'
   },
   'campaigns.pause': {
-    enabled: false,
+    enabled: true,
     requiresApiWrite: true,
     description: 'Pause or enable campaigns'
   },
@@ -108,7 +108,7 @@ export const FEATURE_FLAGS: Record<FeatureFlag, FeatureConfig> = {
     description: 'Edit ad content'
   },
   'ads.pause': {
-    enabled: false,
+    enabled: true,
     requiresApiWrite: true,
     description: 'Pause or enable ads'
   },
@@ -125,7 +125,7 @@ export const FEATURE_FLAGS: Record<FeatureFlag, FeatureConfig> = {
     description: 'View keywords list'
   },
   'keywords.add': {
-    enabled: false,
+    enabled: true,
     requiresApiWrite: true,
     description: 'Add new keywords'
   },
@@ -140,7 +140,7 @@ export const FEATURE_FLAGS: Record<FeatureFlag, FeatureConfig> = {
     description: 'Remove keywords'
   },
   'keywords.pause': {
-    enabled: false,
+    enabled: true,
     requiresApiWrite: true,
     description: 'Pause or enable keywords'
   },
@@ -152,7 +152,7 @@ export const FEATURE_FLAGS: Record<FeatureFlag, FeatureConfig> = {
     description: 'View campaign budgets'
   },
   'budgets.adjust': {
-    enabled: false,
+    enabled: true,
     requiresApiWrite: true,
     description: 'Adjust campaign budgets'
   },
@@ -208,7 +208,7 @@ export const FEATURE_FLAGS: Record<FeatureFlag, FeatureConfig> = {
     description: 'AI recommendations for optimization'
   },
   'ai.autoApply': {
-    enabled: false,
+    enabled: true,
     requiresApiWrite: true,
     description: 'Auto-apply AI suggestions'
   },

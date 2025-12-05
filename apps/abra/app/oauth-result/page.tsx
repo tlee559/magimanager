@@ -21,6 +21,8 @@ function OAuthResultContent() {
   const email = searchParams.get('email');
   const cidsParam = searchParams.get('cids');
   const accountName = searchParams.get('accountName');
+  const mode = searchParams.get('mode');
+  const mccId = searchParams.get('mccId');
 
   // Parse accessible CIDs for account picker
   const accessibleCids = useMemo(() => {
@@ -235,6 +237,78 @@ function OAuthResultContent() {
               Cancel
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // MCC Connection - notify parent window
+  useEffect(() => {
+    if (mode === 'mcc' && window.opener) {
+      if (status === 'success') {
+        window.opener.postMessage({
+          type: 'mcc-connection-result',
+          success: true,
+          mccId: mccId,
+          email: email,
+        }, window.location.origin);
+      } else if (status === 'error') {
+        window.opener.postMessage({
+          type: 'mcc-connection-result',
+          success: false,
+          error: message,
+        }, window.location.origin);
+      }
+    }
+  }, [mode, status, mccId, email, message]);
+
+  // MCC Connection Success
+  if (status === 'success' && mode === 'mcc') {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <CheckCircle className="w-8 h-8 text-emerald-500" />
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-2">MCC Connected!</h1>
+          <p className="text-zinc-400 mb-4">
+            Manager Account <span className="text-white font-mono">{mccId ? formatCid(mccId) : ''}</span> is now connected.
+          </p>
+          {email && (
+            <p className="text-zinc-400 mb-4">
+              Connected as <span className="text-white">{email}</span>
+            </p>
+          )}
+          <p className="text-sm text-zinc-500 mb-6">
+            You can now create accounts under this MCC and manage all connected accounts.
+          </p>
+          <button
+            onClick={() => window.close()}
+            className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
+          >
+            Close Window
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // MCC Connection Error
+  if (status === 'error' && mode === 'mcc') {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <XCircle className="w-8 h-8 text-red-500" />
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-2">MCC Connection Failed</h1>
+          <p className="text-zinc-400 mb-6">{message || 'An unknown error occurred'}</p>
+          <button
+            onClick={() => window.close()}
+            className="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors"
+          >
+            Close Window
+          </button>
         </div>
       </div>
     );

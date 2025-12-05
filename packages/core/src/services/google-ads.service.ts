@@ -1569,3 +1569,395 @@ function getRecommendationTypeDisplay(type: string): string {
   };
   return displayMap[type] || type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
+
+// ============================================================================
+// MUTATE OPERATIONS (Write Operations)
+// ============================================================================
+
+export interface MutateResult {
+  success: boolean;
+  resourceName?: string;
+  error?: string;
+}
+
+/**
+ * Execute a Google Ads mutate operation
+ */
+async function googleAdsMutate(
+  accessToken: string,
+  customerId: string,
+  operations: any[],
+  loginCustomerId?: string
+): Promise<MutateResult[]> {
+  const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  if (!developerToken) {
+    throw new Error('GOOGLE_ADS_DEVELOPER_TOKEN not configured');
+  }
+
+  const cleanCustomerId = normalizeCid(customerId);
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+    'developer-token': developerToken,
+    'Content-Type': 'application/json',
+  };
+
+  // If operating through MCC, include login-customer-id header
+  if (loginCustomerId) {
+    headers['login-customer-id'] = normalizeCid(loginCustomerId);
+  }
+
+  const response = await fetch(
+    `${GOOGLE_ADS_API_BASE}/customers/${cleanCustomerId}/googleAds:mutate`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        mutateOperations: operations,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('Google Ads mutate error:', error);
+    throw new Error(`Google Ads mutate failed: ${error}`);
+  }
+
+  const data = await response.json();
+
+  return (data.mutateOperationResponses || []).map((r: any) => ({
+    success: !r.error,
+    resourceName: r.campaignResult?.resourceName ||
+                  r.adGroupResult?.resourceName ||
+                  r.adGroupAdResult?.resourceName ||
+                  r.adGroupCriterionResult?.resourceName,
+    error: r.error?.message,
+  }));
+}
+
+/**
+ * Update campaign status (pause/enable/remove)
+ */
+export async function mutateCampaignStatus(
+  accessToken: string,
+  customerId: string,
+  campaignId: string,
+  status: 'ENABLED' | 'PAUSED' | 'REMOVED',
+  loginCustomerId?: string
+): Promise<MutateResult> {
+  const operation = {
+    campaignOperation: {
+      update: {
+        resourceName: `customers/${normalizeCid(customerId)}/campaigns/${campaignId}`,
+        status,
+      },
+      updateMask: 'status',
+    },
+  };
+
+  const results = await googleAdsMutate(accessToken, customerId, [operation], loginCustomerId);
+  return results[0] || { success: false, error: 'No response' };
+}
+
+/**
+ * Update ad group status (pause/enable/remove)
+ */
+export async function mutateAdGroupStatus(
+  accessToken: string,
+  customerId: string,
+  adGroupId: string,
+  status: 'ENABLED' | 'PAUSED' | 'REMOVED',
+  loginCustomerId?: string
+): Promise<MutateResult> {
+  const operation = {
+    adGroupOperation: {
+      update: {
+        resourceName: `customers/${normalizeCid(customerId)}/adGroups/${adGroupId}`,
+        status,
+      },
+      updateMask: 'status',
+    },
+  };
+
+  const results = await googleAdsMutate(accessToken, customerId, [operation], loginCustomerId);
+  return results[0] || { success: false, error: 'No response' };
+}
+
+/**
+ * Update ad status (pause/enable/remove)
+ * Note: Ads are under ad_group_ad resource
+ */
+export async function mutateAdStatus(
+  accessToken: string,
+  customerId: string,
+  adGroupId: string,
+  adId: string,
+  status: 'ENABLED' | 'PAUSED' | 'REMOVED',
+  loginCustomerId?: string
+): Promise<MutateResult> {
+  const operation = {
+    adGroupAdOperation: {
+      update: {
+        resourceName: `customers/${normalizeCid(customerId)}/adGroupAds/${adGroupId}~${adId}`,
+        status,
+      },
+      updateMask: 'status',
+    },
+  };
+
+  const results = await googleAdsMutate(accessToken, customerId, [operation], loginCustomerId);
+  return results[0] || { success: false, error: 'No response' };
+}
+
+/**
+ * Update keyword status (pause/enable/remove)
+ * Keywords are ad_group_criterion resources
+ */
+export async function mutateKeywordStatus(
+  accessToken: string,
+  customerId: string,
+  adGroupId: string,
+  criterionId: string,
+  status: 'ENABLED' | 'PAUSED' | 'REMOVED',
+  loginCustomerId?: string
+): Promise<MutateResult> {
+  const operation = {
+    adGroupCriterionOperation: {
+      update: {
+        resourceName: `customers/${normalizeCid(customerId)}/adGroupCriteria/${adGroupId}~${criterionId}`,
+        status,
+      },
+      updateMask: 'status',
+    },
+  };
+
+  const results = await googleAdsMutate(accessToken, customerId, [operation], loginCustomerId);
+  return results[0] || { success: false, error: 'No response' };
+}
+
+/**
+ * Apply a Google Ads recommendation
+ */
+export async function applyRecommendation(
+  accessToken: string,
+  customerId: string,
+  recommendationResourceName: string,
+  loginCustomerId?: string
+): Promise<MutateResult> {
+  const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  if (!developerToken) {
+    throw new Error('GOOGLE_ADS_DEVELOPER_TOKEN not configured');
+  }
+
+  const cleanCustomerId = normalizeCid(customerId);
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+    'developer-token': developerToken,
+    'Content-Type': 'application/json',
+  };
+
+  if (loginCustomerId) {
+    headers['login-customer-id'] = normalizeCid(loginCustomerId);
+  }
+
+  const response = await fetch(
+    `${GOOGLE_ADS_API_BASE}/customers/${cleanCustomerId}/recommendations:apply`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        operations: [{
+          resourceName: recommendationResourceName,
+        }],
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('Apply recommendation error:', error);
+    return { success: false, error: `Failed to apply recommendation: ${error}` };
+  }
+
+  const data = await response.json();
+  const result = data.results?.[0];
+
+  return {
+    success: true,
+    resourceName: result?.resourceName,
+  };
+}
+
+/**
+ * Add negative keywords to a campaign
+ */
+export async function addCampaignNegativeKeywords(
+  accessToken: string,
+  customerId: string,
+  campaignId: string,
+  keywords: { text: string; matchType: 'EXACT' | 'PHRASE' | 'BROAD' }[],
+  loginCustomerId?: string
+): Promise<MutateResult[]> {
+  const operations = keywords.map(kw => ({
+    campaignCriterionOperation: {
+      create: {
+        campaign: `customers/${normalizeCid(customerId)}/campaigns/${campaignId}`,
+        negative: true,
+        keyword: {
+          text: kw.text,
+          matchType: kw.matchType,
+        },
+      },
+    },
+  }));
+
+  return googleAdsMutate(accessToken, customerId, operations, loginCustomerId);
+}
+
+/**
+ * Add negative keywords to an ad group
+ */
+export async function addAdGroupNegativeKeywords(
+  accessToken: string,
+  customerId: string,
+  adGroupId: string,
+  keywords: { text: string; matchType: 'EXACT' | 'PHRASE' | 'BROAD' }[],
+  loginCustomerId?: string
+): Promise<MutateResult[]> {
+  const operations = keywords.map(kw => ({
+    adGroupCriterionOperation: {
+      create: {
+        adGroup: `customers/${normalizeCid(customerId)}/adGroups/${adGroupId}`,
+        negative: true,
+        keyword: {
+          text: kw.text,
+          matchType: kw.matchType,
+        },
+      },
+    },
+  }));
+
+  return googleAdsMutate(accessToken, customerId, operations, loginCustomerId);
+}
+
+/**
+ * Update campaign budget
+ */
+export async function updateCampaignBudget(
+  accessToken: string,
+  customerId: string,
+  campaignBudgetId: string,
+  amountMicros: number,
+  loginCustomerId?: string
+): Promise<MutateResult> {
+  const operation = {
+    campaignBudgetOperation: {
+      update: {
+        resourceName: `customers/${normalizeCid(customerId)}/campaignBudgets/${campaignBudgetId}`,
+        amountMicros: amountMicros.toString(),
+      },
+      updateMask: 'amount_micros',
+    },
+  };
+
+  const results = await googleAdsMutate(accessToken, customerId, [operation], loginCustomerId);
+  return results[0] || { success: false, error: 'No response' };
+}
+
+// ============================================================================
+// ACCOUNT CREATION (MCC Operations)
+// ============================================================================
+
+export interface CreateCustomerResult {
+  success: boolean;
+  customerId?: string;
+  resourceName?: string;
+  error?: string;
+}
+
+/**
+ * Create a new Google Ads customer account under an MCC (Manager Account)
+ *
+ * @param accessToken - OAuth access token for the MCC
+ * @param mccCustomerId - The MCC (Manager Account) customer ID
+ * @param accountInfo - Info for the new account
+ * @returns The new customer ID or error
+ */
+export async function createCustomerClient(
+  accessToken: string,
+  mccCustomerId: string,
+  accountInfo: {
+    descriptiveName: string;
+    currencyCode?: string;
+    timeZone?: string;
+  }
+): Promise<CreateCustomerResult> {
+  const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  if (!developerToken) {
+    return { success: false, error: 'GOOGLE_ADS_DEVELOPER_TOKEN not configured' };
+  }
+
+  const cleanMccId = normalizeCid(mccCustomerId);
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+    'developer-token': developerToken,
+    'Content-Type': 'application/json',
+    'login-customer-id': cleanMccId,
+  };
+
+  // Create customer using CustomerService.createCustomerClient
+  const response = await fetch(
+    `${GOOGLE_ADS_API_BASE}/customers/${cleanMccId}:createCustomerClient`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        customerId: cleanMccId,
+        customerClient: {
+          descriptiveName: accountInfo.descriptiveName,
+          currencyCode: accountInfo.currencyCode || 'USD',
+          timeZone: accountInfo.timeZone || 'America/Los_Angeles',
+        },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('Failed to create customer client:', error);
+
+    // Parse specific error messages
+    if (error.includes('CUSTOMER_NOT_FOUND')) {
+      return { success: false, error: 'MCC account not found or not accessible' };
+    }
+    if (error.includes('PERMISSION_DENIED')) {
+      return { success: false, error: 'Permission denied - MCC must have admin access' };
+    }
+    if (error.includes('MANAGER_LINK_PENDING')) {
+      return { success: false, error: 'Another manager link is pending for this client' };
+    }
+
+    return { success: false, error: `Failed to create account: ${error}` };
+  }
+
+  const data = await response.json();
+
+  // The response contains the resource name of the new customer
+  // Format: customers/{mcc_id}/customerClients/{new_customer_id}
+  const resourceName = data.resourceName || '';
+  const customerIdMatch = resourceName.match(/customerClients\/(\d+)/);
+  const newCustomerId = customerIdMatch ? customerIdMatch[1] : undefined;
+
+  if (!newCustomerId) {
+    return { success: false, error: 'Created account but could not extract customer ID' };
+  }
+
+  return {
+    success: true,
+    customerId: newCustomerId,
+    resourceName,
+  };
+}
