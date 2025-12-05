@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/700.css";
-import { TextOverlayModal, TextLayer, TextPreviewOverlay } from "./text-overlay";
+import { TextOverlayModal, TextLayer, TextPreviewOverlay, exportImageWithText } from "./text-overlay";
 
 type Provider = "google-imagen" | "replicate-flux";
 type AspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
@@ -461,7 +461,7 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
     return imageTextLayers.get(currentImageIndex) || [];
   };
 
-  // Export/Download with text burned in
+  // Export/Download with text burned in (client-side canvas for WYSIWYG)
   const handleExportWithText = async () => {
     const currentImg = generatedImages[currentImageIndex];
     const layers = getCurrentTextLayers();
@@ -478,24 +478,12 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
         return;
       }
 
-      // Burn text into image via API
-      const response = await fetch("/api/ai/export-with-text", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageUrl: currentImg,
-          layers: layers,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to export with text");
-      }
+      // Use client-side canvas export for WYSIWYG - this ensures the export
+      // matches exactly what the user sees in the preview
+      const dataUrl = await exportImageWithText(currentImg, layers);
 
       // Download the exported image
-      await handleDownload(data.imageUrl);
+      await handleDownload(dataUrl);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
     } finally {
@@ -1619,8 +1607,8 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                     alt={`Generated ${currentImageIndex + 1}`}
                     className="w-full h-full object-contain"
                   />
-                  {/* Text overlay preview - renders text layers on top of image */}
-                  <TextPreviewOverlay layers={getCurrentTextLayers()} />
+                  {/* Text overlay preview - canvas that renders exactly like export */}
+                  <TextPreviewOverlay imageUrl={currentImage} layers={getCurrentTextLayers()} />
                   {generatedImages.length > 1 && (
                     <>
                       <button
