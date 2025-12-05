@@ -187,10 +187,10 @@ export function TextPreviewOverlay({ imageUrl, layers, className = "" }: TextPre
 
   // Redraw when dependencies change
   useEffect(() => {
-    if (imageLoaded) {
+    if (imageLoaded && canvasSize.width > 0 && canvasSize.height > 0) {
       draw();
     }
-  }, [imageLoaded, draw]);
+  }, [imageLoaded, draw, canvasSize]);
 
   // If no layers, don't render the canvas overlay
   if (layers.length === 0) return null;
