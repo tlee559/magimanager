@@ -591,6 +591,17 @@ class AccountRepository {
       totalSpend,
     };
   }
+
+  /**
+   * Get the next internal ID that will be assigned to a new account.
+   * Used for generating descriptive names before account creation.
+   */
+  async getNextInternalId(): Promise<number> {
+    const result = await this.prisma.adAccount.aggregate({
+      _max: { internalId: true },
+    });
+    return (result._max.internalId || 0) + 1;
+  }
 }
 
 export const accountRepository = new AccountRepository();

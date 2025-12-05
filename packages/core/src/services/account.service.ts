@@ -152,14 +152,20 @@ class AccountService {
             try {
               const accessToken = decryptToken(connection.accessToken);
 
-              // Get identity name for descriptive name
-              let accountName = "New Account";
+              // Get identity name and next internal ID for descriptive name
+              // Format: "MM001 - John Smith" or "MM001 - New Account"
+              const nextInternalId = await accountRepository.getNextInternalId();
+              const internalIdStr = `MM${nextInternalId.toString().padStart(3, "0")}`;
+
+              let identityName = "New Account";
               if (identityId) {
                 const identity = await identityRepository.findById(identityId);
                 if (identity) {
-                  accountName = identity.fullName;
+                  identityName = identity.fullName;
                 }
               }
+
+              const accountName = `${internalIdStr} - ${identityName}`;
 
               // Create the account via Google Ads API
               const result = await createCustomerClient(accessToken, settings.mccCustomerId, {
