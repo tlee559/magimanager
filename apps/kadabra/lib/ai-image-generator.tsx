@@ -40,6 +40,15 @@ type FontWeight = "normal" | "bold";
 type BackgroundCategory = "studio" | "lifestyle" | "abstract" | "outdoor" | "custom";
 type BackgroundStyle = "minimal" | "elegant" | "bold" | "natural" | "modern";
 type BackgroundMood = "bright" | "warm" | "cool" | "dramatic" | "neutral";
+type EnhancementPreset = "none" | "clean" | "studio" | "dramatic";
+
+// Enhancement presets for product compositing
+const ENHANCEMENT_PRESETS: { value: EnhancementPreset; label: string; description: string }[] = [
+  { value: "none", label: "None", description: "No effects" },
+  { value: "clean", label: "Clean", description: "Soft shadow, light blur" },
+  { value: "studio", label: "Studio", description: "Shadow, blur, vignette" },
+  { value: "dramatic", label: "Dramatic", description: "Strong effects" },
+];
 
 // Prompt template system for product backgrounds
 interface PromptTemplate {
@@ -217,6 +226,7 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
   const [bgCategory, setBgCategory] = useState<BackgroundCategory>("studio");
   const [bgStyle, setBgStyle] = useState<BackgroundStyle>("minimal");
   const [bgMood, setBgMood] = useState<BackgroundMood>("bright");
+  const [enhancementPreset, setEnhancementPreset] = useState<EnhancementPreset>("clean");
 
   // Text overlay state
   const [showTextOverlay, setShowTextOverlay] = useState(false);
@@ -536,6 +546,7 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                 scale: productScale,
                 overlayColor: enableBgOverlay ? bgOverlayColor : undefined,
                 overlayOpacity: enableBgOverlay ? bgOverlayOpacity : 0,
+                enhancementPreset,
               }),
             });
 
@@ -1007,6 +1018,33 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                         disabled={isGenerating}
                         className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-teal-500"
                       />
+                    </div>
+
+                    {/* Enhancement Preset */}
+                    <div className="pt-2 border-t border-slate-700/50">
+                      <label className="block text-xs font-medium text-slate-400 mb-2">
+                        Enhancement Style
+                      </label>
+                      <div className="grid grid-cols-4 gap-2">
+                        {ENHANCEMENT_PRESETS.map((preset) => (
+                          <button
+                            key={preset.value}
+                            onClick={() => setEnhancementPreset(preset.value)}
+                            disabled={isGenerating}
+                            className={`py-2 px-2 rounded-lg text-xs font-medium transition ${
+                              enhancementPreset === preset.value
+                                ? "bg-teal-600/20 border border-teal-500/50 text-teal-400"
+                                : "bg-slate-900/50 border border-slate-700 text-slate-400 hover:border-slate-600"
+                            } disabled:opacity-50`}
+                            title={preset.description}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1.5">
+                        {ENHANCEMENT_PRESETS.find((p) => p.value === enhancementPreset)?.description}
+                      </p>
                     </div>
 
                     {/* Background Color Overlay - Optional */}

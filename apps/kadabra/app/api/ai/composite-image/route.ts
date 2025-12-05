@@ -6,6 +6,8 @@ import sharp from "sharp";
 
 export const maxDuration = 30;
 
+type EnhancementPreset = "none" | "clean" | "studio" | "dramatic";
+
 interface CompositeRequest {
   backgroundUrl: string;
   productUrl: string; // Should be transparent PNG
@@ -13,7 +15,56 @@ interface CompositeRequest {
   scale?: number; // 0.1 to 1.0, how much of the image the product takes up
   overlayColor?: string; // hex color for background overlay (e.g., "#000000")
   overlayOpacity?: number; // 0 to 1, opacity of the overlay
+  enhancementPreset?: EnhancementPreset; // Visual enhancement preset
 }
+
+// Enhancement preset configurations
+const ENHANCEMENT_CONFIGS: Record<EnhancementPreset, {
+  shadow: boolean;
+  shadowBlur: number;
+  shadowOpacity: number;
+  shadowOffsetY: number;
+  backgroundBlur: number;
+  vignette: boolean;
+  vignetteStrength: number;
+}> = {
+  none: {
+    shadow: false,
+    shadowBlur: 0,
+    shadowOpacity: 0,
+    shadowOffsetY: 0,
+    backgroundBlur: 0,
+    vignette: false,
+    vignetteStrength: 0,
+  },
+  clean: {
+    shadow: true,
+    shadowBlur: 20,
+    shadowOpacity: 0.3,
+    shadowOffsetY: 15,
+    backgroundBlur: 2,
+    vignette: false,
+    vignetteStrength: 0,
+  },
+  studio: {
+    shadow: true,
+    shadowBlur: 30,
+    shadowOpacity: 0.4,
+    shadowOffsetY: 20,
+    backgroundBlur: 4,
+    vignette: true,
+    vignetteStrength: 0.2,
+  },
+  dramatic: {
+    shadow: true,
+    shadowBlur: 40,
+    shadowOpacity: 0.5,
+    shadowOffsetY: 25,
+    backgroundBlur: 8,
+    vignette: true,
+    vignetteStrength: 0.4,
+  },
+};
 
 // Get dimensions for aspect ratio
 function getDimensionsForAspectRatio(aspectRatio: string): { width: number; height: number } {
@@ -46,7 +97,11 @@ export async function POST(req: NextRequest) {
       scale = 0.6,
       overlayColor,
       overlayOpacity = 0,
+      enhancementPreset = "none",
     } = body;
+
+    // Get enhancement config
+    const enhancement = ENHANCEMENT_CONFIGS[enhancementPreset] || ENHANCEMENT_CONFIGS.none;
 
     if (!backgroundUrl || !productUrl) {
       return NextResponse.json(
@@ -62,6 +117,7 @@ export async function POST(req: NextRequest) {
       scale,
       overlayColor: overlayColor || "none",
       overlayOpacity,
+      enhancementPreset,
     });
 
     // Helper to get image buffer from URL or base64 data URL
@@ -186,6 +242,43 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Add shadow if enhancement preset requires it
+    if (enhancement.shadow) {
+      // Create shadow from product (darkened, blurred version)
+      const shadowBuffer = await sharp(resizedProduct)
+        .ensureAlpha()
+        .modulate({ brightness: 0 }) // Make completely dark
+        .blur(enhancement.shadowBlur)
+        .toBuffer();
+
+      // Get shadow dimensions (blur expands the image slightly)
+      const shadowMeta = await sharp(shadowBuffer).metadata();
+      const shadowWidth = shadowMeta.width || prodWidth;
+      const shadowHeight = shadowMeta.height || prodHeight;
+
+      // Create shadow with reduced opacity
+      const shadowAlpha = Math.round(enhancement.shadowOpacity * 255);
+      const shadowWithOpacity = await sharp(shadowBuffer)
+        .composite([{
+          input: Buffer.from([0, 0, 0, shadowAlpha]),
+          raw: { width: 1, height: 1, channels: 4 },
+          tile: true,
+          blend: "dest-in" as const,
+        }])
+        .toBuffer();
+
+      // Position shadow (slightly offset down)
+      const shadowLeft = left - Math.floor((shadowWidth - prodWidth) / 2);
+      const shadowTop = top + enhancement.shadowOffsetY - Math.floor((shadowHeight - prodHeight) / 2);
+
+      compositeLayers.push({
+        input: shadowWithOpacity,
+        left: Math.max(0, shadowLeft),
+        top: Math.max(0, shadowTop),
+        blend: "over" as const,
+      });
+    }
+
     // Add product on top
     compositeLayers.push({
       input: resizedProduct,
@@ -193,9 +286,37 @@ export async function POST(req: NextRequest) {
       top,
     });
 
+    // Add vignette if enhancement preset requires it
+    if (enhancement.vignette && enhancement.vignetteStrength > 0) {
+      const vignetteOpacity = Math.round(enhancement.vignetteStrength * 255);
+      const vignetteSvg = `
+        <svg width="${bgWidth}" height="${bgHeight}" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="vignette" cx="50%" cy="50%" r="70%">
+              <stop offset="0%" style="stop-color:black;stop-opacity:0" />
+              <stop offset="100%" style="stop-color:black;stop-opacity:1" />
+            </radialGradient>
+          </defs>
+          <rect width="${bgWidth}" height="${bgHeight}" fill="url(#vignette)" opacity="${vignetteOpacity / 255}" />
+        </svg>
+      `;
+
+      compositeLayers.push({
+        input: Buffer.from(vignetteSvg),
+        top: 0,
+        left: 0,
+        blend: "over" as const,
+      });
+    }
+
+    // Apply background blur if configured
+    let processedBackground = sharp(backgroundBuffer).ensureAlpha();
+    if (enhancement.backgroundBlur > 0) {
+      processedBackground = processedBackground.blur(enhancement.backgroundBlur);
+    }
+
     // Composite the images onto the background
-    const composited = await sharp(backgroundBuffer)
-      .ensureAlpha()
+    const composited = await processedBackground
       .composite(compositeLayers)
       .png()
       .toBuffer();
