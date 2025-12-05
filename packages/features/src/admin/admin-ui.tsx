@@ -7033,16 +7033,21 @@ function MyAccountsView() {
   const [loading, setLoading] = useState(true);
   const [accounts, setAccounts] = useState<AdAccount[]>([]);
   const [editingNotes, setEditingNotes] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMyAccounts();
-  }, []);
+  }, [showArchived]);
 
   async function fetchMyAccounts() {
     setLoading(true);
     try {
       // Use dedicated my-accounts endpoint with server-side role-based filtering
-      const res = await fetch("/api/accounts/my-accounts");
+      const url = showArchived
+        ? "/api/accounts/my-accounts?includeArchived=true"
+        : "/api/accounts/my-accounts";
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setAccounts(Array.isArray(data) ? data : []);
@@ -7058,21 +7063,51 @@ function MyAccountsView() {
     setEditingNotes(account.id);
   }
 
+  // Get selected account for detail modal
+  const selectedAccount = selectedAccountId ? accounts.find(a => a.id === selectedAccountId) : null;
+
   if (loading) {
     return <SkeletonAccountsTable />;
   }
 
-  if (accounts.length === 0) {
+  if (accounts.length === 0 && !showArchived) {
     return (
-      <div className="text-center py-12">
-        <p className="text-slate-400 mb-4">You don't have any accounts assigned yet.</p>
-        <p className="text-sm text-slate-500">Request an account from the Requests page.</p>
+      <div className="space-y-4">
+        {/* Show Archived Toggle */}
+        <div className="flex justify-end">
+          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+              className="rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-emerald-500/20"
+            />
+            Show Archived
+          </label>
+        </div>
+        <div className="text-center py-12">
+          <p className="text-slate-400 mb-4">You don't have any accounts assigned yet.</p>
+          <p className="text-sm text-slate-500">Request an account from the Requests page.</p>
+        </div>
       </div>
     );
   }
 
   return (
     <>
+      {/* Show Archived Toggle */}
+      <div className="flex justify-end mb-4">
+        <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showArchived}
+            onChange={(e) => setShowArchived(e.target.checked)}
+            className="rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-emerald-500/20"
+          />
+          Show Archived
+        </label>
+      </div>
+
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead className="border-b border-slate-800">
@@ -7088,17 +7123,24 @@ function MyAccountsView() {
           </thead>
           <tbody className="text-sm">
             {accounts.map((account) => (
-              <tr key={account.id} className="border-b border-slate-800/50">
+              <tr
+                key={account.id}
+                className={`border-b border-slate-800/50 cursor-pointer hover:bg-slate-800/50 transition ${
+                  account.handoffStatus === "archived" ? "opacity-50" : ""
+                }`}
+                onClick={() => setSelectedAccountId(account.id)}
+              >
                 <td className="py-4 text-slate-200">{account.identityProfile?.fullName || "Unassigned"}</td>
                 <td className="py-4 text-slate-300">{formatCid(account.googleCid) || "—"}</td>
                 <td className="py-4">
                   <span className={`px-2 py-1 rounded-full text-xs ${
+                    account.handoffStatus === "archived" ? "bg-slate-600/20 text-slate-400" :
                     account.status === "active" ? "bg-emerald-500/20 text-emerald-300" :
                     account.status === "warming" ? "bg-amber-500/20 text-amber-300" :
                     account.status === "provisioned" ? "bg-blue-500/20 text-blue-300" :
                     "bg-slate-500/20 text-slate-300"
                   }`}>
-                    {account.status}
+                    {account.handoffStatus === "archived" ? "archived" : account.status}
                   </span>
                 </td>
                 <td className="py-4 text-slate-300">${(account.currentSpendTotal / 100).toFixed(2)}</td>
@@ -7108,7 +7150,10 @@ function MyAccountsView() {
                 </td>
                 <td className="py-4">
                   <button
-                    onClick={() => openThreadModal(account)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openThreadModal(account);
+                    }}
                     className="text-xs text-slate-400 hover:text-slate-300"
                     title="View conversation thread"
                   >
@@ -7126,6 +7171,129 @@ function MyAccountsView() {
           accountId={editingNotes}
           onClose={() => setEditingNotes(null)}
         />
+      )}
+
+      {/* Account Detail Modal */}
+      {selectedAccount && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-slate-900 rounded-xl border border-slate-700 shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className={`w-3 h-3 rounded-full ${
+                  selectedAccount.accountHealth === "active" ? "bg-emerald-400" :
+                  selectedAccount.accountHealth === "suspended" ? "bg-red-400" :
+                  "bg-slate-400"
+                }`} />
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-100">
+                    MM{String(selectedAccount.internalId).padStart(3, "0")}
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    {selectedAccount.identityProfile?.fullName || "No Identity"}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedAccountId(null)}
+                className="p-2 text-slate-400 hover:text-slate-300 hover:bg-slate-800 rounded-lg transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+              {/* Key Metrics */}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="bg-slate-800/50 rounded-lg p-4">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Total Spend</p>
+                  <p className="text-xl font-semibold text-slate-100">
+                    ${(selectedAccount.currentSpendTotal / 100).toFixed(2)}
+                  </p>
+                </div>
+                <div className="bg-slate-800/50 rounded-lg p-4">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Ads</p>
+                  <p className="text-xl font-semibold text-slate-100">{selectedAccount.adsCount}</p>
+                </div>
+              </div>
+
+              {/* Account Details */}
+              <div className="space-y-4">
+                <div className="flex justify-between items-center py-2 border-b border-slate-800">
+                  <span className="text-sm text-slate-400">Google CID</span>
+                  <span className="text-sm text-slate-200 font-mono">{formatCid(selectedAccount.googleCid) || "—"}</span>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-slate-800">
+                  <span className="text-sm text-slate-400">Status</span>
+                  <span className={`px-2 py-1 rounded-full text-xs ${
+                    selectedAccount.status === "ready" ? "bg-emerald-500/20 text-emerald-300" :
+                    selectedAccount.status === "warming-up" ? "bg-amber-500/20 text-amber-300" :
+                    selectedAccount.status === "provisioned" ? "bg-blue-500/20 text-blue-300" :
+                    selectedAccount.status === "handed-off" ? "bg-violet-500/20 text-violet-300" :
+                    "bg-slate-500/20 text-slate-300"
+                  }`}>
+                    {selectedAccount.status}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-slate-800">
+                  <span className="text-sm text-slate-400">Health</span>
+                  <span className={`px-2 py-1 rounded-full text-xs ${
+                    selectedAccount.accountHealth === "active" ? "bg-emerald-500/20 text-emerald-300" :
+                    selectedAccount.accountHealth === "suspended" ? "bg-red-500/20 text-red-300" :
+                    selectedAccount.accountHealth === "limited" ? "bg-amber-500/20 text-amber-300" :
+                    "bg-slate-500/20 text-slate-300"
+                  }`}>
+                    {selectedAccount.accountHealth}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-slate-800">
+                  <span className="text-sm text-slate-400">Handoff Status</span>
+                  <span className="text-sm text-slate-200">{selectedAccount.handoffStatus}</span>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-slate-800">
+                  <span className="text-sm text-slate-400">Handoff Date</span>
+                  <span className="text-sm text-slate-200">
+                    {selectedAccount.handoffDate ? formatDateForDisplay(selectedAccount.handoffDate) : "—"}
+                  </span>
+                </div>
+                {selectedAccount.identityProfile && (
+                  <div className="flex justify-between items-center py-2 border-b border-slate-800">
+                    <span className="text-sm text-slate-400">Identity Geo</span>
+                    <span className="text-sm text-slate-200">{selectedAccount.identityProfile.geo}</span>
+                  </div>
+                )}
+                {selectedAccount.handoffNotes && (
+                  <div className="py-2">
+                    <span className="text-sm text-slate-400 block mb-2">Handoff Notes</span>
+                    <p className="text-sm text-slate-200 bg-slate-800/50 rounded-lg p-3">
+                      {selectedAccount.handoffNotes}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end gap-2 px-6 py-4 border-t border-slate-800">
+              <button
+                onClick={() => {
+                  setSelectedAccountId(null);
+                  openThreadModal(selectedAccount);
+                }}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-sm font-medium transition"
+              >
+                💬 Thread
+              </button>
+              <button
+                onClick={() => setSelectedAccountId(null)}
+                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-900 rounded-lg text-sm font-medium transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
