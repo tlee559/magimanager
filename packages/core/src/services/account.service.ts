@@ -181,6 +181,12 @@ class AccountService {
         }
       }
 
+      // Check for decommission alert if account was archived via update
+      if (data.handoffStatus === "archived" && existing.handoffStatus !== "archived") {
+        await accountRepository.logActivity(id, "ARCHIVED", "Account archived", userId);
+        await checkAndFireDecommissionAlert(id, existing.identityProfileId);
+      }
+
       return { success: true, data: account };
     } catch (error) {
       console.error("AccountService.update error:", error);
