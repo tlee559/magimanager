@@ -1985,3 +1985,84 @@ export async function createCustomerClient(
     resourceName,
   };
 }
+
+// ============================================================================
+// UNLINK CUSTOMER FROM MCC
+// ============================================================================
+
+export interface UnlinkCustomerResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Unlink a customer account from an MCC (Manager Account)
+ * This removes the management relationship but does NOT delete the Google Ads account.
+ * The account will still exist but won't be managed by this MCC anymore.
+ *
+ * @param accessToken - OAuth access token for the MCC
+ * @param mccCustomerId - The MCC (Manager Account) customer ID
+ * @param clientCustomerId - The customer account to unlink
+ * @returns Success or error
+ */
+export async function unlinkCustomerClient(
+  accessToken: string,
+  mccCustomerId: string,
+  clientCustomerId: string
+): Promise<UnlinkCustomerResult> {
+  const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  if (!developerToken) {
+    return { success: false, error: 'GOOGLE_ADS_DEVELOPER_TOKEN not configured' };
+  }
+
+  const cleanMccId = normalizeCid(mccCustomerId);
+  const cleanClientId = normalizeCid(clientCustomerId);
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+    'developer-token': developerToken,
+    'Content-Type': 'application/json',
+    'login-customer-id': cleanMccId,
+  };
+
+  // Use CustomerManagerLinkService to remove the link
+  // The mutate operation with REMOVE action unlinks the customer
+  const resourceName = `customers/${cleanClientId}/customerManagerLinks/${cleanMccId}`;
+
+  console.log(`[unlinkCustomerClient] Unlinking ${cleanClientId} from MCC ${cleanMccId}`);
+
+  const response = await fetch(
+    `${GOOGLE_ADS_API_BASE}/customers/${cleanClientId}/customerManagerLinks:mutate`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        operations: [
+          {
+            remove: resourceName,
+          },
+        ],
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('[unlinkCustomerClient] Failed to unlink customer:', error);
+
+    if (error.includes('CUSTOMER_NOT_FOUND')) {
+      return { success: false, error: 'Customer account not found' };
+    }
+    if (error.includes('PERMISSION_DENIED')) {
+      return { success: false, error: 'Permission denied - MCC does not manage this account' };
+    }
+    if (error.includes('MANAGER_LINK_NOT_FOUND')) {
+      return { success: false, error: 'No management link found between MCC and this account' };
+    }
+
+    return { success: false, error: `Failed to unlink account: ${error}` };
+  }
+
+  console.log(`[unlinkCustomerClient] Successfully unlinked ${cleanClientId} from MCC`);
+  return { success: true };
+}

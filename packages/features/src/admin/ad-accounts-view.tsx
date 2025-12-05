@@ -1328,6 +1328,33 @@ function DetailPanel({
     }
   }
 
+  async function handleUnlinkFromMcc() {
+    if (!isSuperAdmin) return;
+    if (!confirm("Are you sure you want to unlink this account from the MCC?\n\nThis will:\n• Remove the account from your MCC in Google Ads\n• Delete the account from MagiManager\n\nThe Google Ads account will still exist but won't be managed by your MCC anymore.")) {
+      return;
+    }
+
+    setUnlinking(true);
+    try {
+      const res = await fetch(`/api/accounts/${account.id}/unlink-mcc`, {
+        method: "POST",
+      });
+
+      if (res.ok) {
+        onClose();
+        onRefresh();
+      } else {
+        const data = await res.json();
+        alert("Failed to unlink account: " + (data.error || "Unknown error"));
+      }
+    } catch (error) {
+      console.error("Failed to unlink account:", error);
+      alert("Network error while unlinking account");
+    } finally {
+      setUnlinking(false);
+    }
+  }
+
   async function fetchHistory() {
     setLoadingHistory(true);
     try {
@@ -2786,6 +2813,26 @@ function DetailPanel({
                 </>
               )}
             </div>
+
+            {/* Unlink from MCC - Only for MCC-created accounts */}
+            {isSuperAdmin && account.origin === "mcc-created" && (
+              <div className="bg-amber-950/30 border border-amber-900/50 rounded-lg p-4 mb-4">
+                <h4 className="text-sm font-medium text-amber-300 mb-2">Unlink from MCC</h4>
+                <p className="text-xs text-amber-400/70 mb-3">
+                  Remove this account from your MCC. The Google Ads account will still exist but won&apos;t be managed by your MCC anymore.
+                </p>
+                <button
+                  onClick={handleUnlinkFromMcc}
+                  disabled={unlinking}
+                  className="w-full px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-500 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  {unlinking ? "Unlinking..." : "Unlink from MCC"}
+                </button>
+              </div>
+            )}
 
             {/* Danger Zone - SUPER_ADMIN only */}
             {isSuperAdmin && (

@@ -283,3 +283,35 @@ export async function dismissAlertHandler(request: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+/**
+ * Handler for POST /api/accounts/[id]/unlink-mcc
+ * Unlinks an MCC-created account from the MCC and deletes from MagiManager
+ */
+export async function accountUnlinkMccHandler(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await requireAdmin();
+  if (!auth.authorized) return auth.error;
+
+  const userId = auth.user?.id || null;
+
+  try {
+    const { id } = await params;
+
+    const result = await accountService.unlinkFromMcc(id, userId);
+
+    if (!result.success) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+
+    // Broadcast real-time event
+    await broadcastEvent(CHANNELS.ACCOUNTS, "account:deleted", { id });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("POST /api/accounts/[id]/unlink-mcc error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
