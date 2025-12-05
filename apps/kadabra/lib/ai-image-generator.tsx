@@ -1749,6 +1749,36 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                     alt={`Generated ${currentImageIndex + 1}`}
                     className="w-full h-full object-contain"
                   />
+                  {/* Live text preview overlay */}
+                  {showTextOverlay && overlayText && (
+                    <div
+                      className={`absolute pointer-events-none ${
+                        textPosition.includes("top")
+                          ? "top-4"
+                          : textPosition.includes("bottom")
+                            ? "bottom-4"
+                            : "top-1/2 -translate-y-1/2"
+                      } ${
+                        textPosition.includes("left")
+                          ? "left-4"
+                          : textPosition.includes("right")
+                            ? "right-4"
+                            : "left-1/2 -translate-x-1/2"
+                      }`}
+                    >
+                      <span
+                        className="inline-block px-3 py-1.5 rounded max-w-[80%]"
+                        style={{
+                          color: textColor,
+                          fontSize: `${Math.min(textFontSize, 32)}px`,
+                          fontWeight: textFontWeight,
+                          backgroundColor: showTextBg ? textBgColor : "transparent",
+                        }}
+                      >
+                        {overlayText}
+                      </span>
+                    </div>
+                  )}
                   {generatedImages.length > 1 && (
                     <>
                       <button
