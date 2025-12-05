@@ -128,6 +128,7 @@ interface GeneratedImage {
   imageUrl: string;
   isFavorite: boolean;
   createdAt: string;
+  textLayers?: TextLayer[] | null; // Stored separately, not burned into image
 }
 
 interface AIImageGeneratorProps {
@@ -234,6 +235,11 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
   // Text overlay modal state
   const [showTextOverlayModal, setShowTextOverlayModal] = useState(false);
   const [isApplyingText, setIsApplyingText] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Text layers per generated image (index -> layers)
+  // These are stored separately and only burned in on export/download
+  const [imageTextLayers, setImageTextLayers] = useState<Map<number, TextLayer[]>>(new Map());
 
   // Gallery state
   const [galleryImages, setGalleryImages] = useState<GeneratedImage[]>([]);
@@ -416,17 +422,47 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
     }
   };
 
-  // Handle text overlay (using new multi-layer system)
-  // Handle text overlay from modal
-  const handleApplyTextOverlay = async (layers: TextLayer[]) => {
-    const currentImg = generatedImages[currentImageIndex];
-    if (!currentImg || layers.length === 0) return;
+  // Handle text overlay from modal - stores layers WITHOUT burning into image
+  const handleApplyTextOverlay = (layers: TextLayer[]) => {
+    // Store layers for this image index (not burned in yet)
+    setImageTextLayers((prev) => {
+      const updated = new Map(prev);
+      if (layers.length > 0) {
+        updated.set(currentImageIndex, layers);
+      } else {
+        updated.delete(currentImageIndex);
+      }
+      return updated;
+    });
 
-    setIsApplyingText(true);
+    // Close modal
+    setShowTextOverlayModal(false);
+  };
+
+  // Get current text layers for the active image
+  const getCurrentTextLayers = (): TextLayer[] => {
+    return imageTextLayers.get(currentImageIndex) || [];
+  };
+
+  // Export/Download with text burned in
+  const handleExportWithText = async () => {
+    const currentImg = generatedImages[currentImageIndex];
+    const layers = getCurrentTextLayers();
+
+    if (!currentImg) return;
+
+    setIsExporting(true);
     setError(null);
 
     try {
-      const response = await fetch("/api/ai/text-overlay", {
+      // If no text layers, just download the original image
+      if (layers.length === 0) {
+        await handleDownload(currentImg);
+        return;
+      }
+
+      // Burn text into image via API
+      const response = await fetch("/api/ai/export-with-text", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -438,22 +474,15 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to add text overlay");
+        throw new Error(data.error || "Failed to export with text");
       }
 
-      // Replace current image with text overlay version
-      setGeneratedImages((prev) => {
-        const updated = [...prev];
-        updated[currentImageIndex] = data.imageUrl;
-        return updated;
-      });
-
-      // Close modal on success
-      setShowTextOverlayModal(false);
+      // Download the exported image
+      await handleDownload(data.imageUrl);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Text overlay failed");
+      setError(err instanceof Error ? err.message : "Export failed");
     } finally {
-      setIsApplyingText(false);
+      setIsExporting(false);
     }
   };
 
@@ -581,6 +610,9 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
         savePrompt = `Product composite: ${prompt}`;
       }
 
+      // Get text layers for this image (if any)
+      const layers = imageTextLayers.get(index);
+
       const response = await fetch("/api/ai/images", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -590,6 +622,8 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
           aspectRatio,
           rawMode: generationMode === "text" && provider === "replicate-flux" ? rawMode : false,
           imageUrl,
+          // Save text layers separately (not burned into image)
+          textLayers: layers && layers.length > 0 ? layers : null,
         }),
       });
 
@@ -1466,10 +1500,14 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                   <button
                     onClick={() => setShowTextOverlayModal(true)}
                     disabled={isApplyingText}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm text-slate-300 transition"
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition ${
+                      getCurrentTextLayers().length > 0
+                        ? "bg-purple-600/20 border border-purple-500/50 text-purple-400 hover:bg-purple-600/30"
+                        : "bg-slate-700 hover:bg-slate-600 text-slate-300"
+                    }`}
                   >
                     <Type className="w-4 h-4" />
-                    Add Text
+                    {getCurrentTextLayers().length > 0 ? `Edit Text (${getCurrentTextLayers().length})` : "Add Text"}
                   </button>
                   <button
                     onClick={() => handleSaveImage(currentImageIndex)}
@@ -1487,13 +1525,28 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                     )}
                     {savedIndices.has(currentImageIndex) ? "Saved" : "Save"}
                   </button>
-                  <button
-                    onClick={() => handleDownload()}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm text-slate-300 transition"
-                  >
-                    <Download className="w-4 h-4" />
-                    Download
-                  </button>
+                  {getCurrentTextLayers().length > 0 ? (
+                    <button
+                      onClick={handleExportWithText}
+                      disabled={isExporting}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm text-white transition disabled:opacity-50"
+                    >
+                      {isExporting ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4" />
+                      )}
+                      Export with Text
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleDownload()}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm text-slate-300 transition"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download
+                    </button>
+                  )}
                   {generatedImages.length > 1 && (
                     <>
                       <div className="w-px h-6 bg-slate-600" />
@@ -1771,6 +1824,7 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
         onClose={() => setShowTextOverlayModal(false)}
         onApply={handleApplyTextOverlay}
         isApplying={isApplyingText}
+        initialLayers={getCurrentTextLayers()}
       />
     </div>
   );

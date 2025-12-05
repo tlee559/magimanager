@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { prompt, provider, aspectRatio, rawMode, imageUrl } = body;
+    const { prompt, provider, aspectRatio, rawMode, imageUrl, textLayers } = body;
 
     if (!prompt || !provider || !imageUrl) {
       return NextResponse.json(
@@ -88,6 +88,8 @@ export async function POST(req: NextRequest) {
         aspectRatio: aspectRatio || "1:1",
         rawMode: rawMode || false,
         imageUrl: finalUrl,
+        // Store text layers separately (not burned into image)
+        textLayers: textLayers && textLayers.length > 0 ? textLayers : null,
       },
     });
 

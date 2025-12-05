@@ -1342,7 +1342,11 @@ model GeneratedImage {
   rawMode       Boolean  @default(false)
 
   // Output
-  imageUrl      String   @db.Text   // Vercel Blob URL
+  imageUrl      String   @db.Text   // Vercel Blob URL (original without text)
+
+  // Text overlay layers (stored as JSON for editability)
+  // Layers are NOT burned into imageUrl - only applied on export/download
+  textLayers    Json?               // Array of TextLayer objects
 
   // User actions
   isFavorite    Boolean  @default(false)

@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@magimanager/auth";
 import { prisma } from "@magimanager/database";
+import { Prisma } from "@prisma/client";
 
-// PATCH - Toggle favorite
+// PATCH - Update image (favorite, text layers)
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -26,11 +27,23 @@ export async function PATCH(
       return NextResponse.json({ error: "Image not found" }, { status: 404 });
     }
 
+    // Build update data - only include fields that are provided
+    const updateData: Prisma.GeneratedImageUpdateInput = {};
+
+    if (body.isFavorite !== undefined) {
+      updateData.isFavorite = body.isFavorite;
+    }
+
+    // Allow updating text layers (for editing text after save)
+    if (body.textLayers !== undefined) {
+      updateData.textLayers = body.textLayers && body.textLayers.length > 0
+        ? body.textLayers
+        : Prisma.DbNull;
+    }
+
     const updated = await prisma.generatedImage.update({
       where: { id },
-      data: {
-        isFavorite: body.isFavorite ?? image.isFavorite,
-      },
+      data: updateData,
     });
 
     return NextResponse.json({ success: true, image: updated });

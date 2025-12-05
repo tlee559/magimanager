@@ -26,8 +26,9 @@ interface TextOverlayModalProps {
   imageUrl: string;
   isOpen: boolean;
   onClose: () => void;
-  onApply: (layers: TextLayer[]) => Promise<void>;
+  onApply: (layers: TextLayer[]) => void;
   isApplying?: boolean;
+  initialLayers?: TextLayer[]; // Pre-existing layers to edit
 }
 
 export function TextOverlayModal({
@@ -36,14 +37,23 @@ export function TextOverlayModal({
   onClose,
   onApply,
   isApplying = false,
+  initialLayers = [],
 }: TextOverlayModalProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
 
-  // Layer state
+  // Layer state - initialize with existing layers if editing
   const [layers, setLayers] = useState<TextLayer[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Initialize layers when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setLayers(initialLayers.length > 0 ? initialLayers : []);
+      setSelectedId(initialLayers.length > 0 ? initialLayers[0].id : null);
+    }
+  }, [isOpen, initialLayers]);
 
   // Drag state
   const [isDragging, setIsDragging] = useState(false);
