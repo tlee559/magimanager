@@ -18,7 +18,7 @@ import type {
   AlertType,
 } from "@magimanager/shared";
 import { checkAndFireDecommissionAlert } from "./decommission-alert.service";
-import { createCustomerClient, unlinkCustomerClient } from "./google-ads.service";
+import { createCustomerClient } from "./google-ads.service";
 import { decryptToken } from "./oauth.service";
 import { getPrisma } from "../repositories/base.repository";
 
@@ -511,88 +511,6 @@ class AccountService {
     } catch (error) {
       console.error("AccountService.simulateWarmupProgress error:", error);
       return { success: false, error: "Failed to simulate warmup" };
-    }
-  }
-
-  /**
-   * Unlink an MCC-created account from the MCC via Google Ads API.
-   * This removes the management relationship - the account will still exist in Google Ads
-   * but won't be managed by this MCC anymore.
-   * Also deletes the account from MagiManager.
-   */
-  async unlinkFromMcc(
-    id: string,
-    userId?: string | null
-  ): Promise<ServiceResult<void>> {
-    try {
-      const account = await accountRepository.findById(id);
-      if (!account) {
-        return { success: false, error: "Account not found" };
-      }
-
-      // Only allow unlinking MCC-created accounts
-      if (account.origin !== "mcc-created") {
-        return {
-          success: false,
-          error: "Only MCC-created accounts can be unlinked from the MCC",
-        };
-      }
-
-      // Get MCC settings
-      const prisma = getPrisma();
-      const settings = await prisma.appSettings.findFirst({
-        select: {
-          mccCustomerId: true,
-          mccConnectionId: true,
-        },
-      });
-
-      if (!settings?.mccConnectionId || !settings?.mccCustomerId) {
-        return {
-          success: false,
-          error: "MCC is not configured",
-        };
-      }
-
-      // Get the MCC connection's access token
-      const connection = await prisma.googleAdsConnection.findUnique({
-        where: { id: settings.mccConnectionId },
-        select: { accessToken: true, status: true },
-      });
-
-      if (!connection || connection.status !== "active") {
-        return {
-          success: false,
-          error: "MCC connection is not active",
-        };
-      }
-
-      // Unlink from MCC via Google Ads API
-      if (account.googleCid) {
-        const accessToken = decryptToken(connection.accessToken);
-        const unlinkResult = await unlinkCustomerClient(
-          accessToken,
-          settings.mccCustomerId,
-          account.googleCid
-        );
-
-        if (!unlinkResult.success) {
-          // Log the error but continue with deletion from MagiManager
-          console.error(
-            `[AccountService] Failed to unlink from MCC: ${unlinkResult.error}`
-          );
-          // Don't fail - the account might already be unlinked or have other issues
-          // We still want to remove it from MagiManager
-        }
-      }
-
-      // Delete from MagiManager
-      await accountRepository.delete(id);
-
-      return { success: true };
-    } catch (error) {
-      console.error("AccountService.unlinkFromMcc error:", error);
-      return { success: false, error: "Failed to unlink account from MCC" };
     }
   }
 }

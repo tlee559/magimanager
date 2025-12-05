@@ -13,7 +13,6 @@ export {
   accountAssignHandler,
   needsAttentionHandler,
   dismissAlertHandler,
-  accountUnlinkMccHandler,
 } from "./accounts.handler";
 
 // Identity handlers
