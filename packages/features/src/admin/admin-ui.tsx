@@ -1348,6 +1348,9 @@ function IdentitiesListView({
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">
                 Email
               </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">
+                Website
+              </th>
               <th className="px-4 py-3 text-center text-xs font-semibold text-slate-400" title="Ad Account linked">
                 Account
               </th>
@@ -1374,6 +1377,7 @@ function IdentitiesListView({
                   </td>
                   <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
                   <td className="px-4 py-3"><Skeleton className="h-4 w-32" /></td>
+                  <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
                   <td className="px-4 py-3 text-center"><Skeleton className="h-4 w-4 rounded-full mx-auto" /></td>
                   <td className="px-4 py-3 text-center"><Skeleton className="h-4 w-4 rounded-full mx-auto" /></td>
                   <td className="px-4 py-3 text-center"><Skeleton className="h-4 w-4 rounded-full mx-auto" /></td>
@@ -1409,6 +1413,15 @@ function IdentitiesListView({
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-400">
                       {identity.email || "-"}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-400 max-w-[150px] truncate">
+                      {identity.website ? (
+                        <span className="text-emerald-400" title={identity.website}>
+                          {identity.website.replace(/^https?:\/\//, '')}
+                        </span>
+                      ) : (
+                        <span className="text-slate-500">-</span>
+                      )}
                     </td>
                     {/* Ad Account Status */}
                     <td className="px-4 py-3 text-center">
@@ -1448,7 +1461,7 @@ function IdentitiesListView({
             ) : (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   className="px-4 py-8 text-center text-sm text-slate-400"
                 >
                   {searchQuery || geoFilter !== "all" ? (
