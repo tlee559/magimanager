@@ -62,15 +62,39 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    // Default redirect based on role
+    // Default redirect based on role and origin
     const userRole = (token as { role?: string }).role || "MEDIA_BUYER";
     const abraUrl = AUTH_CONFIG.urls.abra;
     const kadabraUrl = AUTH_CONFIG.urls.kadabra;
 
-    const response =
-      userRole === "MEDIA_BUYER"
-        ? NextResponse.redirect(new URL(`${kadabraUrl}/admin`))
-        : NextResponse.redirect(new URL(`${abraUrl}/admin`));
+    // Check for origin parameter (passed during logout->login flow)
+    const origin = request.nextUrl.searchParams.get("origin");
+
+    let redirectUrl: string;
+    if (origin) {
+      // Try to respect origin, but MEDIA_BUYER can only access Kadabra
+      try {
+        const parsed = new URL(origin);
+        const isKadabra = parsed.hostname === "magimanager.com" ||
+                          parsed.hostname === "www.magimanager.com";
+
+        if (userRole === "MEDIA_BUYER") {
+          redirectUrl = `${kadabraUrl}/admin`;
+        } else if (isKadabra) {
+          redirectUrl = `${kadabraUrl}/admin`;
+        } else {
+          redirectUrl = `${abraUrl}/admin`;
+        }
+      } catch {
+        // Invalid origin, use role-based default
+        redirectUrl = userRole === "MEDIA_BUYER" ? `${kadabraUrl}/admin` : `${abraUrl}/admin`;
+      }
+    } else {
+      // No origin, use role-based default
+      redirectUrl = userRole === "MEDIA_BUYER" ? `${kadabraUrl}/admin` : `${abraUrl}/admin`;
+    }
+
+    const response = NextResponse.redirect(new URL(redirectUrl));
 
     // Clear redirect counter on successful auth
     response.cookies.delete(REDIRECT_COUNT_COOKIE);

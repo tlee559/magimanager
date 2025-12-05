@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { cn, isValidReturnUrl, getDefaultRedirectUrl } from "@/lib/utils";
+import { cn, isValidReturnUrl, getDefaultRedirectUrl, getOriginFromUrl } from "@/lib/utils";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
 function MagiManagerLogo({ size = 80 }: { size?: number }) {
@@ -51,6 +51,7 @@ function LoginForm() {
   const [loginState, setLoginState] = useState<LoginState>("idle");
 
   const returnTo = searchParams.get("returnTo");
+  const origin = searchParams.get("origin"); // Origin app the user came from (e.g., for logout->login flow)
 
   // If already authenticated, redirect appropriately
   useEffect(() => {
@@ -60,10 +61,12 @@ function LoginForm() {
       if (returnTo && isValidReturnUrl(returnTo)) {
         window.location.href = returnTo;
       } else {
-        window.location.href = getDefaultRedirectUrl(userRole);
+        // Use origin param if available, or extract origin from returnTo
+        const effectiveOrigin = origin || getOriginFromUrl(returnTo);
+        window.location.href = getDefaultRedirectUrl(userRole, effectiveOrigin);
       }
     }
-  }, [status, session, returnTo]);
+  }, [status, session, returnTo, origin]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

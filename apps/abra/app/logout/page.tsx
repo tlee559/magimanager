@@ -61,13 +61,15 @@ export default function LogoutPage() {
       // Clear cookies again after signOut (belt and suspenders)
       clearAllAuthCookies();
 
-      // Redirect to central login portal's logout page
+      // Redirect to central login portal's logout page with origin info
       const loginUrl = process.env.NEXT_PUBLIC_LOGIN_URL || "https://login.magimanager.com";
+      const abraUrl = process.env.NEXT_PUBLIC_ABRA_URL || "https://abra.magimanager.com";
 
       // Small delay to ensure cookies are cleared
       setTimeout(() => {
         setIsLoggingOut(false);
-        window.location.href = `${loginUrl}/logout`;
+        // Pass origin so after re-login, user returns to Abra
+        window.location.href = `${loginUrl}/logout?origin=${encodeURIComponent(abraUrl)}`;
       }, 500);
     };
 

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Loader2, LogOut, User } from "lucide-react";
 
 function MagiManagerLogo({ size = 80 }: { size?: number }) {
@@ -38,10 +39,16 @@ function MagiManagerLogo({ size = 80 }: { size?: number }) {
 
 type LogoutState = "signing-out" | "signed-out";
 
-export default function LogoutPage() {
+function LogoutContent() {
+  const searchParams = useSearchParams();
   const { data: session, status } = useSession();
   const [logoutState, setLogoutState] = useState<LogoutState>("signing-out");
   const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  // Get origin parameter (where the user logged out from)
+  const origin = searchParams.get("origin");
+  // Build the sign-in URL, preserving origin if present
+  const signInUrl = origin ? `/?origin=${encodeURIComponent(origin)}` : "/";
 
   useEffect(() => {
     // Capture the email before signing out
@@ -115,7 +122,7 @@ export default function LogoutPage() {
 
           {/* Sign in again button */}
           <Link
-            href="/"
+            href={signInUrl}
             className="inline-flex items-center justify-center w-full px-4 py-3 bg-violet-600 text-white font-semibold rounded-lg hover:bg-violet-500 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-slate-900"
           >
             Sign in again
@@ -130,5 +137,26 @@ export default function LogoutPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+// Wrap with Suspense for useSearchParams
+export default function LogoutPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
+          <div className="text-center animate-fade-in">
+            <div className="flex justify-center mb-6">
+              <MagiManagerLogo size={64} />
+            </div>
+            <Loader2 className="h-6 w-6 text-violet-500 animate-spin mx-auto mb-4" />
+            <p className="text-slate-300 font-medium">Loading...</p>
+          </div>
+        </main>
+      }
+    >
+      <LogoutContent />
+    </Suspense>
   );
 }
