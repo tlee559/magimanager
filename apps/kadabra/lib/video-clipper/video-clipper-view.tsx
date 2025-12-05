@@ -472,11 +472,11 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
 
           const clipData = await clipResponse.json();
 
-          if (clipResponse.ok && clipData.clipUrl) {
+          if (clipResponse.ok && clipData.clip?.url) {
             setGeneratedClips(prev => {
               const next = new Map(prev);
               next.set(i, {
-                url: clipData.clipUrl,
+                url: clipData.clip.url,
                 startTime: suggestion.startTime,
                 endTime: suggestion.endTime,
                 duration: suggestion.endTime - suggestion.startTime,
