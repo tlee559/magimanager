@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/700.css";
-import { useTextLayers, TextOverlayEditor, TextControlsPanel } from "./text-overlay";
+import { TextOverlayModal, TextLayer } from "./text-overlay";
 
 type Provider = "google-imagen" | "replicate-flux";
 type AspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
@@ -231,10 +231,9 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
   const [bgMood, setBgMood] = useState<BackgroundMood>("bright");
   const [enhancementPreset, setEnhancementPreset] = useState<EnhancementPreset>("clean");
 
-  // Text overlay state (Instagram-style multi-layer system)
-  const [showTextOverlay, setShowTextOverlay] = useState(false);
+  // Text overlay modal state
+  const [showTextOverlayModal, setShowTextOverlayModal] = useState(false);
   const [isApplyingText, setIsApplyingText] = useState(false);
-  const textLayers = useTextLayers();
 
   // Gallery state
   const [galleryImages, setGalleryImages] = useState<GeneratedImage[]>([]);
@@ -418,9 +417,10 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
   };
 
   // Handle text overlay (using new multi-layer system)
-  const handleApplyTextOverlay = async () => {
+  // Handle text overlay from modal
+  const handleApplyTextOverlay = async (layers: TextLayer[]) => {
     const currentImg = generatedImages[currentImageIndex];
-    if (!currentImg || textLayers.layers.length === 0) return;
+    if (!currentImg || layers.length === 0) return;
 
     setIsApplyingText(true);
     setError(null);
@@ -431,7 +431,7 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           imageUrl: currentImg,
-          layers: textLayers.layers,
+          layers: layers,
         }),
       });
 
@@ -448,9 +448,8 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
         return updated;
       });
 
-      // Clear layers after applying
-      textLayers.clearLayers();
-      setShowTextOverlay(false);
+      // Close modal on success
+      setShowTextOverlayModal(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Text overlay failed");
     } finally {
@@ -1465,13 +1464,9 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
               {generatedImages.length > 0 && (
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
-                    onClick={() => setShowTextOverlay(!showTextOverlay)}
+                    onClick={() => setShowTextOverlayModal(true)}
                     disabled={isApplyingText}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition ${
-                      showTextOverlay
-                        ? "bg-amber-600/20 border border-amber-500/30 text-amber-400"
-                        : "bg-slate-700 hover:bg-slate-600 text-slate-300"
-                    }`}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm text-slate-300 transition"
                   >
                     <Type className="w-4 h-4" />
                     Add Text
@@ -1522,40 +1517,6 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                 </div>
               )}
             </div>
-
-            {/* Text Overlay Controls - Instagram-style editor */}
-            {showTextOverlay && generatedImages.length > 0 && (
-              <div className="bg-slate-900/50 rounded-lg border border-amber-500/30 p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium text-amber-400 flex items-center gap-2">
-                    <Type className="w-4 h-4" />
-                    Text Overlay
-                  </h3>
-                  <button
-                    onClick={() => {
-                      setShowTextOverlay(false);
-                      textLayers.clearLayers();
-                    }}
-                    className="p-1 hover:bg-slate-700 rounded transition"
-                  >
-                    <X className="w-4 h-4 text-slate-400" />
-                  </button>
-                </div>
-
-                {/* Visual Editor with draggable text */}
-                <TextOverlayEditor
-                  imageUrl={currentImage}
-                  textLayers={textLayers}
-                />
-
-                {/* Controls Panel */}
-                <TextControlsPanel
-                  textLayers={textLayers}
-                  onApply={handleApplyTextOverlay}
-                  isApplying={isApplyingText}
-                />
-              </div>
-            )}
 
             <div
               className={`${getAspectClass()} bg-slate-900/50 rounded-lg border border-slate-700/50 flex items-center justify-center overflow-hidden relative`}
@@ -1802,6 +1763,15 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
           </div>
         </div>
       )}
+
+      {/* Text Overlay Modal */}
+      <TextOverlayModal
+        imageUrl={currentImage}
+        isOpen={showTextOverlayModal}
+        onClose={() => setShowTextOverlayModal(false)}
+        onApply={handleApplyTextOverlay}
+        isApplying={isApplyingText}
+      />
     </div>
   );
 }
