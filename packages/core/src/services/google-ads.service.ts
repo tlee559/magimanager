@@ -1944,17 +1944,41 @@ export async function createCustomerClient(
   }
 
   const data = await response.json();
+  console.log('[createCustomerClient] API Response:', JSON.stringify(data, null, 2));
 
   // The response contains the resource name of the new customer
   // Format: customers/{mcc_id}/customerClients/{new_customer_id}
-  const resourceName = data.resourceName || '';
-  const customerIdMatch = resourceName.match(/customerClients\/(\d+)/);
-  const newCustomerId = customerIdMatch ? customerIdMatch[1] : undefined;
+  // Or it might be in data.result.resourceName for some API versions
+  const resourceName = data.resourceName || data.result?.resourceName || '';
 
-  if (!newCustomerId) {
-    return { success: false, error: 'Created account but could not extract customer ID' };
+  // Try to extract customer ID from resourceName
+  let newCustomerId: string | undefined;
+
+  // Pattern 1: customerClients/{customer_id}
+  const customerClientMatch = resourceName.match(/customerClients\/(\d+)/);
+  if (customerClientMatch) {
+    newCustomerId = customerClientMatch[1];
   }
 
+  // Pattern 2: customers/{customer_id} (direct customer resource)
+  if (!newCustomerId) {
+    const customerMatch = resourceName.match(/customers\/(\d+)$/);
+    if (customerMatch) {
+      newCustomerId = customerMatch[1];
+    }
+  }
+
+  // Pattern 3: Check if customerId is directly in response
+  if (!newCustomerId && data.customerId) {
+    newCustomerId = String(data.customerId).replace(/[-\s]/g, '');
+  }
+
+  if (!newCustomerId) {
+    console.error('[createCustomerClient] Could not extract customer ID from response:', data);
+    return { success: false, error: 'Created account but could not extract customer ID from response' };
+  }
+
+  console.log('[createCustomerClient] Successfully created account:', newCustomerId);
   return {
     success: true,
     customerId: newCustomerId,

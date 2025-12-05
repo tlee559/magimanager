@@ -221,10 +221,9 @@ class AccountRepository {
     let googleCid = data.googleCid;
     if (googleCid) {
       googleCid = googleCid.replace(/[-\s]/g, "");
-    } else if (data.origin === "mcc-created") {
-      // Generate mock CID for MCC-created accounts
-      googleCid = `${Math.floor(100 + Math.random() * 900)}${Math.floor(100 + Math.random() * 900)}${Math.floor(1000 + Math.random() * 9000)}`;
     }
+    // Note: For MCC-created accounts, the CID should be provided by the Google Ads API
+    // If no CID is provided, we'll store null (account pending CID assignment)
 
     const account = await this.prisma.adAccount.create({
       data: {

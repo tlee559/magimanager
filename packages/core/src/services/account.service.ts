@@ -130,7 +130,7 @@ class AccountService {
         identityId = identity.id;
       }
 
-      // For MCC-created accounts, try to create via Google Ads API
+      // For MCC-created accounts, MUST create via Google Ads API
       let googleCid = data.googleCid;
       if (data.origin === "mcc-created" && !googleCid) {
         const prisma = getPrisma();
@@ -141,14 +141,27 @@ class AccountService {
           },
         });
 
-        if (settings?.mccConnectionId && settings?.mccCustomerId) {
-          // Get the MCC connection's access token
-          const connection = await prisma.googleAdsConnection.findUnique({
-            where: { id: settings.mccConnectionId },
-            select: { accessToken: true, status: true },
-          });
+        if (!settings?.mccConnectionId || !settings?.mccCustomerId) {
+          return {
+            success: false,
+            error: "MCC is not configured. Please connect your MCC in Settings first.",
+          };
+        }
 
-          if (connection && connection.status === "active") {
+        // Get the MCC connection's access token
+        const connection = await prisma.googleAdsConnection.findUnique({
+          where: { id: settings.mccConnectionId },
+          select: { accessToken: true, status: true },
+        });
+
+        if (!connection || connection.status !== "active") {
+          return {
+            success: false,
+            error: "MCC connection is not active. Please reconnect your MCC in Settings.",
+          };
+        }
+
+        {
             try {
               const accessToken = decryptToken(connection.accessToken);
 
@@ -178,14 +191,20 @@ class AccountService {
                 googleCid = result.customerId;
                 console.log(`[AccountService] Created real Google Ads account: ${googleCid}`);
               } else {
+                // Failed to create account via MCC - return error instead of creating fake account
                 console.error(`[AccountService] Failed to create Google Ads account: ${result.error}`);
-                // Fall through to mock CID - the repository will generate one
+                return {
+                  success: false,
+                  error: `Failed to create Google Ads account: ${result.error || "Unknown error"}`,
+                };
               }
             } catch (error) {
               console.error("[AccountService] Error creating Google Ads account:", error);
-              // Fall through to mock CID - the repository will generate one
+              return {
+                success: false,
+                error: `Error creating Google Ads account: ${error instanceof Error ? error.message : "Unknown error"}`,
+              };
             }
-          }
         }
       }
 
