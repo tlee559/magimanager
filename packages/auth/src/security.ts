@@ -61,3 +61,34 @@ export function isVercelCronRequest(request: Request): boolean {
   const authHeader = request.headers.get('authorization');
   return isValidCronRequest(authHeader);
 }
+
+/**
+ * Validates an inter-app request (KADABRA calling ABRA or vice versa).
+ * Uses INTER_APP_SECRET for service-to-service authentication.
+ *
+ * @param authHeader - The Authorization header value (should be "Bearer <token>")
+ * @returns true if the token matches INTER_APP_SECRET
+ */
+export function isValidInterAppRequest(authHeader: string | null): boolean {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return false;
+  }
+
+  const token = authHeader.slice(7); // Remove "Bearer " prefix
+  const interAppSecret = process.env.INTER_APP_SECRET;
+
+  if (!interAppSecret) {
+    console.warn('[Security] INTER_APP_SECRET not configured');
+    return false;
+  }
+
+  return constantTimeCompare(token, interAppSecret);
+}
+
+/**
+ * Validates an inter-app request from the Request object.
+ */
+export function isInterAppRequest(request: Request): boolean {
+  const authHeader = request.headers.get('authorization');
+  return isValidInterAppRequest(authHeader);
+}

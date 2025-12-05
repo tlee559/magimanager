@@ -25,6 +25,8 @@ export {
   constantTimeCompare,
   isValidCronRequest,
   isVercelCronRequest,
+  isValidInterAppRequest,
+  isInterAppRequest,
 } from './security';
 
 export {

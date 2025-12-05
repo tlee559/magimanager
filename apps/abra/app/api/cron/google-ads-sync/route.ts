@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { decrypt, encrypt } from '@/lib/encryption';
+import { prisma } from '@magimanager/database';
 import { isValidCronRequest } from '@magimanager/auth';
 import {
   refreshAccessTokenWithRetry,
+  decryptToken,
+  encryptToken,
+  logOAuthActivity,
   fetchAccountMetrics,
   mapGoogleStatus,
-} from '@/lib/google-ads-api';
+} from '@magimanager/core';
 
 /**
  * GET /api/cron/google-ads-sync
@@ -64,7 +66,7 @@ export async function GET(request: NextRequest) {
       const connection = accounts[0].connection!;
 
       // Check if token needs refresh (with 5 min buffer) or connection needs recovery
-      let accessToken = decrypt(connection.accessToken);
+      let accessToken = decryptToken(connection.accessToken);
       const tokenExpiresAt = new Date(connection.tokenExpiresAt);
       const bufferMs = 5 * 60 * 1000; // 5 minutes
       const needsRefresh = tokenExpiresAt.getTime() - Date.now() < bufferMs || connection.status === 'needs_refresh';
@@ -72,8 +74,8 @@ export async function GET(request: NextRequest) {
       if (needsRefresh) {
         console.log(`[Google Ads Sync] Refreshing token for connection ${connectionId} (status: ${connection.status})`);
 
-        const refreshToken = decrypt(connection.refreshToken);
-        const refreshResult = await refreshAccessTokenWithRetry(refreshToken);
+        const refreshToken = decryptToken(connection.refreshToken);
+        const refreshResult = await refreshAccessTokenWithRetry(refreshToken, connectionId, 'abra');
 
         if (!refreshResult.success) {
           const error = refreshResult.error!;
@@ -122,7 +124,7 @@ export async function GET(request: NextRequest) {
           lastSyncError: null;
           refreshToken?: string;
         } = {
-          accessToken: encrypt(refreshResult.accessToken!),
+          accessToken: encryptToken(refreshResult.accessToken!),
           tokenExpiresAt: refreshResult.expiresAt!,
           status: 'active', // Reset to active on successful refresh
           lastSyncError: null,
@@ -131,7 +133,7 @@ export async function GET(request: NextRequest) {
         // Handle refresh token rotation (Google may issue a new refresh token)
         if (refreshResult.newRefreshToken) {
           console.log(`[Google Ads Sync] Refresh token rotated for connection ${connectionId}`);
-          updateData.refreshToken = encrypt(refreshResult.newRefreshToken);
+          updateData.refreshToken = encryptToken(refreshResult.newRefreshToken);
         }
 
         await prisma.googleAdsConnection.update({

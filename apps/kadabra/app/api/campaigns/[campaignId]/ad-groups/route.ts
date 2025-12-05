@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@magimanager/database";
-import { fetchAdGroups, refreshAccessToken } from "@/lib/google-ads-api";
+import {
+  fetchAdGroups,
+  refreshAccessTokenWithRetry,
+  decryptToken,
+  encryptToken,
+} from "@magimanager/core";
 import { isFeatureEnabled } from "@magimanager/shared";
-import { decrypt, encrypt } from "@/lib/encryption";
 
 // Helper to return cached ad groups
 function returnCachedAdGroups(account: { cachedAdGroups: string | null; adGroupsCachedAt: Date | null }, campaignId: string, reason: string) {
@@ -80,8 +84,8 @@ export async function GET(
     let accessToken: string;
     let refreshToken: string;
     try {
-      accessToken = decrypt(account.connection.accessToken);
-      refreshToken = decrypt(account.connection.refreshToken);
+      accessToken = decryptToken(account.connection.accessToken);
+      refreshToken = decryptToken(account.connection.refreshToken);
     } catch (decryptError) {
       const cached = returnCachedAdGroups(account, campaignId, "token_decrypt_failed");
       if (cached) return cached;
@@ -96,35 +100,42 @@ export async function GET(
     const needsRefresh = account.connection.tokenExpiresAt <= now || account.connection.status === 'expired';
 
     if (needsRefresh) {
-      try {
-        const refreshed = await refreshAccessToken(refreshToken);
-        accessToken = refreshed.accessToken;
+      const refreshResult = await refreshAccessTokenWithRetry(refreshToken, account.connection.id, 'kadabra');
 
+      if (!refreshResult.success) {
+        const newStatus = refreshResult.error?.isRecoverable ? 'needs_refresh' : 'expired';
         await prisma.googleAdsConnection.update({
           where: { id: account.connection.id },
           data: {
-            accessToken: encrypt(refreshed.accessToken),
-            tokenExpiresAt: refreshed.expiresAt,
-            status: 'active',
-            lastSyncError: null,
-          },
-        });
-      } catch (refreshError) {
-        console.error("Failed to refresh token:", refreshError);
-        await prisma.googleAdsConnection.update({
-          where: { id: account.connection.id },
-          data: {
-            status: 'expired',
-            lastSyncError: refreshError instanceof Error ? refreshError.message : 'Token refresh failed',
+            status: newStatus,
+            lastSyncError: refreshResult.error?.message || 'Token refresh failed',
           },
         });
         const cached = returnCachedAdGroups(account, campaignId, "token_refresh_failed");
         if (cached) return cached;
         return NextResponse.json(
-          { error: "Failed to refresh OAuth token", needsReauth: true },
+          { error: "Failed to refresh OAuth token", needsReauth: !refreshResult.error?.isRecoverable },
           { status: 401 }
         );
       }
+
+      accessToken = refreshResult.accessToken!;
+
+      const updateData: any = {
+        accessToken: encryptToken(refreshResult.accessToken!),
+        tokenExpiresAt: refreshResult.expiresAt,
+        status: 'active',
+        lastSyncError: null,
+      };
+
+      if (refreshResult.newRefreshToken) {
+        updateData.refreshToken = encryptToken(refreshResult.newRefreshToken);
+      }
+
+      await prisma.googleAdsConnection.update({
+        where: { id: account.connection.id },
+        data: updateData,
+      });
     }
 
     // Fetch live data

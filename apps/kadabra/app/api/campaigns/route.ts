@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@magimanager/database";
-import { fetchCampaigns, refreshAccessToken } from "../../../lib/google-ads-api";
+import {
+  fetchCampaigns,
+  refreshAccessTokenWithRetry,
+  decryptToken,
+  encryptToken,
+} from "@magimanager/core";
 import { isFeatureEnabled } from "@magimanager/shared";
-import { decrypt, encrypt } from "@/lib/encryption";
 
 export async function GET(req: NextRequest) {
   try {
@@ -120,8 +124,8 @@ export async function GET(req: NextRequest) {
     let refreshToken: string;
 
     try {
-      accessToken = decrypt(account.connection.accessToken);
-      refreshToken = decrypt(account.connection.refreshToken);
+      accessToken = decryptToken(account.connection.accessToken);
+      refreshToken = decryptToken(account.connection.refreshToken);
     } catch (decryptError) {
       console.error("Failed to decrypt tokens:", decryptError);
       const cached = returnCachedCampaigns("token_decrypt_failed");
@@ -140,42 +144,50 @@ export async function GET(req: NextRequest) {
     const needsRefresh = account.connection.tokenExpiresAt <= now || account.connection.status === 'expired';
 
     if (needsRefresh) {
-      // Refresh the token - try to recover even if status is 'expired'
+      // Refresh the token using shared service with retry logic
       console.log(`[API/campaigns] Refreshing token (status: ${account.connection.status})`);
-      try {
-        const refreshed = await refreshAccessToken(refreshToken);
-        accessToken = refreshed.accessToken;
+      const refreshResult = await refreshAccessTokenWithRetry(refreshToken, account.connection.id, 'kadabra');
 
-        // Update the connection with new encrypted token AND reset status to active
+      if (!refreshResult.success) {
+        console.error("Failed to refresh token:", refreshResult.error?.message);
+
+        // Mark connection as expired or needs_refresh based on error type
+        const newStatus = refreshResult.error?.isRecoverable ? 'needs_refresh' : 'expired';
         await prisma.googleAdsConnection.update({
           where: { id: account.connection.id },
           data: {
-            accessToken: encrypt(refreshed.accessToken),
-            tokenExpiresAt: refreshed.expiresAt,
-            status: 'active', // Reset to active on successful refresh
-            lastSyncError: null,
-          },
-        });
-        console.log(`[API/campaigns] Token refreshed, connection restored to active`);
-      } catch (refreshError) {
-        console.error("Failed to refresh token:", refreshError);
-
-        // Mark connection as expired
-        await prisma.googleAdsConnection.update({
-          where: { id: account.connection.id },
-          data: {
-            status: 'expired',
-            lastSyncError: refreshError instanceof Error ? refreshError.message : 'Token refresh failed',
+            status: newStatus,
+            lastSyncError: refreshResult.error?.message || 'Token refresh failed',
           },
         });
 
         const cached = returnCachedCampaigns("token_refresh_failed");
         if (cached) return cached;
         return NextResponse.json(
-          { error: "Failed to refresh OAuth token", needsReauth: true },
+          { error: "Failed to refresh OAuth token", needsReauth: !refreshResult.error?.isRecoverable },
           { status: 401 }
         );
       }
+
+      accessToken = refreshResult.accessToken!;
+
+      // Update the connection with new encrypted token
+      const updateData: any = {
+        accessToken: encryptToken(refreshResult.accessToken!),
+        tokenExpiresAt: refreshResult.expiresAt,
+        status: 'active',
+        lastSyncError: null,
+      };
+
+      if (refreshResult.newRefreshToken) {
+        updateData.refreshToken = encryptToken(refreshResult.newRefreshToken);
+      }
+
+      await prisma.googleAdsConnection.update({
+        where: { id: account.connection.id },
+        data: updateData,
+      });
+      console.log(`[API/campaigns] Token refreshed, connection restored to active`);
     }
 
     // Fetch campaigns from Google Ads API

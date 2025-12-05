@@ -1,13 +1,10 @@
-/**
- * Google Ads API Client
- * Handles OAuth token exchange, refresh, and metrics fetching
- */
+// ============================================================================
+// GOOGLE ADS SERVICE - Centralized Google Ads API interactions
+// All OAuth token usage and Google Ads API calls go through here
+// ============================================================================
 
-import { sendMessage as sendTelegramMessage } from '@magimanager/core';
+import { prisma } from '@magimanager/database';
 import { formatCid, normalizeCid } from '@magimanager/shared';
-
-// Re-export for backwards compatibility
-export { formatCid, normalizeCid } from '@magimanager/shared';
 import type {
   Campaign,
   CampaignStatus,
@@ -24,36 +21,22 @@ import type {
   KeywordMatchType,
   PerformanceMetrics,
 } from '@magimanager/shared';
+import { sendMessage as sendTelegramMessage } from '../integrations/telegram-bot';
 
-const GOOGLE_OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+// Re-export for backwards compatibility
+export { formatCid, normalizeCid };
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
 // Google Ads API version - check https://developers.google.com/google-ads/api/docs/sunset-dates
-// for supported versions. Versions sunset ~12 months after release.
 const GOOGLE_ADS_API_VERSION = 'v22';
 const GOOGLE_ADS_API_BASE = `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}`;
 
-/**
- * Get a date string in YYYY-MM-DD format with an optional offset
- */
-function getDateString(daysOffset: number = 0): string {
-  const date = new Date();
-  date.setDate(date.getDate() + daysOffset);
-  return date.toISOString().split('T')[0];
-}
-
-interface TokenResponse {
-  access_token: string;
-  refresh_token?: string;
-  expires_in: number;
-  token_type: string;
-  scope: string;
-  id_token?: string;
-}
-
-interface GoogleUserInfo {
-  id: string;
-  email: string;
-  name?: string;
-}
+// ============================================================================
+// TYPES
+// ============================================================================
 
 export interface AccountMetrics {
   customerId: string;
@@ -67,90 +50,133 @@ export interface AccountMetrics {
   adCount: number;
 }
 
-/**
- * Exchange authorization code for tokens
- */
-export async function exchangeCodeForTokens(
-  code: string,
-  redirectUri: string
-): Promise<{ accessToken: string; refreshToken: string; expiresAt: Date; idToken?: string }> {
-  const response = await fetch(GOOGLE_OAUTH_TOKEN_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      code,
-      client_id: process.env.GOOGLE_ADS_CLIENT_ID!.trim(),
-      client_secret: process.env.GOOGLE_ADS_CLIENT_SECRET!.trim(),
-      redirect_uri: redirectUri,
-      grant_type: 'authorization_code',
-    }),
-  });
+export interface FetchCampaignsOptions {
+  dateRangeStart?: string;
+  dateRangeEnd?: string;
+  status?: CampaignStatus[];
+  includeMetrics?: boolean;
+}
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Token exchange failed: ${error}`);
-  }
+export interface FetchAdGroupsOptions {
+  campaignId?: string;
+  status?: AdGroupStatus[];
+  includeMetrics?: boolean;
+}
 
-  const data: TokenResponse = await response.json();
+export interface FetchAdsOptions {
+  campaignId?: string;
+  adGroupId?: string;
+  status?: AdStatus[];
+  includeMetrics?: boolean;
+}
 
-  return {
-    accessToken: data.access_token,
-    refreshToken: data.refresh_token!,
-    expiresAt: new Date(Date.now() + data.expires_in * 1000),
-    idToken: data.id_token,
+export interface FetchKeywordsOptions {
+  campaignId?: string;
+  adGroupId?: string;
+  status?: KeywordStatus[];
+  includeMetrics?: boolean;
+  dateRange?: string;
+}
+
+export interface SearchTerm {
+  searchTerm: string;
+  campaignId: string;
+  campaignName: string;
+  adGroupId: string;
+  adGroupName: string;
+  keywordText?: string;
+  keywordMatchType?: KeywordMatchType;
+  impressions: number;
+  clicks: number;
+  cost: number;
+  conversions: number;
+  ctr: number;
+  averageCpc: number;
+  conversionRate: number;
+  costPerConversion?: number;
+}
+
+export interface FetchSearchTermsOptions {
+  campaignId?: string;
+  adGroupId?: string;
+  startDate?: string;
+  endDate?: string;
+  minImpressions?: number;
+  minCost?: number;
+  sortBy?: 'cost' | 'impressions' | 'clicks' | 'conversions';
+  sortOrder?: 'asc' | 'desc';
+  limit?: number;
+}
+
+export type RecommendationType =
+  | 'CAMPAIGN_BUDGET'
+  | 'KEYWORD'
+  | 'TEXT_AD'
+  | 'TARGET_CPA_OPT_IN'
+  | 'MAXIMIZE_CONVERSIONS_OPT_IN'
+  | 'MAXIMIZE_CLICKS_OPT_IN'
+  | 'ENHANCED_CPC_OPT_IN'
+  | 'SEARCH_PARTNERS_OPT_IN'
+  | 'SITELINK_EXTENSION'
+  | 'CALL_EXTENSION'
+  | 'CALLOUT_EXTENSION'
+  | 'KEYWORD_MATCH_TYPE'
+  | 'MOVE_UNUSED_BUDGET'
+  | 'FORECASTING_CAMPAIGN_BUDGET'
+  | 'RESPONSIVE_SEARCH_AD'
+  | 'MARGINAL_ROI_CAMPAIGN_BUDGET'
+  | 'UPGRADE_SMART_SHOPPING_CAMPAIGN_TO_PERFORMANCE_MAX'
+  | 'RESPONSIVE_SEARCH_AD_ASSET'
+  | 'UPGRADE_LOCAL_CAMPAIGN_TO_PERFORMANCE_MAX'
+  | 'UNKNOWN';
+
+export interface Recommendation {
+  id: string;
+  resourceName: string;
+  type: RecommendationType;
+  typeDisplay: string;
+  campaignId?: string;
+  campaignName?: string;
+  adGroupId?: string;
+  impact?: {
+    baseMetrics?: {
+      impressions: number;
+      clicks: number;
+      cost: number;
+      conversions: number;
+    };
+    potentialMetrics?: {
+      impressions: number;
+      clicks: number;
+      cost: number;
+      conversions: number;
+    };
+  };
+  dismissed: boolean;
+  budgetRecommendation?: {
+    currentBudgetMicros: number;
+    recommendedBudgetMicros: number;
+  };
+  keywordRecommendation?: {
+    keyword: string;
+    matchType: KeywordMatchType;
+    recommendedCpcBidMicros?: number;
+  };
+  textAdRecommendation?: {
+    headlines: string[];
+    descriptions: string[];
   };
 }
 
-/**
- * Refresh an expired access token
- */
-export async function refreshAccessToken(
-  refreshToken: string
-): Promise<{ accessToken: string; expiresAt: Date }> {
-  const response = await fetch(GOOGLE_OAUTH_TOKEN_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      refresh_token: refreshToken,
-      client_id: process.env.GOOGLE_ADS_CLIENT_ID!.trim(),
-      client_secret: process.env.GOOGLE_ADS_CLIENT_SECRET!.trim(),
-      grant_type: 'refresh_token',
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Token refresh failed: ${error}`);
-  }
-
-  const data: TokenResponse = await response.json();
-
-  return {
-    accessToken: data.access_token,
-    expiresAt: new Date(Date.now() + data.expires_in * 1000),
-  };
+export interface FetchRecommendationsOptions {
+  campaignId?: string;
+  types?: RecommendationType[];
+  includeDismissed?: boolean;
 }
 
-/**
- * Get user info from Google (email, id)
- */
-export async function getGoogleUserInfo(accessToken: string): Promise<GoogleUserInfo> {
-  const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to get user info');
-  }
-
-  return response.json();
-}
+// ============================================================================
+// CORE API FUNCTIONS
+// ============================================================================
 
 /**
  * List all Google Ads customer IDs accessible by this token
@@ -170,13 +196,83 @@ export async function listAccessibleCustomers(accessToken: string): Promise<stri
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Failed to list accessible customers: ${error}`);
+    const errorText = await response.text();
+
+    // Parse and provide user-friendly error messages
+    let userMessage: string;
+
+    if (response.status === 401) {
+      userMessage = "Your Google session has expired. Please try connecting again.";
+    } else if (response.status === 403) {
+      if (errorText.includes("PERMISSION_DENIED") || errorText.includes("ACCESS_DENIED")) {
+        userMessage = "Your Google account doesn't have permission to access Google Ads. Make sure you're signed into the correct account with Google Ads access.";
+      } else if (errorText.includes("DEVELOPER_TOKEN")) {
+        userMessage = "Configuration error - please contact support.";
+      } else {
+        userMessage = "Access denied. Make sure you're signed into a Google account with Google Ads access.";
+      }
+    } else if (response.status === 404) {
+      userMessage = "This Google account has no accessible Google Ads accounts.";
+    } else if (response.status >= 500) {
+      userMessage = "Google Ads is temporarily unavailable. Please try again in a few minutes.";
+    } else {
+      console.error("Google Ads API error:", response.status, errorText);
+      userMessage = "Unable to connect to Google Ads. Please try again.";
+    }
+
+    throw new Error(userMessage);
   }
 
-  const data = await response.json();
-  // Response format: { resourceNames: ["customers/1234567890", "customers/0987654321"] }
+  const data = await response.json() as { resourceNames?: string[] };
   return (data.resourceNames || []).map((name: string) => name.replace('customers/', ''));
+}
+
+/**
+ * Execute a Google Ads Query Language (GAQL) query
+ */
+export async function googleAdsQuery(
+  accessToken: string,
+  customerId: string,
+  query: string,
+  developerToken?: string
+): Promise<any[]> {
+  const devToken = developerToken || process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  if (!devToken) {
+    throw new Error('GOOGLE_ADS_DEVELOPER_TOKEN not configured');
+  }
+
+  const response = await fetch(
+    `${GOOGLE_ADS_API_BASE}/customers/${customerId}/googleAds:searchStream`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'developer-token': devToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    if (error.includes('CUSTOMER_NOT_ENABLED')) {
+      throw new Error('Account is not enabled');
+    }
+    if (error.includes('NOT_ADS_USER')) {
+      throw new Error('User does not have access to this account');
+    }
+    throw new Error(`Google Ads query failed: ${error}`);
+  }
+
+  const data = await response.json() as Array<{ results?: any[] }>;
+  const results: any[] = [];
+  for (const batch of data) {
+    if (batch.results) {
+      results.push(...batch.results);
+    }
+  }
+  return results;
 }
 
 /**
@@ -191,8 +287,7 @@ export async function fetchAccountMetrics(
     throw new Error('GOOGLE_ADS_DEVELOPER_TOKEN not configured');
   }
 
-  // Remove dashes from customer ID
-  const cleanCustomerId = customerId.replace(/-/g, '');
+  const cleanCustomerId = normalizeCid(customerId);
 
   // Fetch customer details and all-time metrics
   const customerQuery = `
@@ -231,8 +326,7 @@ export async function fetchAccountMetrics(
     );
     const todayMetrics = todayResponse[0]?.metrics || {};
     todayCostMicros = parseInt(todayMetrics.costMicros || '0', 10);
-  } catch (error) {
-    // If today's query fails (e.g., no data for today), default to 0
+  } catch {
     console.log('Today spend query returned no data, defaulting to 0');
   }
 
@@ -264,7 +358,6 @@ export async function fetchAccountMetrics(
     developerToken
   );
 
-  // Parse customer response
   const customerRow = customerResponse[0] || {};
   const customer = customerRow.customer || {};
   const metrics = customerRow.metrics || {};
@@ -280,51 +373,6 @@ export async function fetchAccountMetrics(
     campaignCount: campaignResponse.length,
     adCount: adResponse.length,
   };
-}
-
-/**
- * Execute a Google Ads Query Language (GAQL) query
- */
-async function googleAdsQuery(
-  accessToken: string,
-  customerId: string,
-  query: string,
-  developerToken: string
-): Promise<any[]> {
-  const response = await fetch(
-    `${GOOGLE_ADS_API_BASE}/customers/${customerId}/googleAds:searchStream`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'developer-token': developerToken,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ query }),
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.text();
-    // Check for common errors
-    if (error.includes('CUSTOMER_NOT_ENABLED')) {
-      throw new Error('Account is not enabled');
-    }
-    if (error.includes('NOT_ADS_USER')) {
-      throw new Error('User does not have access to this account');
-    }
-    throw new Error(`Google Ads query failed: ${error}`);
-  }
-
-  const data = await response.json();
-  // searchStream returns an array of batch results
-  const results: any[] = [];
-  for (const batch of data) {
-    if (batch.results) {
-      results.push(...batch.results);
-    }
-  }
-  return results;
 }
 
 /**
@@ -346,15 +394,15 @@ export function mapGoogleStatus(googleStatus: string): string {
 
 /**
  * Sync a single account - fetches metrics and updates the database
- * Returns the metrics on success, or throws on error
+ * This is the primary sync function that ABRA uses for all syncing
  */
 export async function syncSingleAccount(
   accessToken: string,
   accountId: string,
   googleCid: string,
-  prismaClient: any
+  prismaClient: typeof prisma = prisma
 ): Promise<AccountMetrics> {
-  // Mark as syncing and get current account data for billingStatus
+  // Mark as syncing and get current account data
   const account = await prismaClient.adAccount.update({
     where: { id: accountId },
     data: { syncStatus: 'syncing' },
@@ -368,7 +416,7 @@ export async function syncSingleAccount(
     const metrics = await fetchAccountMetrics(accessToken, googleCid);
 
     // Convert cost from micros to cents
-    const spendCents = Math.round(metrics.costMicros / 10000); // micros / 1M * 100
+    const spendCents = Math.round(metrics.costMicros / 10000);
     const todaySpendCents = Math.round(metrics.todayCostMicros / 10000);
 
     // Track old health status for change detection
@@ -376,14 +424,11 @@ export async function syncSingleAccount(
     const newHealth = mapGoogleStatus(metrics.status);
 
     // Determine new status based on spend vs warmup target
-    // Only auto-update status if not already handed-off or ready
     let newStatus = account.status;
     if (account.handoffStatus !== 'handed-off' && account.status !== 'ready') {
       if (spendCents >= account.warmupTargetSpend) {
-        // Hit warmup target → ready for handoff (regardless of current status)
         newStatus = 'ready';
       } else if (spendCents > 0 && account.status === 'provisioned') {
-        // Started spending but not at target yet → warming up
         newStatus = 'warming-up';
       }
     }
@@ -409,7 +454,6 @@ export async function syncSingleAccount(
     if (newHealth === 'suspended' && oldHealth !== 'suspended') {
       const accountName = account.identityProfile?.fullName || account.googleCid || 'Unknown';
 
-      // Log activity event
       await prismaClient.accountActivity.create({
         data: {
           adAccountId: accountId,
@@ -418,7 +462,6 @@ export async function syncSingleAccount(
         },
       });
 
-      // Create system notification (no userId - visible to all admins)
       await prismaClient.notification.create({
         data: {
           type: 'ACCOUNT_SUSPENDED',
@@ -430,7 +473,6 @@ export async function syncSingleAccount(
         },
       });
 
-      // Send Telegram alert
       try {
         await sendTelegramMessage(
           `🚨 *Account Suspended*\n\n` +
@@ -445,7 +487,7 @@ export async function syncSingleAccount(
       console.log(`[Sync] Account suspended detected: ${accountName} (${formatCid(googleCid)})`);
     }
 
-    // Also detect reactivation (good to know!)
+    // Detect reactivation
     if (newHealth === 'active' && oldHealth === 'suspended') {
       const accountName = account.identityProfile?.fullName || account.googleCid || 'Unknown';
 
@@ -468,7 +510,6 @@ export async function syncSingleAccount(
         },
       });
 
-      // Send Telegram alert for good news too
       try {
         await sendTelegramMessage(
           `✅ *Account Reactivated*\n\n` +
@@ -479,8 +520,6 @@ export async function syncSingleAccount(
       } catch (telegramError) {
         console.error('[Sync] Failed to send Telegram alert:', telegramError);
       }
-
-      console.log(`[Sync] Account reactivated: ${accountName} (${formatCid(googleCid)})`);
     }
 
     // Create/update daily snapshot
@@ -513,110 +552,8 @@ export async function syncSingleAccount(
       },
     });
 
-    // Cache ALL Google Ads data for offline viewing
-    const customerId = googleCid.replace(/-/g, '');
-
-    // Cache campaigns (with metrics for last 7 days)
-    try {
-      const campaigns = await fetchCampaigns(accessToken, customerId, {
-        includeMetrics: true,
-        dateRangeStart: getDateString(-6),
-        dateRangeEnd: getDateString(0),
-      });
-      await prismaClient.adAccount.update({
-        where: { id: accountId },
-        data: {
-          cachedCampaigns: JSON.stringify(campaigns),
-          campaignsCachedAt: new Date(),
-        },
-      });
-      console.log(`[Sync] Cached ${campaigns.length} campaigns for account ${accountId}`);
-    } catch (cacheError) {
-      console.error('[Sync] Campaign caching failed:', cacheError);
-    }
-
-    // Cache ad groups
-    try {
-      const adGroups = await fetchAdGroups(accessToken, customerId, { includeMetrics: true });
-      await prismaClient.adAccount.update({
-        where: { id: accountId },
-        data: {
-          cachedAdGroups: JSON.stringify(adGroups),
-          adGroupsCachedAt: new Date(),
-        },
-      });
-      console.log(`[Sync] Cached ${adGroups.length} ad groups for account ${accountId}`);
-    } catch (cacheError) {
-      console.error('[Sync] Ad groups caching failed:', cacheError);
-    }
-
-    // Cache ads
-    try {
-      const ads = await fetchAds(accessToken, customerId, { includeMetrics: true });
-      await prismaClient.adAccount.update({
-        where: { id: accountId },
-        data: {
-          cachedAds: JSON.stringify(ads),
-          adsCachedAt: new Date(),
-        },
-      });
-      console.log(`[Sync] Cached ${ads.length} ads for account ${accountId}`);
-    } catch (cacheError) {
-      console.error('[Sync] Ads caching failed:', cacheError);
-    }
-
-    // Cache keywords
-    try {
-      const keywords = await fetchKeywords(accessToken, customerId, { includeMetrics: true });
-      await prismaClient.adAccount.update({
-        where: { id: accountId },
-        data: {
-          cachedKeywords: JSON.stringify(keywords),
-          keywordsCachedAt: new Date(),
-        },
-      });
-      console.log(`[Sync] Cached ${keywords.length} keywords for account ${accountId}`);
-    } catch (cacheError) {
-      console.error('[Sync] Keywords caching failed:', cacheError);
-    }
-
-    // Cache search terms (last 30 days for better analysis)
-    try {
-      const searchTerms = await fetchSearchTerms(accessToken, customerId, {
-        startDate: getDateString(-29),
-        endDate: getDateString(0),
-      });
-      await prismaClient.adAccount.update({
-        where: { id: accountId },
-        data: {
-          cachedSearchTerms: JSON.stringify(searchTerms),
-          searchTermsCachedAt: new Date(),
-        },
-      });
-      console.log(`[Sync] Cached ${searchTerms.length} search terms for account ${accountId}`);
-    } catch (cacheError) {
-      console.error('[Sync] Search terms caching failed:', cacheError);
-    }
-
-    // Cache recommendations
-    try {
-      const recommendations = await fetchRecommendations(accessToken, customerId);
-      await prismaClient.adAccount.update({
-        where: { id: accountId },
-        data: {
-          cachedRecommendations: JSON.stringify(recommendations),
-          recommendationsCachedAt: new Date(),
-          lastFullCacheAt: new Date(), // Mark full cache complete
-        },
-      });
-      console.log(`[Sync] Cached ${recommendations.length} recommendations for account ${accountId}`);
-    } catch (cacheError) {
-      console.error('[Sync] Recommendations caching failed:', cacheError);
-    }
-
     return metrics;
   } catch (error) {
-    // Mark as error
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     await prismaClient.adAccount.update({
       where: { id: accountId },
@@ -629,57 +566,12 @@ export async function syncSingleAccount(
   }
 }
 
-/**
- * Build the Google OAuth authorization URL
- */
-export function buildOAuthUrl(redirectUri: string, state: string): string {
-  const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_ADS_CLIENT_ID!.trim(),
-    redirect_uri: redirectUri,
-    response_type: 'code',
-    scope: 'https://www.googleapis.com/auth/adwords openid email profile',
-    access_type: 'offline',
-    prompt: 'consent', // Force consent to always get refresh token
-    state,
-  });
-
-  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-}
-
 // ============================================================================
-// KADABRA: CAMPAIGN MANAGEMENT API EXTENSIONS
+// CAMPAIGN DATA FUNCTIONS
 // ============================================================================
 
-export interface FetchCampaignsOptions {
-  dateRangeStart?: string;  // YYYY-MM-DD
-  dateRangeEnd?: string;    // YYYY-MM-DD
-  status?: CampaignStatus[];
-  includeMetrics?: boolean;
-}
-
-export interface FetchAdGroupsOptions {
-  campaignId?: string;
-  status?: AdGroupStatus[];
-  includeMetrics?: boolean;
-}
-
-export interface FetchAdsOptions {
-  campaignId?: string;
-  adGroupId?: string;
-  status?: AdStatus[];
-  includeMetrics?: boolean;
-}
-
-export interface FetchKeywordsOptions {
-  campaignId?: string;
-  adGroupId?: string;
-  status?: KeywordStatus[];
-  includeMetrics?: boolean;
-  dateRange?: string;
-}
-
 /**
- * Fetch all campaigns for an account with optional metrics
+ * Fetch campaigns for an account with optional metrics
  */
 export async function fetchCampaigns(
   accessToken: string,
@@ -694,7 +586,6 @@ export async function fetchCampaigns(
   const cleanCustomerId = normalizeCid(customerId);
   const { dateRangeStart, dateRangeEnd, status, includeMetrics = true } = options;
 
-  // First, fetch ALL campaigns without date filter (so suspended/inactive campaigns still appear)
   let campaignsQuery = `
     SELECT
       campaign.id,
@@ -713,7 +604,6 @@ export async function fetchCampaigns(
     FROM campaign
   `;
 
-  // Only filter by status, NOT by date range (date range only affects metrics)
   if (status && status.length > 0) {
     campaignsQuery += ` WHERE campaign.status IN (${status.map(s => `'${s}'`).join(', ')})`;
   }
@@ -722,8 +612,7 @@ export async function fetchCampaigns(
 
   const campaignResults = await googleAdsQuery(accessToken, cleanCustomerId, campaignsQuery, developerToken);
 
-  // Then, separately fetch metrics for the date range (if requested)
-  // This allows us to show campaigns even if they have no metrics in the date range
+  // Fetch metrics separately if requested with date range
   const metricsMap = new Map<string, {
     impressions: number;
     clicks: number;
@@ -751,7 +640,6 @@ export async function fetchCampaigns(
 
     const metricsResults = await googleAdsQuery(accessToken, cleanCustomerId, metricsQuery, developerToken);
 
-    // Aggregate metrics by campaign (date segments return multiple rows per campaign)
     for (const row of metricsResults) {
       const campaignId = row.campaign?.id?.toString() || '';
       const metrics = row.metrics || {};
@@ -783,37 +671,25 @@ export async function fetchCampaigns(
     }
   }
 
-  // Use campaignResults as the base (all campaigns)
-  const results = campaignResults;
-
-  // Also fetch ad group and ad counts per campaign
-  const countsQuery = `
-    SELECT
-      campaign.id,
-      ad_group.id
+  // Fetch ad group and ad counts per campaign
+  const adGroupResults = await googleAdsQuery(accessToken, cleanCustomerId, `
+    SELECT campaign.id, ad_group.id
     FROM ad_group
     WHERE ad_group.status != 'REMOVED'
-  `;
-  const adGroupResults = await googleAdsQuery(accessToken, cleanCustomerId, countsQuery, developerToken);
+  `, developerToken);
 
-  const adCountsQuery = `
-    SELECT
-      campaign.id,
-      ad_group_ad.ad.id
+  const adResults = await googleAdsQuery(accessToken, cleanCustomerId, `
+    SELECT campaign.id, ad_group_ad.ad.id
     FROM ad_group_ad
     WHERE ad_group_ad.status != 'REMOVED'
-  `;
-  const adResults = await googleAdsQuery(accessToken, cleanCustomerId, adCountsQuery, developerToken);
+  `, developerToken);
 
-  const keywordCountsQuery = `
-    SELECT
-      campaign.id,
-      ad_group_criterion.criterion_id
+  const keywordResults = await googleAdsQuery(accessToken, cleanCustomerId, `
+    SELECT campaign.id, ad_group_criterion.criterion_id
     FROM ad_group_criterion
     WHERE ad_group_criterion.type = 'KEYWORD'
       AND ad_group_criterion.status != 'REMOVED'
-  `;
-  const keywordResults = await googleAdsQuery(accessToken, cleanCustomerId, keywordCountsQuery, developerToken);
+  `, developerToken);
 
   // Build counts maps
   const adGroupCounts = new Map<string, number>();
@@ -822,32 +698,24 @@ export async function fetchCampaigns(
 
   for (const row of adGroupResults) {
     const campaignId = row.campaign?.id;
-    if (campaignId) {
-      adGroupCounts.set(campaignId, (adGroupCounts.get(campaignId) || 0) + 1);
-    }
+    if (campaignId) adGroupCounts.set(campaignId, (adGroupCounts.get(campaignId) || 0) + 1);
   }
 
   for (const row of adResults) {
     const campaignId = row.campaign?.id;
-    if (campaignId) {
-      adCounts.set(campaignId, (adCounts.get(campaignId) || 0) + 1);
-    }
+    if (campaignId) adCounts.set(campaignId, (adCounts.get(campaignId) || 0) + 1);
   }
 
   for (const row of keywordResults) {
     const campaignId = row.campaign?.id;
-    if (campaignId) {
-      keywordCounts.set(campaignId, (keywordCounts.get(campaignId) || 0) + 1);
-    }
+    if (campaignId) keywordCounts.set(campaignId, (keywordCounts.get(campaignId) || 0) + 1);
   }
 
-  // Map results to Campaign type, using metricsMap for date-range metrics
-  return results.map((row): Campaign => {
+  return campaignResults.map((row): Campaign => {
     const campaign = row.campaign || {};
     const budget = row.campaignBudget || {};
     const campaignId = campaign.id?.toString() || '';
 
-    // Get metrics from metricsMap (aggregated by date range) or default to 0
     const metrics = metricsMap.get(campaignId) || {
       impressions: 0,
       clicks: 0,
@@ -930,9 +798,7 @@ export async function fetchAdGroups(
     `;
   }
 
-  query += `
-    FROM ad_group
-  `;
+  query += ` FROM ad_group`;
 
   const whereClauses: string[] = [];
 
@@ -956,7 +822,6 @@ export async function fetchAdGroups(
     const adGroup = row.adGroup || {};
     const metrics = row.metrics || {};
 
-    // Extract campaign ID from resource name
     const campaignMatch = adGroup.campaign?.match(/campaigns\/(\d+)/);
     const extractedCampaignId = campaignMatch ? campaignMatch[1] : '';
 
@@ -976,7 +841,7 @@ export async function fetchAdGroups(
       conversionValue: parseFloat(metrics.conversionsValue || '0'),
       ctr: parseFloat(metrics.ctr || '0'),
       averageCpc: parseInt(metrics.averageCpc || '0', 10),
-      adsCount: 0, // Will be populated separately if needed
+      adsCount: 0,
       keywordsCount: 0,
       lastSyncAt: new Date(),
     };
@@ -1026,9 +891,7 @@ export async function fetchAds(
     `;
   }
 
-  query += `
-    FROM ad_group_ad
-  `;
+  query += ` FROM ad_group_ad`;
 
   const whereClauses: string[] = [];
 
@@ -1056,11 +919,9 @@ export async function fetchAds(
     const metrics = row.metrics || {};
     const responsiveSearchAd = ad.responsiveSearchAd || {};
 
-    // Extract ad group and campaign IDs
     const adGroupMatch = adGroupAd.adGroup?.match(/adGroups\/(\d+)/);
     const extractedAdGroupId = adGroupMatch ? adGroupMatch[1] : '';
 
-    // Extract headlines and descriptions from responsive search ads
     const headlines = (responsiveSearchAd.headlines || []).map((h: any) => h.text || '');
     const descriptions = (responsiveSearchAd.descriptions || []).map((d: any) => d.text || '');
 
@@ -1091,7 +952,6 @@ export async function fetchAds(
 
 /**
  * Fetch keywords for an account, campaign, or ad group
- * Uses keyword_view resource which supports metrics (unlike ad_group_criterion alone)
  */
 export async function fetchKeywords(
   accessToken: string,
@@ -1106,7 +966,6 @@ export async function fetchKeywords(
   const cleanCustomerId = normalizeCid(customerId);
   const { campaignId, adGroupId, status, includeMetrics = true, dateRange = 'LAST_30_DAYS' } = options;
 
-  // Build WHERE clause filters
   const buildWhereClause = (includesDateRange: boolean): string => {
     const whereClauses: string[] = [];
 
@@ -1126,18 +985,12 @@ export async function fetchKeywords(
       whereClauses.push(`ad_group_criterion.status IN (${status.map(s => `'${s}'`).join(', ')})`);
     }
 
-    // Only include keyword type criteria
     whereClauses.push(`ad_group_criterion.type = 'KEYWORD'`);
 
     return whereClauses.length > 0 ? ` WHERE ${whereClauses.join(' AND ')}` : '';
   };
 
-  // IMPORTANT: Google Ads API requires separate queries for:
-  // 1. Metrics (clicks, impressions, cost, etc.) - requires keyword_view + date range
-  // 2. Quality Info (quality_score, predicted_ctr, etc.) - cannot be combined with metrics
-  // We run both queries and merge results by criterion ID
-
-  // Query 1: Fetch metrics from keyword_view (requires date range)
+  // Metrics query (requires date range)
   const metricsQuery = `
     SELECT
       ad_group_criterion.criterion_id,
@@ -1158,7 +1011,7 @@ export async function fetchKeywords(
     ${buildWhereClause(true)}
   `;
 
-  // Query 2: Fetch quality info from ad_group_criterion (no date range needed)
+  // Quality info query (no date range)
   const qualityQuery = `
     SELECT
       ad_group_criterion.criterion_id,
@@ -1170,7 +1023,6 @@ export async function fetchKeywords(
     ${buildWhereClause(false)}
   `;
 
-  // Run both queries in parallel
   const [metricsResults, qualityResults] = await Promise.all([
     includeMetrics
       ? googleAdsQuery(accessToken, cleanCustomerId, metricsQuery, developerToken)
@@ -1178,7 +1030,6 @@ export async function fetchKeywords(
     googleAdsQuery(accessToken, cleanCustomerId, qualityQuery, developerToken)
   ]);
 
-  // Build a map of criterion ID -> quality info
   const qualityMap = new Map<string, any>();
   for (const row of qualityResults) {
     const criterionId = row.adGroupCriterion?.criterionId?.toString();
@@ -1187,7 +1038,6 @@ export async function fetchKeywords(
     }
   }
 
-  // If we don't have metrics, use qualityResults as the base
   const baseResults = includeMetrics ? metricsResults : qualityResults;
 
   return baseResults.map((row): Keyword => {
@@ -1196,11 +1046,9 @@ export async function fetchKeywords(
     const metrics = row.metrics || {};
     const campaign = row.campaign || {};
 
-    // Get quality info from the quality map
     const criterionId = criterion.criterionId?.toString() || '';
     const qualityInfo = qualityMap.get(criterionId) || {};
 
-    // Extract ad group ID from resource name
     const adGroupMatch = criterion.adGroup?.match(/adGroups\/(\d+)/);
     const extractedAdGroupId = adGroupMatch ? adGroupMatch[1] : '';
 
@@ -1229,131 +1077,7 @@ export async function fetchKeywords(
 }
 
 /**
- * Fetch account performance summary for a date range
- */
-export async function fetchAccountPerformance(
-  accessToken: string,
-  customerId: string,
-  startDate: string,
-  endDate: string
-): Promise<PerformanceMetrics & { dailyBreakdown: Array<PerformanceMetrics & { date: string }> }> {
-  const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
-  if (!developerToken) {
-    throw new Error('GOOGLE_ADS_DEVELOPER_TOKEN not configured');
-  }
-
-  const cleanCustomerId = normalizeCid(customerId);
-
-  // Fetch daily metrics
-  const query = `
-    SELECT
-      segments.date,
-      metrics.impressions,
-      metrics.clicks,
-      metrics.cost_micros,
-      metrics.conversions,
-      metrics.conversions_value,
-      metrics.ctr,
-      metrics.average_cpc
-    FROM customer
-    WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
-    ORDER BY segments.date
-  `;
-
-  const results = await googleAdsQuery(accessToken, cleanCustomerId, query, developerToken);
-
-  // Aggregate totals and build daily breakdown
-  let totalImpressions = 0;
-  let totalClicks = 0;
-  let totalCost = 0;
-  let totalConversions = 0;
-  let totalConversionValue = 0;
-
-  const dailyBreakdown = results.map((row) => {
-    const metrics = row.metrics || {};
-    const segments = row.segments || {};
-
-    const impressions = parseInt(metrics.impressions || '0', 10);
-    const clicks = parseInt(metrics.clicks || '0', 10);
-    const cost = parseInt(metrics.costMicros || '0', 10);
-    const conversions = parseFloat(metrics.conversions || '0');
-    const conversionValue = parseFloat(metrics.conversionsValue || '0');
-
-    totalImpressions += impressions;
-    totalClicks += clicks;
-    totalCost += cost;
-    totalConversions += conversions;
-    totalConversionValue += conversionValue;
-
-    return {
-      date: segments.date,
-      impressions,
-      clicks,
-      cost,
-      conversions,
-      conversionValue,
-      ctr: parseFloat(metrics.ctr || '0'),
-      averageCpc: parseInt(metrics.averageCpc || '0', 10),
-    };
-  });
-
-  // Calculate aggregate metrics
-  const avgCtr = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
-  const avgCpc = totalClicks > 0 ? totalCost / totalClicks : 0;
-  const costPerConversion = totalConversions > 0 ? totalCost / totalConversions : undefined;
-  const roas = totalCost > 0 ? (totalConversionValue * 1000000) / totalCost : undefined;
-
-  return {
-    impressions: totalImpressions,
-    clicks: totalClicks,
-    cost: totalCost,
-    conversions: totalConversions,
-    conversionValue: totalConversionValue,
-    ctr: avgCtr,
-    averageCpc: avgCpc,
-    costPerConversion,
-    roas,
-    dailyBreakdown,
-  };
-}
-
-// ============================================================================
-// SEARCH TERMS & RECOMMENDATIONS (KADABRA INTELLIGENCE)
-// ============================================================================
-
-export interface SearchTerm {
-  searchTerm: string;
-  campaignId: string;
-  campaignName: string;
-  adGroupId: string;
-  adGroupName: string;
-  keywordText?: string;
-  keywordMatchType?: KeywordMatchType;
-  impressions: number;
-  clicks: number;
-  cost: number;
-  conversions: number;
-  ctr: number;
-  averageCpc: number;
-  conversionRate: number;
-  costPerConversion?: number;
-}
-
-export interface FetchSearchTermsOptions {
-  campaignId?: string;
-  adGroupId?: string;
-  startDate?: string; // YYYY-MM-DD
-  endDate?: string;   // YYYY-MM-DD
-  minImpressions?: number;
-  minCost?: number;
-  sortBy?: 'cost' | 'impressions' | 'clicks' | 'conversions';
-  sortOrder?: 'asc' | 'desc';
-  limit?: number;
-}
-
-/**
- * Fetch search terms report - shows actual queries that triggered ads
- * This is incredibly valuable for finding wasted spend and new opportunities
+ * Fetch search terms report
  */
 export async function fetchSearchTerms(
   accessToken: string,
@@ -1378,7 +1102,6 @@ export async function fetchSearchTerms(
     limit = 500,
   } = options;
 
-  // Default to last 30 days if no date range provided
   const today = new Date();
   const thirtyDaysAgo = new Date(today);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -1414,7 +1137,6 @@ export async function fetchSearchTerms(
     query += ` AND ad_group.id = ${adGroupId}`;
   }
 
-  // Map sort fields to GAQL column names
   const sortFieldMap: Record<string, string> = {
     cost: 'metrics.cost_micros',
     impressions: 'metrics.impressions',
@@ -1461,15 +1183,14 @@ export async function fetchSearchTerms(
       };
     })
     .filter((term) => {
-      // Apply post-query filters for min thresholds
       if (minImpressions > 0 && term.impressions < minImpressions) return false;
-      if (minCost > 0 && term.cost < minCost * 1000000) return false; // minCost is in dollars, cost is micros
+      if (minCost > 0 && term.cost < minCost * 1000000) return false;
       return true;
     });
 }
 
 /**
- * Analyze search terms to find wasted spend (high cost, zero conversions)
+ * Analyze search terms to find wasted spend
  */
 export async function analyzeWastedSpend(
   accessToken: string,
@@ -1487,14 +1208,11 @@ export async function analyzeWastedSpend(
     limit: 1000,
   });
 
-  // Filter to search terms with spend but no conversions
   const wastedTerms = searchTerms.filter(
     (term) => term.cost > 0 && term.conversions === 0
   );
 
   const totalWastedSpend = wastedTerms.reduce((sum, term) => sum + term.cost, 0);
-
-  // Top 10 wasters
   const topWasters = wastedTerms.slice(0, 10);
 
   return {
@@ -1504,80 +1222,8 @@ export async function analyzeWastedSpend(
   };
 }
 
-// ============================================================================
-// GOOGLE ADS RECOMMENDATIONS
-// ============================================================================
-
-export type RecommendationType =
-  | 'CAMPAIGN_BUDGET'
-  | 'KEYWORD'
-  | 'TEXT_AD'
-  | 'TARGET_CPA_OPT_IN'
-  | 'MAXIMIZE_CONVERSIONS_OPT_IN'
-  | 'MAXIMIZE_CLICKS_OPT_IN'
-  | 'ENHANCED_CPC_OPT_IN'
-  | 'SEARCH_PARTNERS_OPT_IN'
-  | 'SITELINK_EXTENSION'
-  | 'CALL_EXTENSION'
-  | 'CALLOUT_EXTENSION'
-  | 'KEYWORD_MATCH_TYPE'
-  | 'MOVE_UNUSED_BUDGET'
-  | 'FORECASTING_CAMPAIGN_BUDGET'
-  | 'RESPONSIVE_SEARCH_AD'
-  | 'MARGINAL_ROI_CAMPAIGN_BUDGET'
-  | 'UPGRADE_SMART_SHOPPING_CAMPAIGN_TO_PERFORMANCE_MAX'
-  | 'RESPONSIVE_SEARCH_AD_ASSET'
-  | 'UPGRADE_LOCAL_CAMPAIGN_TO_PERFORMANCE_MAX'
-  | 'UNKNOWN';
-
-export interface Recommendation {
-  id: string;
-  resourceName: string;
-  type: RecommendationType;
-  typeDisplay: string;
-  campaignId?: string;
-  campaignName?: string;
-  adGroupId?: string;
-  impact?: {
-    baseMetrics?: {
-      impressions: number;
-      clicks: number;
-      cost: number;
-      conversions: number;
-    };
-    potentialMetrics?: {
-      impressions: number;
-      clicks: number;
-      cost: number;
-      conversions: number;
-    };
-  };
-  dismissed: boolean;
-  // Specific recommendation details
-  budgetRecommendation?: {
-    currentBudgetMicros: number;
-    recommendedBudgetMicros: number;
-  };
-  keywordRecommendation?: {
-    keyword: string;
-    matchType: KeywordMatchType;
-    recommendedCpcBidMicros?: number;
-  };
-  textAdRecommendation?: {
-    headlines: string[];
-    descriptions: string[];
-  };
-}
-
-export interface FetchRecommendationsOptions {
-  campaignId?: string;
-  types?: RecommendationType[];
-  includeDismissed?: boolean;
-}
-
 /**
- * Fetch Google's native recommendations for the account
- * These are AI-generated suggestions from Google to improve performance
+ * Fetch Google's native recommendations
  */
 export async function fetchRecommendations(
   accessToken: string,
@@ -1629,15 +1275,12 @@ export async function fetchRecommendations(
   return results.map((row): Recommendation => {
     const rec = row.recommendation || {};
 
-    // Extract campaign ID from resource name
     const campaignMatch = rec.campaign?.match(/campaigns\/(\d+)/);
     const extractedCampaignId = campaignMatch ? campaignMatch[1] : undefined;
 
-    // Extract ad group ID from resource name
     const adGroupMatch = rec.adGroup?.match(/adGroups\/(\d+)/);
     const extractedAdGroupId = adGroupMatch ? adGroupMatch[1] : undefined;
 
-    // Parse impact metrics
     let impact: Recommendation['impact'];
     if (rec.impact) {
       const baseMetrics = rec.impact.baseMetrics || {};
@@ -1658,7 +1301,6 @@ export async function fetchRecommendations(
       };
     }
 
-    // Parse specific recommendation types
     let budgetRecommendation: Recommendation['budgetRecommendation'];
     if (rec.campaignBudgetRecommendation) {
       const br = rec.campaignBudgetRecommendation;
@@ -1689,7 +1331,6 @@ export async function fetchRecommendations(
       };
     }
 
-    // Extract ID from resource name
     const idMatch = rec.resourceName?.match(/recommendations\/(\d+)/);
     const id = idMatch ? idMatch[1] : '';
 
@@ -1710,7 +1351,7 @@ export async function fetchRecommendations(
 }
 
 /**
- * Get recommendation summary for dashboard display
+ * Get recommendation summary for dashboard
  */
 export async function getRecommendationSummary(
   accessToken: string,
@@ -1729,13 +1370,11 @@ export async function getRecommendationSummary(
     includeDismissed: false,
   });
 
-  // Count by type
   const byType: Record<string, number> = {};
   for (const rec of recommendations) {
     byType[rec.typeDisplay] = (byType[rec.typeDisplay] || 0) + 1;
   }
 
-  // Calculate potential impact
   let additionalConversions = 0;
   let additionalClicks = 0;
   let costChange = 0;
@@ -1748,7 +1387,6 @@ export async function getRecommendationSummary(
     }
   }
 
-  // Get high priority recommendations (budget and conversion-related)
   const highPriorityTypes: RecommendationType[] = [
     'CAMPAIGN_BUDGET',
     'FORECASTING_CAMPAIGN_BUDGET',
@@ -1771,56 +1409,6 @@ export async function getRecommendationSummary(
     },
     highPriority,
   };
-}
-
-function mapRecommendationType(type: string): RecommendationType {
-  const typeMap: Record<string, RecommendationType> = {
-    'CAMPAIGN_BUDGET': 'CAMPAIGN_BUDGET',
-    'KEYWORD': 'KEYWORD',
-    'TEXT_AD': 'TEXT_AD',
-    'TARGET_CPA_OPT_IN': 'TARGET_CPA_OPT_IN',
-    'MAXIMIZE_CONVERSIONS_OPT_IN': 'MAXIMIZE_CONVERSIONS_OPT_IN',
-    'MAXIMIZE_CLICKS_OPT_IN': 'MAXIMIZE_CLICKS_OPT_IN',
-    'ENHANCED_CPC_OPT_IN': 'ENHANCED_CPC_OPT_IN',
-    'SEARCH_PARTNERS_OPT_IN': 'SEARCH_PARTNERS_OPT_IN',
-    'SITELINK_EXTENSION': 'SITELINK_EXTENSION',
-    'CALL_EXTENSION': 'CALL_EXTENSION',
-    'CALLOUT_EXTENSION': 'CALLOUT_EXTENSION',
-    'KEYWORD_MATCH_TYPE': 'KEYWORD_MATCH_TYPE',
-    'MOVE_UNUSED_BUDGET': 'MOVE_UNUSED_BUDGET',
-    'FORECASTING_CAMPAIGN_BUDGET': 'FORECASTING_CAMPAIGN_BUDGET',
-    'RESPONSIVE_SEARCH_AD': 'RESPONSIVE_SEARCH_AD',
-    'MARGINAL_ROI_CAMPAIGN_BUDGET': 'MARGINAL_ROI_CAMPAIGN_BUDGET',
-    'UPGRADE_SMART_SHOPPING_CAMPAIGN_TO_PERFORMANCE_MAX': 'UPGRADE_SMART_SHOPPING_CAMPAIGN_TO_PERFORMANCE_MAX',
-    'RESPONSIVE_SEARCH_AD_ASSET': 'RESPONSIVE_SEARCH_AD_ASSET',
-    'UPGRADE_LOCAL_CAMPAIGN_TO_PERFORMANCE_MAX': 'UPGRADE_LOCAL_CAMPAIGN_TO_PERFORMANCE_MAX',
-  };
-  return typeMap[type] || 'UNKNOWN';
-}
-
-function getRecommendationTypeDisplay(type: string): string {
-  const displayMap: Record<string, string> = {
-    'CAMPAIGN_BUDGET': 'Increase Budget',
-    'KEYWORD': 'Add Keywords',
-    'TEXT_AD': 'Improve Ads',
-    'TARGET_CPA_OPT_IN': 'Use Target CPA',
-    'MAXIMIZE_CONVERSIONS_OPT_IN': 'Maximize Conversions',
-    'MAXIMIZE_CLICKS_OPT_IN': 'Maximize Clicks',
-    'ENHANCED_CPC_OPT_IN': 'Enhanced CPC',
-    'SEARCH_PARTNERS_OPT_IN': 'Search Partners',
-    'SITELINK_EXTENSION': 'Add Sitelinks',
-    'CALL_EXTENSION': 'Add Call Extension',
-    'CALLOUT_EXTENSION': 'Add Callouts',
-    'KEYWORD_MATCH_TYPE': 'Keyword Match Type',
-    'MOVE_UNUSED_BUDGET': 'Move Unused Budget',
-    'FORECASTING_CAMPAIGN_BUDGET': 'Budget Forecast',
-    'RESPONSIVE_SEARCH_AD': 'Add Responsive Ads',
-    'MARGINAL_ROI_CAMPAIGN_BUDGET': 'ROI Budget',
-    'UPGRADE_SMART_SHOPPING_CAMPAIGN_TO_PERFORMANCE_MAX': 'Upgrade to PMax',
-    'RESPONSIVE_SEARCH_AD_ASSET': 'Add Ad Assets',
-    'UPGRADE_LOCAL_CAMPAIGN_TO_PERFORMANCE_MAX': 'Upgrade Local to PMax',
-  };
-  return displayMap[type] || type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
 
 // ============================================================================
@@ -1932,5 +1520,52 @@ function mapQualityRating(rating: string): 'BELOW_AVERAGE' | 'AVERAGE' | 'ABOVE_
   }
 }
 
-// Export the internal query function for advanced use cases
-export { googleAdsQuery };
+function mapRecommendationType(type: string): RecommendationType {
+  const typeMap: Record<string, RecommendationType> = {
+    'CAMPAIGN_BUDGET': 'CAMPAIGN_BUDGET',
+    'KEYWORD': 'KEYWORD',
+    'TEXT_AD': 'TEXT_AD',
+    'TARGET_CPA_OPT_IN': 'TARGET_CPA_OPT_IN',
+    'MAXIMIZE_CONVERSIONS_OPT_IN': 'MAXIMIZE_CONVERSIONS_OPT_IN',
+    'MAXIMIZE_CLICKS_OPT_IN': 'MAXIMIZE_CLICKS_OPT_IN',
+    'ENHANCED_CPC_OPT_IN': 'ENHANCED_CPC_OPT_IN',
+    'SEARCH_PARTNERS_OPT_IN': 'SEARCH_PARTNERS_OPT_IN',
+    'SITELINK_EXTENSION': 'SITELINK_EXTENSION',
+    'CALL_EXTENSION': 'CALL_EXTENSION',
+    'CALLOUT_EXTENSION': 'CALLOUT_EXTENSION',
+    'KEYWORD_MATCH_TYPE': 'KEYWORD_MATCH_TYPE',
+    'MOVE_UNUSED_BUDGET': 'MOVE_UNUSED_BUDGET',
+    'FORECASTING_CAMPAIGN_BUDGET': 'FORECASTING_CAMPAIGN_BUDGET',
+    'RESPONSIVE_SEARCH_AD': 'RESPONSIVE_SEARCH_AD',
+    'MARGINAL_ROI_CAMPAIGN_BUDGET': 'MARGINAL_ROI_CAMPAIGN_BUDGET',
+    'UPGRADE_SMART_SHOPPING_CAMPAIGN_TO_PERFORMANCE_MAX': 'UPGRADE_SMART_SHOPPING_CAMPAIGN_TO_PERFORMANCE_MAX',
+    'RESPONSIVE_SEARCH_AD_ASSET': 'RESPONSIVE_SEARCH_AD_ASSET',
+    'UPGRADE_LOCAL_CAMPAIGN_TO_PERFORMANCE_MAX': 'UPGRADE_LOCAL_CAMPAIGN_TO_PERFORMANCE_MAX',
+  };
+  return typeMap[type] || 'UNKNOWN';
+}
+
+function getRecommendationTypeDisplay(type: string): string {
+  const displayMap: Record<string, string> = {
+    'CAMPAIGN_BUDGET': 'Increase Budget',
+    'KEYWORD': 'Add Keywords',
+    'TEXT_AD': 'Improve Ads',
+    'TARGET_CPA_OPT_IN': 'Use Target CPA',
+    'MAXIMIZE_CONVERSIONS_OPT_IN': 'Maximize Conversions',
+    'MAXIMIZE_CLICKS_OPT_IN': 'Maximize Clicks',
+    'ENHANCED_CPC_OPT_IN': 'Enhanced CPC',
+    'SEARCH_PARTNERS_OPT_IN': 'Search Partners',
+    'SITELINK_EXTENSION': 'Add Sitelinks',
+    'CALL_EXTENSION': 'Add Call Extension',
+    'CALLOUT_EXTENSION': 'Add Callouts',
+    'KEYWORD_MATCH_TYPE': 'Keyword Match Type',
+    'MOVE_UNUSED_BUDGET': 'Move Unused Budget',
+    'FORECASTING_CAMPAIGN_BUDGET': 'Budget Forecast',
+    'RESPONSIVE_SEARCH_AD': 'Add Responsive Ads',
+    'MARGINAL_ROI_CAMPAIGN_BUDGET': 'ROI Budget',
+    'UPGRADE_SMART_SHOPPING_CAMPAIGN_TO_PERFORMANCE_MAX': 'Upgrade to PMax',
+    'RESPONSIVE_SEARCH_AD_ASSET': 'Add Ad Assets',
+    'UPGRADE_LOCAL_CAMPAIGN_TO_PERFORMANCE_MAX': 'Upgrade Local to PMax',
+  };
+  return displayMap[type] || type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}

@@ -556,6 +556,27 @@ model GoogleAdsConnection {
 
   // Accounts using this connection
   adAccounts        AdAccount[]
+
+  // Activity logs for debugging
+  activityLogs      OAuthActivityLog[]
+}
+
+// OAuth activity logging for debugging token refresh issues
+model OAuthActivityLog {
+  id            String   @id @default(cuid())
+  connectionId  String
+  action        String   // "token_refresh", "token_refresh_failed", "sync_started", "sync_completed", "sync_failed"
+  details       String?  @db.Text  // JSON with error details, metrics, etc.
+  errorCode     String?  // "invalid_grant", "transient", "unauthorized_client", etc.
+  isRecoverable Boolean?
+  sourceApp     String   // "abra" | "kadabra"
+  createdAt     DateTime @default(now())
+
+  connection    GoogleAdsConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId])
+  @@index([action])
+  @@index([createdAt])
 }
 
 // ============================================================================

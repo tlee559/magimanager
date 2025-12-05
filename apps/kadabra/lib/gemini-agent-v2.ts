@@ -9,11 +9,12 @@ import {
   fetchRecommendations,
   getRecommendationSummary,
   refreshAccessToken,
-  normalizeCid,
   fetchAds,
   fetchCampaigns,
   fetchAdGroups,
-} from "./google-ads-api";
+  decryptToken,
+  encryptToken,
+} from "@magimanager/core";
 import { scoreAdsInGroup, getWinners, sortByScore, type ScoredAd } from "./campaign-manager/utils/ad-scoring";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
@@ -1717,20 +1718,32 @@ async function findAccountWithOAuth(identifier: string): Promise<{
     };
   }
 
+  // Decrypt the access token
+  let accessToken: string;
+  let refreshToken: string;
+  try {
+    accessToken = decryptToken(account.connection.accessToken);
+    refreshToken = decryptToken(account.connection.refreshToken);
+  } catch (error) {
+    return {
+      found: false,
+      message: `Token decryption failed for "${account.identityProfile?.fullName || identifier}". Please reconnect via Settings.`,
+    };
+  }
+
   // Check if token needs refresh
-  let accessToken = account.connection.accessToken;
   const expiresAt = new Date(account.connection.tokenExpiresAt);
 
   if (expiresAt <= new Date()) {
     try {
-      const refreshed = await refreshAccessToken(account.connection.refreshToken);
+      const refreshed = await refreshAccessToken(refreshToken);
       accessToken = refreshed.accessToken;
 
-      // Update the stored token
+      // Update the stored token (encrypted)
       await prisma.googleAdsConnection.update({
         where: { id: account.connection.id },
         data: {
-          accessToken: refreshed.accessToken,
+          accessToken: encryptToken(refreshed.accessToken),
           tokenExpiresAt: refreshed.expiresAt,
         },
       });
