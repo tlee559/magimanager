@@ -2933,8 +2933,9 @@ export function AdAccountsView({ onDataChange, onNavigate }: AdAccountsViewProps
       if (billingFilter !== "all" && account.billingStatus !== billingFilter) return false;
       if (originFilter !== "all" && account.origin !== originFilter) return false;
       if (lifecycleFilter !== "all") {
+        if (lifecycleFilter === "archived" && account.handoffStatus !== "archived") return false;
         if (lifecycleFilter === "handed-off" && account.handoffStatus !== "handed-off") return false;
-        if (lifecycleFilter !== "handed-off" && (account.status !== lifecycleFilter || account.handoffStatus === "handed-off")) return false;
+        if (lifecycleFilter !== "handed-off" && lifecycleFilter !== "archived" && (account.status !== lifecycleFilter || account.handoffStatus === "handed-off" || account.handoffStatus === "archived")) return false;
       }
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
@@ -3133,28 +3134,32 @@ export function AdAccountsView({ onDataChange, onNavigate }: AdAccountsViewProps
   }
 
   // Summary stats - redesigned for operational visibility
+  // IMPORTANT: Stats should NEVER include archived accounts
   const stats = useMemo(() => {
+    // Filter out archived accounts from all stats calculations
+    const activeAccounts = accounts.filter(a => a.handoffStatus !== "archived");
+
     // Pipeline stats based on account status field (matches what's displayed in cards)
-    const warmingUp = accounts.filter(a =>
+    const warmingUp = activeAccounts.filter(a =>
       a.status === "warming-up" &&
       a.handoffStatus !== "handed-off"
     );
-    const readyToHandoff = accounts.filter(a =>
+    const readyToHandoff = activeAccounts.filter(a =>
       a.status === "ready" &&
       a.handoffStatus !== "handed-off"
     );
-    const handedOff = accounts.filter(a => a.handoffStatus === "handed-off");
+    const handedOff = activeAccounts.filter(a => a.handoffStatus === "handed-off");
 
-    // Problem accounts
-    const suspended = accounts.filter(a => a.accountHealth === "suspended" || a.accountHealth === "banned");
-    const billingIssues = accounts.filter(a => a.billingStatus === "pending" || a.billingStatus === "failed");
+    // Problem accounts (only from non-archived)
+    const suspended = activeAccounts.filter(a => a.accountHealth === "suspended" || a.accountHealth === "banned");
+    const billingIssues = activeAccounts.filter(a => a.billingStatus === "pending" || a.billingStatus === "failed");
 
-    // Orphan accounts (OAuth connected but no identity)
-    const orphans = accounts.filter(a => a.identityProfileId === null && a.connectionType === "oauth");
+    // Orphan accounts (OAuth connected but no identity) - only from non-archived
+    const orphans = activeAccounts.filter(a => a.identityProfileId === null && a.connectionType === "oauth");
 
-    // Financial
-    const totalSpend = accounts.reduce((sum, a) => sum + (a.currentSpendTotal || 0), 0);
-    const activeSpend = accounts
+    // Financial - only from non-archived accounts
+    const totalSpend = activeAccounts.reduce((sum, a) => sum + (a.currentSpendTotal || 0), 0);
+    const activeSpend = activeAccounts
       .filter(a => a.accountHealth === "active")
       .reduce((sum, a) => sum + (a.currentSpendTotal || 0), 0);
 
@@ -3162,6 +3167,9 @@ export function AdAccountsView({ onDataChange, onNavigate }: AdAccountsViewProps
     const avgWarmupProgress = warmingUp.length > 0
       ? warmingUp.reduce((sum, a) => sum + (a.warmupTargetSpend > 0 ? (a.currentSpendTotal / a.warmupTargetSpend) * 100 : 0), 0) / warmingUp.length
       : 0;
+
+    // Count archived accounts separately (for reference only)
+    const archivedCount = accounts.filter(a => a.handoffStatus === "archived").length;
 
     return {
       // Pipeline
@@ -3179,8 +3187,11 @@ export function AdAccountsView({ onDataChange, onNavigate }: AdAccountsViewProps
       totalSpend,
       activeSpend,
 
-      // Total for reference
-      total: accounts.length,
+      // Archived (separate tracking)
+      archived: archivedCount,
+
+      // Total for reference (non-archived only)
+      total: activeAccounts.length,
     };
   }, [accounts]);
 
@@ -3368,7 +3379,14 @@ export function AdAccountsView({ onDataChange, onNavigate }: AdAccountsViewProps
         </select>
         <select
           value={lifecycleFilter}
-          onChange={(e) => setLifecycleFilter(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            setLifecycleFilter(value);
+            // Auto-enable showArchived when filtering by archived
+            if (value === "archived") {
+              setShowArchived(true);
+            }
+          }}
           className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm"
         >
           <option value="all">All Lifecycle</option>
@@ -3376,6 +3394,7 @@ export function AdAccountsView({ onDataChange, onNavigate }: AdAccountsViewProps
           <option value="warming-up">Warming Up</option>
           <option value="ready">Ready</option>
           <option value="handed-off">Handed Off</option>
+          <option value="archived">Archived</option>
         </select>
         <select
           value={originFilter}

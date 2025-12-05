@@ -329,6 +329,7 @@ class AccountRepository {
   ): Promise<AccountWithRelations> {
     const account = await this.update(id, {
       mediaBuyerId,
+      status: "handed-off", // Update lifecycle status to handed-off
       handoffStatus: "handed-off",
       handoffDate: new Date(),
       handoffNotes: notes || null,
