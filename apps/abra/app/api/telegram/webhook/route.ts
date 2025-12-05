@@ -249,14 +249,59 @@ function getFastResponse(text: string, userName: string): string | null {
 I'm powered by AI and remember our conversation! 🤖`;
   }
 
-  // Greetings
-  if (/^(hi|hello|hey|yo|sup|what'?s up|howdy)[\s!?.]*$/i.test(lower)) {
-    return `Hey ${userName}! 👋 How can I help you today? Try /help to see what I can do!`;
+  // Greetings (flexible - can include extra words)
+  if (/^(hi+|hello+|hey+|yo+|sup|what'?s up|howdy|hola|wassup)(\s|!|\?|,|\.)*(\w+)?(\s|!|\?|\.)*$/i.test(lower)) {
+    const greetings = [
+      `Hey ${userName}! 👋 What can I help with?`,
+      `What's up ${userName}! 🤙`,
+      `Hey! Need something?`,
+      `Yo ${userName}! What do you need?`,
+    ];
+    return greetings[Math.floor(Math.random() * greetings.length)];
   }
 
-  // Thanks
-  if (/^(thanks?|thank you|thx|ty|appreciate it)[\s!?.]*$/i.test(lower)) {
-    return `You're welcome! Let me know if you need anything else 👍`;
+  // Thanks (with optional extra words like "bro", "man", "dude", etc.)
+  if (/\b(thanks?|thank you|thx|ty|appreciate it)\b/i.test(lower)) {
+    const responses = [
+      `You got it! 👍`,
+      `Anytime! Let me know if you need anything else`,
+      `No problem! 🤙`,
+      `You're welcome! Hit me up if you need more`,
+      `Happy to help! 👊`,
+    ];
+    return responses[Math.floor(Math.random() * responses.length)];
+  }
+
+  // Acknowledgments (ok, cool, nice, got it, etc.)
+  if (/^(ok+|okay+|k+|cool+|nice+|got it|sounds good|perfect|awesome|great|bet|word|alright|aight|dope|sick|fire|lit)(\s|!|\?|\.)*$/i.test(lower)) {
+    const acks = [
+      `👍`,
+      `🤙`,
+      `Cool, just holler if you need anything!`,
+      `Bet! 👊`,
+      `💪`,
+    ];
+    return acks[Math.floor(Math.random() * acks.length)];
+  }
+
+  // Laughing / reactions
+  if (/^(lol+|lmao+|haha+|hehe+|😂+|🤣+|rofl)(\s|!)*$/i.test(lower)) {
+    const laughs = [
+      `😄`,
+      `Haha glad you're having fun! Need anything?`,
+      `😎`,
+    ];
+    return laughs[Math.floor(Math.random() * laughs.length)];
+  }
+
+  // Goodbyes
+  if (/^(bye+|later+|peace+|cya+|see ya|gtg|gotta go|talk later|ttyl)(\s|!|\?|\.)*$/i.test(lower)) {
+    return `Later! 👋 I'll be here when you need me`;
+  }
+
+  // Simple questions about the bot
+  if (/^(who are you|what are you|are you a bot|are you real|you a bot)\??$/i.test(lower)) {
+    return `I'm MagiManager Bot 🤖 - your friendly account dashboard assistant! Try /help to see what I can do`;
   }
 
   return null;

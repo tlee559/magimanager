@@ -1265,10 +1265,22 @@ export async function runAgent(
       };
     }
 
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch (jsonError) {
+      console.error("[Agent] Failed to parse API response:", jsonError);
+      return {
+        response: "Got a weird response from my AI brain 🤖 Try again?",
+        toolsUsed,
+        context,
+      };
+    }
+
     const candidate = data.candidates?.[0];
 
     if (!candidate?.content?.parts) {
+      console.log("[Agent] No content parts in response:", JSON.stringify(data).slice(0, 200));
       return {
         response: "Hmm, I got confused there. Could you try rephrasing?",
         toolsUsed,
