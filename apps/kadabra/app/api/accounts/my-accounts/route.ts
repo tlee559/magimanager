@@ -13,12 +13,12 @@ export async function GET() {
 
   try {
     // For media buyers, get accounts assigned to them
-    // For super admins, get ALL accounts (full visibility)
+    // For super admins, get ALL non-archived accounts (full visibility)
     // For admins, get all handed-off accounts
     const whereClause = user.role === "MEDIA_BUYER" && user.mediaBuyerId
       ? { mediaBuyerId: user.mediaBuyerId, handoffStatus: "handed-off" }
       : user.role === "SUPER_ADMIN"
-      ? {} // Super admins see ALL accounts
+      ? { handoffStatus: { not: "archived" } } // Super admins see all non-archived accounts
       : user.role === "ADMIN"
       ? { handoffStatus: "handed-off" }
       : { mediaBuyerId: "none" }; // Return no accounts for other roles
