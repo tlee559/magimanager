@@ -3179,9 +3179,9 @@ export function AdAccountsView({ onDataChange, onNavigate }: AdAccountsViewProps
 
     // Financial - only from non-archived accounts
     const totalSpend = activeAccounts.reduce((sum, a) => sum + (a.currentSpendTotal || 0), 0);
-    const activeSpend = activeAccounts
-      .filter(a => a.accountHealth === "active")
-      .reduce((sum, a) => sum + (a.currentSpendTotal || 0), 0);
+    const todaySpend = activeAccounts.reduce((sum, a) => sum + (a.todaySpend || 0), 0);
+    // Count accounts with spend today for display
+    const accountsWithSpendToday = activeAccounts.filter(a => (a.todaySpend || 0) > 0).length;
 
     // Calculate average warmup progress for warming accounts
     const avgWarmupProgress = warmingUp.length > 0
@@ -3205,7 +3205,8 @@ export function AdAccountsView({ onDataChange, onNavigate }: AdAccountsViewProps
 
       // Money
       totalSpend,
-      activeSpend,
+      todaySpend,
+      accountsWithSpendToday,
 
       // Archived (separate tracking)
       archived: archivedCount,
@@ -3355,12 +3356,12 @@ export function AdAccountsView({ onDataChange, onNavigate }: AdAccountsViewProps
               {loading ? (
                 <div className="h-8 w-16 mx-auto bg-slate-700 rounded animate-pulse" />
               ) : (
-                <div className="text-2xl font-bold text-emerald-400">
-                  ${(stats.activeSpend / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                <div className="text-2xl font-bold text-cyan-400">
+                  ${(stats.todaySpend / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                 </div>
               )}
-              <div className="text-xs text-slate-400 mt-1">Active Spend</div>
-              <div className="text-[10px] text-slate-500 mt-0.5">healthy accounts</div>
+              <div className="text-xs text-slate-400 mt-1">Today&apos;s Spend</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">{stats.accountsWithSpendToday} active</div>
             </div>
           </div>
         </div>
