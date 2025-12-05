@@ -397,14 +397,6 @@ export function TextOverlayModal({
     await onApply(layers);
   }, [layers, onApply]);
 
-  // Reset state when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      setLayers([]);
-      setSelectedId(null);
-    }
-  }, [isOpen]);
-
   if (!isOpen) return null;
 
   return (
