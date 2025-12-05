@@ -166,19 +166,17 @@ export function TextPreviewOverlay({ imageUrl, layers, className = "" }: TextPre
     ctx.restore();
   }, []);
 
-  // Main draw function
+  // Main draw function - only draws text layers (transparent canvas overlay)
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
-    const img = imageRef.current;
 
-    if (!canvas || !ctx || !img || canvasSize.width === 0) return;
+    if (!canvas || !ctx || canvasSize.width === 0) return;
 
-    // Clear and draw image
+    // Clear canvas (transparent background - don't draw image, it's already shown below)
     ctx.clearRect(0, 0, canvasSize.width, canvasSize.height);
-    ctx.drawImage(img, 0, 0, canvasSize.width, canvasSize.height);
 
-    // Draw text layers (sorted by zIndex)
+    // Draw text layers only (sorted by zIndex)
     const sortedLayers = [...layers].sort((a, b) => a.zIndex - b.zIndex);
     sortedLayers.forEach(layer => {
       if (layer.text.trim()) {
