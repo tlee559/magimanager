@@ -12,18 +12,20 @@ interface TextPreviewOverlayProps {
 /**
  * Canvas-based text preview that renders exactly like the export will.
  * This ensures WYSIWYG - what you see in preview matches the downloaded image.
+ *
+ * This component overlays the actual <img> element and must match its rendered size exactly.
  */
 export function TextPreviewOverlay({ imageUrl, layers, className = "" }: TextPreviewOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [imageLoaded, setImageLoaded] = useState(false);
   const imageRef = useRef<HTMLImageElement | null>(null);
 
-  // Load image
+  // Load image to get its natural dimensions
   useEffect(() => {
     if (!imageUrl) return;
 
+    setImageLoaded(false);
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
@@ -37,42 +39,56 @@ export function TextPreviewOverlay({ imageUrl, layers, className = "" }: TextPre
 
     return () => {
       imageRef.current = null;
-      setImageLoaded(false);
     };
   }, [imageUrl]);
 
-  // Calculate canvas size to fit container while maintaining aspect ratio
+  // Find the actual rendered img element and match its size
   useEffect(() => {
-    if (!containerRef.current || !imageRef.current) return;
+    if (!imageLoaded || !imageRef.current) return;
 
     const updateSize = () => {
-      const container = containerRef.current;
-      const img = imageRef.current;
-      if (!container || !img) return;
+      // Find the sibling img element that displays the actual image
+      const canvas = canvasRef.current;
+      if (!canvas) return;
 
-      const containerWidth = container.clientWidth;
-      const containerHeight = container.clientHeight;
-      const imgAspect = img.width / img.height;
-      const containerAspect = containerWidth / containerHeight;
+      const parent = canvas.parentElement;
+      if (!parent) return;
 
-      let width, height;
-      if (imgAspect > containerAspect) {
-        width = containerWidth;
-        height = containerWidth / imgAspect;
-      } else {
-        height = containerHeight;
-        width = containerHeight * imgAspect;
+      // The img is a sibling - find it by looking at parent's parent (the container)
+      // Structure: container > img + div > canvas
+      const container = parent.parentElement;
+      if (!container) return;
+
+      const imgElement = container.querySelector('img') as HTMLImageElement;
+      if (!imgElement) return;
+
+      // Use the rendered size of the actual img element
+      const rect = imgElement.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setCanvasSize({ width: rect.width, height: rect.height });
       }
-
-      setCanvasSize({ width, height });
     };
 
-    updateSize();
-    const resizeObserver = new ResizeObserver(updateSize);
-    resizeObserver.observe(containerRef.current);
+    // Initial update after a small delay to ensure img is rendered
+    const timeoutId = setTimeout(updateSize, 50);
 
-    return () => resizeObserver.disconnect();
-  }, [imageLoaded]);
+    // Also observe resize on the container
+    const resizeObserver = new ResizeObserver(updateSize);
+    const canvas = canvasRef.current;
+    const container = canvas?.parentElement?.parentElement;
+    if (container) {
+      resizeObserver.observe(container);
+    }
+
+    // Window resize fallback
+    window.addEventListener('resize', updateSize);
+
+    return () => {
+      clearTimeout(timeoutId);
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateSize);
+    };
+  }, [imageLoaded, layers]);
 
   // Draw text layer on canvas
   const drawTextLayer = useCallback((
@@ -197,14 +213,12 @@ export function TextPreviewOverlay({ imageUrl, layers, className = "" }: TextPre
 
   return (
     <div
-      ref={containerRef}
       className={`absolute inset-0 flex items-center justify-center pointer-events-none ${className}`}
     >
       <canvas
         ref={canvasRef}
         width={canvasSize.width}
         height={canvasSize.height}
-        className="max-w-full max-h-full"
         style={{
           width: canvasSize.width,
           height: canvasSize.height,
