@@ -1384,7 +1384,15 @@ function DetailPanel({
         await onAddActivity("CERT_CHANGED", `Cert status changed to ${cert}. ${quickDetails}`.trim());
       } else if (quickAction.startsWith("SET_LIFECYCLE_")) {
         const lifecycle = quickAction.replace("SET_LIFECYCLE_", "").toLowerCase();
-        await onUpdateAccount(account.id, { status: lifecycle });
+        // Special handling for handed-off - update both status and handoffStatus
+        if (lifecycle === "handed-off") {
+          await onUpdateAccount(account.id, { status: "handed-off", handoffStatus: "handed-off" });
+        } else if (account.handoffStatus === "handed-off") {
+          // Changing from handed-off to another status, reset handoffStatus
+          await onUpdateAccount(account.id, { status: lifecycle, handoffStatus: "available" });
+        } else {
+          await onUpdateAccount(account.id, { status: lifecycle });
+        }
         await onAddActivity("LIFECYCLE_CHANGED", `Lifecycle changed to ${lifecycle}. ${quickDetails}`.trim());
       } else {
         // Regular activity log
@@ -1409,7 +1417,17 @@ function DetailPanel({
       if (field === "googleCid" && typeof value === "string") {
         normalizedValue = value.replace(/[-\s]/g, "");
       }
-      await onUpdateAccount(account.id, { [field]: normalizedValue });
+
+      // Special handling for lifecycle status changes
+      if (field === "status" && value === "handed-off") {
+        // When setting to handed-off, update both status and handoffStatus
+        await onUpdateAccount(account.id, { status: "handed-off", handoffStatus: "handed-off" });
+      } else if (field === "status" && account.handoffStatus === "handed-off") {
+        // When changing from handed-off to another status, reset handoffStatus to available
+        await onUpdateAccount(account.id, { status: normalizedValue as string, handoffStatus: "available" });
+      } else {
+        await onUpdateAccount(account.id, { [field]: normalizedValue });
+      }
       const fieldLabels: Record<string, string> = {
         googleCid: "Google CID",
         warmupTargetSpend: "Warmup target",
@@ -1736,6 +1754,7 @@ function DetailPanel({
                   { value: "provisioned", label: "Provisioned" },
                   { value: "warming-up", label: "Warming Up" },
                   { value: "ready", label: "Ready" },
+                  { value: "handed-off", label: "Handed Off" },
                 ]}
               />
               <SelectableField
@@ -2267,6 +2286,7 @@ function DetailPanel({
                     <option value="SET_LIFECYCLE_PROVISIONED">Set Provisioned</option>
                     <option value="SET_LIFECYCLE_WARMING-UP">Set Warming Up</option>
                     <option value="SET_LIFECYCLE_READY">Set Ready</option>
+                    <option value="SET_LIFECYCLE_HANDED-OFF">Set Handed Off</option>
                   </optgroup>
                   <optgroup label="Gmail">
                     <option value="GMAIL_SUS">Gmail Suspended</option>
