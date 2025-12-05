@@ -108,7 +108,92 @@ export function TextOverlayModal({
     return () => window.removeEventListener("resize", updateCanvasSize);
   }, [imageSize]);
 
-  // Draw canvas
+  // Draw a single text layer on canvas
+  const drawTextLayer = useCallback(
+    (
+      ctx: CanvasRenderingContext2D,
+      layer: TextLayer,
+      canvasWidth: number,
+      canvasHeight: number,
+      isSelected: boolean
+    ) => {
+      const x = (layer.x / 100) * canvasWidth;
+      const y = (layer.y / 100) * canvasHeight;
+      const scaledFontSize = layer.fontSize * layer.scale * scale;
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate((layer.rotation * Math.PI) / 180);
+
+      // Set font
+      ctx.font = `${layer.fontWeight} ${scaledFontSize}px Inter, system-ui, sans-serif`;
+      ctx.textAlign = layer.textAlign;
+      ctx.textBaseline = "middle";
+
+      // Measure text for background
+      const lines = layer.text.split("\n");
+      const lineHeight = scaledFontSize * 1.2;
+      const metrics = lines.map((line) => ctx.measureText(line));
+      const maxWidth = Math.max(...metrics.map((m) => m.width));
+      const totalHeight = lines.length * lineHeight;
+
+      // Calculate background bounds
+      const padding = layer.backgroundPadding * scale;
+      let bgX = -padding;
+      let bgY = -totalHeight / 2 - padding;
+      const bgW = maxWidth + padding * 2;
+      const bgH = totalHeight + padding * 2;
+
+      // Adjust for text alignment
+      if (layer.textAlign === "center") {
+        bgX = -maxWidth / 2 - padding;
+      } else if (layer.textAlign === "right") {
+        bgX = -maxWidth - padding;
+      }
+
+      // Draw background
+      if (layer.backgroundColor) {
+        ctx.fillStyle = layer.backgroundColor;
+        ctx.globalAlpha = layer.backgroundOpacity;
+        ctx.beginPath();
+        ctx.roundRect(bgX, bgY, bgW, bgH, layer.backgroundRadius * scale);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      // Draw stroke/outline
+      if (layer.strokeColor && layer.strokeWidth > 0) {
+        ctx.strokeStyle = layer.strokeColor;
+        ctx.lineWidth = layer.strokeWidth * scale;
+        ctx.lineJoin = "round";
+        lines.forEach((line, i) => {
+          const lineY = -totalHeight / 2 + lineHeight / 2 + i * lineHeight;
+          ctx.strokeText(line, 0, lineY);
+        });
+      }
+
+      // Draw text
+      ctx.fillStyle = layer.color;
+      lines.forEach((line, i) => {
+        const lineY = -totalHeight / 2 + lineHeight / 2 + i * lineHeight;
+        ctx.fillText(line, 0, lineY);
+      });
+
+      // Draw selection indicator
+      if (isSelected) {
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.strokeRect(bgX - 4, bgY - 4, bgW + 8, bgH + 8);
+        ctx.setLineDash([]);
+      }
+
+      ctx.restore();
+    },
+    [scale]
+  );
+
+  // Draw canvas with image and text layers
   const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
@@ -124,89 +209,7 @@ export function TextOverlayModal({
     for (const layer of sortedLayers) {
       drawTextLayer(ctx, layer, canvas.width, canvas.height, layer.id === selectedId);
     }
-  }, [layers, selectedId]);
-
-  // Draw a single text layer
-  const drawTextLayer = (
-    ctx: CanvasRenderingContext2D,
-    layer: TextLayer,
-    canvasWidth: number,
-    canvasHeight: number,
-    isSelected: boolean
-  ) => {
-    const x = (layer.x / 100) * canvasWidth;
-    const y = (layer.y / 100) * canvasHeight;
-    const scaledFontSize = layer.fontSize * layer.scale * scale;
-
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate((layer.rotation * Math.PI) / 180);
-
-    // Set font
-    ctx.font = `${layer.fontWeight} ${scaledFontSize}px Inter, system-ui, sans-serif`;
-    ctx.textAlign = layer.textAlign;
-    ctx.textBaseline = "middle";
-
-    // Measure text for background
-    const lines = layer.text.split("\n");
-    const lineHeight = scaledFontSize * 1.2;
-    const metrics = lines.map((line) => ctx.measureText(line));
-    const maxWidth = Math.max(...metrics.map((m) => m.width));
-    const totalHeight = lines.length * lineHeight;
-
-    // Calculate background bounds
-    const padding = layer.backgroundPadding * scale;
-    let bgX = -padding;
-    let bgY = -totalHeight / 2 - padding;
-    const bgW = maxWidth + padding * 2;
-    const bgH = totalHeight + padding * 2;
-
-    // Adjust for text alignment
-    if (layer.textAlign === "center") {
-      bgX = -maxWidth / 2 - padding;
-    } else if (layer.textAlign === "right") {
-      bgX = -maxWidth - padding;
-    }
-
-    // Draw background
-    if (layer.backgroundColor) {
-      ctx.fillStyle = layer.backgroundColor;
-      ctx.globalAlpha = layer.backgroundOpacity;
-      ctx.beginPath();
-      ctx.roundRect(bgX, bgY, bgW, bgH, layer.backgroundRadius * scale);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-
-    // Draw stroke/outline
-    if (layer.strokeColor && layer.strokeWidth > 0) {
-      ctx.strokeStyle = layer.strokeColor;
-      ctx.lineWidth = layer.strokeWidth * scale;
-      ctx.lineJoin = "round";
-      lines.forEach((line, i) => {
-        const lineY = -totalHeight / 2 + lineHeight / 2 + i * lineHeight;
-        ctx.strokeText(line, 0, lineY);
-      });
-    }
-
-    // Draw text
-    ctx.fillStyle = layer.color;
-    lines.forEach((line, i) => {
-      const lineY = -totalHeight / 2 + lineHeight / 2 + i * lineHeight;
-      ctx.fillText(line, 0, lineY);
-    });
-
-    // Draw selection indicator
-    if (isSelected) {
-      ctx.strokeStyle = "#3b82f6";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]);
-      ctx.strokeRect(bgX - 4, bgY - 4, bgW + 8, bgH + 8);
-      ctx.setLineDash([]);
-    }
-
-    ctx.restore();
-  };
+  }, [layers, selectedId, drawTextLayer]);
 
   // Redraw on changes
   useEffect(() => {
