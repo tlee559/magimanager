@@ -19,6 +19,9 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/700.css";
+import { useTextLayers, TextOverlayEditor, TextControlsPanel } from "./text-overlay";
 
 type Provider = "google-imagen" | "replicate-flux";
 type AspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
@@ -228,16 +231,10 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
   const [bgMood, setBgMood] = useState<BackgroundMood>("bright");
   const [enhancementPreset, setEnhancementPreset] = useState<EnhancementPreset>("clean");
 
-  // Text overlay state
+  // Text overlay state (Instagram-style multi-layer system)
   const [showTextOverlay, setShowTextOverlay] = useState(false);
-  const [overlayText, setOverlayText] = useState("");
-  const [textPosition, setTextPosition] = useState<TextPosition>("bottom-center");
-  const [textFontSize, setTextFontSize] = useState(48);
-  const [textFontWeight, setTextFontWeight] = useState<FontWeight>("bold");
-  const [textColor, setTextColor] = useState("#FFFFFF");
-  const [textBgColor, setTextBgColor] = useState("#00000080");
-  const [showTextBg, setShowTextBg] = useState(true);
   const [isApplyingText, setIsApplyingText] = useState(false);
+  const textLayers = useTextLayers();
 
   // Gallery state
   const [galleryImages, setGalleryImages] = useState<GeneratedImage[]>([]);
@@ -420,10 +417,10 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
     }
   };
 
-  // Handle text overlay
+  // Handle text overlay (using new multi-layer system)
   const handleApplyTextOverlay = async () => {
     const currentImg = generatedImages[currentImageIndex];
-    if (!currentImg || !overlayText.trim()) return;
+    if (!currentImg || textLayers.layers.length === 0) return;
 
     setIsApplyingText(true);
     setError(null);
@@ -434,12 +431,7 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           imageUrl: currentImg,
-          text: overlayText.trim(),
-          position: textPosition,
-          fontSize: textFontSize,
-          fontWeight: textFontWeight,
-          color: textColor,
-          backgroundColor: showTextBg ? textBgColor : undefined,
+          layers: textLayers.layers,
         }),
       });
 
@@ -456,8 +448,8 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
         return updated;
       });
 
-      // Clear the overlay text after applying
-      setOverlayText("");
+      // Clear layers after applying
+      textLayers.clearLayers();
       setShowTextOverlay(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Text overlay failed");
@@ -1531,7 +1523,7 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
               )}
             </div>
 
-            {/* Text Overlay Controls */}
+            {/* Text Overlay Controls - Instagram-style editor */}
             {showTextOverlay && generatedImages.length > 0 && (
               <div className="bg-slate-900/50 rounded-lg border border-amber-500/30 p-4 space-y-4">
                 <div className="flex items-center justify-between">
@@ -1540,192 +1532,28 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                     Text Overlay
                   </h3>
                   <button
-                    onClick={() => setShowTextOverlay(false)}
+                    onClick={() => {
+                      setShowTextOverlay(false);
+                      textLayers.clearLayers();
+                    }}
                     className="p-1 hover:bg-slate-700 rounded transition"
                   >
                     <X className="w-4 h-4 text-slate-400" />
                   </button>
                 </div>
 
-                {/* Text Input */}
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                    Text
-                  </label>
-                  <textarea
-                    value={overlayText}
-                    onChange={(e) => setOverlayText(e.target.value)}
-                    placeholder="Enter your text here..."
-                    className="w-full h-16 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 resize-none"
-                    disabled={isApplyingText}
-                  />
-                </div>
+                {/* Visual Editor with draggable text */}
+                <TextOverlayEditor
+                  imageUrl={currentImage}
+                  textLayers={textLayers}
+                />
 
-                {/* Position */}
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                    Position
-                  </label>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {(
-                      [
-                        ["top-left", "top-center", "top-right"],
-                        ["center-left", "center", "center-right"],
-                        ["bottom-left", "bottom-center", "bottom-right"],
-                      ] as TextPosition[][]
-                    ).map((row, rowIdx) => (
-                      <div key={rowIdx} className="contents">
-                        {row.map((pos) => (
-                          <button
-                            key={pos}
-                            onClick={() => setTextPosition(pos)}
-                            disabled={isApplyingText}
-                            className={`py-1.5 px-2 rounded text-xs font-medium transition ${
-                              textPosition === pos
-                                ? "bg-amber-600/20 border border-amber-500/50 text-amber-400"
-                                : "bg-slate-800 border border-slate-700 text-slate-500 hover:border-slate-600"
-                            }`}
-                          >
-                            {pos
-                              .split("-")
-                              .map((w) => w.charAt(0).toUpperCase())
-                              .join("")}
-                          </button>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Font Size & Weight */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                      Font Size: {textFontSize}px
-                    </label>
-                    <input
-                      type="range"
-                      min="16"
-                      max="96"
-                      value={textFontSize}
-                      onChange={(e) => setTextFontSize(parseInt(e.target.value))}
-                      disabled={isApplyingText}
-                      className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                      Font Weight
-                    </label>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setTextFontWeight("normal")}
-                        disabled={isApplyingText}
-                        className={`flex-1 py-1.5 px-2 rounded text-xs transition ${
-                          textFontWeight === "normal"
-                            ? "bg-amber-600/20 border border-amber-500/50 text-amber-400"
-                            : "bg-slate-800 border border-slate-700 text-slate-500 hover:border-slate-600"
-                        }`}
-                      >
-                        Normal
-                      </button>
-                      <button
-                        onClick={() => setTextFontWeight("bold")}
-                        disabled={isApplyingText}
-                        className={`flex-1 py-1.5 px-2 rounded text-xs font-bold transition ${
-                          textFontWeight === "bold"
-                            ? "bg-amber-600/20 border border-amber-500/50 text-amber-400"
-                            : "bg-slate-800 border border-slate-700 text-slate-500 hover:border-slate-600"
-                        }`}
-                      >
-                        Bold
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Colors */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                      Text Color
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        value={textColor}
-                        onChange={(e) => setTextColor(e.target.value)}
-                        disabled={isApplyingText}
-                        className="w-10 h-8 rounded border border-slate-700 bg-slate-800 cursor-pointer"
-                      />
-                      <input
-                        type="text"
-                        value={textColor}
-                        onChange={(e) => setTextColor(e.target.value)}
-                        disabled={isApplyingText}
-                        className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 text-xs text-slate-300 uppercase"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="flex items-center gap-2 text-xs font-medium text-slate-400 mb-1.5">
-                      <input
-                        type="checkbox"
-                        checked={showTextBg}
-                        onChange={(e) => setShowTextBg(e.target.checked)}
-                        disabled={isApplyingText}
-                        className="rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500/50"
-                      />
-                      Background Color
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        value={textBgColor.slice(0, 7)}
-                        onChange={(e) =>
-                          setTextBgColor(e.target.value + textBgColor.slice(7))
-                        }
-                        disabled={isApplyingText || !showTextBg}
-                        className="w-10 h-8 rounded border border-slate-700 bg-slate-800 cursor-pointer disabled:opacity-50"
-                      />
-                      <select
-                        value={textBgColor.slice(7) || "80"}
-                        onChange={(e) =>
-                          setTextBgColor(textBgColor.slice(0, 7) + e.target.value)
-                        }
-                        disabled={isApplyingText || !showTextBg}
-                        className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 text-xs text-slate-300 disabled:opacity-50"
-                      >
-                        <option value="FF">100%</option>
-                        <option value="CC">80%</option>
-                        <option value="99">60%</option>
-                        <option value="80">50%</option>
-                        <option value="66">40%</option>
-                        <option value="4D">30%</option>
-                        <option value="33">20%</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Apply Button */}
-                <button
-                  onClick={handleApplyTextOverlay}
-                  disabled={isApplyingText || !overlayText.trim()}
-                  className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed rounded-lg font-medium text-white transition flex items-center justify-center gap-2"
-                >
-                  {isApplyingText ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Applying Text...
-                    </>
-                  ) : (
-                    <>
-                      <Type className="w-4 h-4" />
-                      Apply Text Overlay
-                    </>
-                  )}
-                </button>
+                {/* Controls Panel */}
+                <TextControlsPanel
+                  textLayers={textLayers}
+                  onApply={handleApplyTextOverlay}
+                  isApplying={isApplyingText}
+                />
               </div>
             )}
 
@@ -1749,36 +1577,6 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                     alt={`Generated ${currentImageIndex + 1}`}
                     className="w-full h-full object-contain"
                   />
-                  {/* Live text preview overlay */}
-                  {showTextOverlay && overlayText && (
-                    <div
-                      className={`absolute pointer-events-none ${
-                        textPosition.includes("top")
-                          ? "top-4"
-                          : textPosition.includes("bottom")
-                            ? "bottom-4"
-                            : "top-1/2 -translate-y-1/2"
-                      } ${
-                        textPosition.includes("left")
-                          ? "left-4"
-                          : textPosition.includes("right")
-                            ? "right-4"
-                            : "left-1/2 -translate-x-1/2"
-                      }`}
-                    >
-                      <span
-                        className="inline-block px-3 py-1.5 rounded max-w-[80%]"
-                        style={{
-                          color: textColor,
-                          fontSize: `${Math.min(textFontSize, 32)}px`,
-                          fontWeight: textFontWeight,
-                          backgroundColor: showTextBg ? textBgColor : "transparent",
-                        }}
-                      >
-                        {overlayText}
-                      </span>
-                    </div>
-                  )}
                   {generatedImages.length > 1 && (
                     <>
                       <button
