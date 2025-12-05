@@ -2892,7 +2892,8 @@ export function AdAccountsView({ onDataChange, onNavigate }: AdAccountsViewProps
 
   const fetchAccounts = useCallback(async () => {
     try {
-      const res = await fetch("/api/accounts?include=identity,checkins");
+      // Always fetch all accounts including archived - filter client-side
+      const res = await fetch("/api/accounts?include=identity,checkins&includeArchived=true");
       if (res.ok) {
         const data = await res.json();
         setAccounts(data.accounts || data || []);

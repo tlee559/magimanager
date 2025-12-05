@@ -18,9 +18,11 @@ export async function accountsGetHandler(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const unassignedOnly = searchParams.get("unassigned") === "true";
+    const includeArchived = searchParams.get("includeArchived") === "true";
 
     const result = await accountService.getAll({
       unassignedOnly,
+      includeArchived,
       includeIdentity: true,
       includeMediaBuyer: true,
       includeConnection: true,
