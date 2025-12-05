@@ -42,9 +42,12 @@ export function TextPreviewOverlay({ imageUrl, layers, className = "" }: TextPre
     };
   }, [imageUrl]);
 
+  // Track if we have layers (for triggering size recalc when transitioning from 0 to >0 layers)
+  const hasLayers = layers.length > 0;
+
   // Find the actual rendered img element and match its size
   useEffect(() => {
-    if (!imageLoaded || !imageRef.current) return;
+    if (!imageLoaded || !imageRef.current || !hasLayers) return;
 
     const updateSize = () => {
       // Find the sibling img element that displays the actual image
@@ -69,8 +72,11 @@ export function TextPreviewOverlay({ imageUrl, layers, className = "" }: TextPre
       }
     };
 
-    // Initial update after a small delay to ensure img is rendered
-    const timeoutId = setTimeout(updateSize, 50);
+    // Initial update - use requestAnimationFrame to ensure canvas is mounted
+    // This is critical when transitioning from 0 layers (null render) to having layers
+    requestAnimationFrame(() => {
+      requestAnimationFrame(updateSize);
+    });
 
     // Also observe resize on the container
     const resizeObserver = new ResizeObserver(updateSize);
@@ -84,11 +90,10 @@ export function TextPreviewOverlay({ imageUrl, layers, className = "" }: TextPre
     window.addEventListener('resize', updateSize);
 
     return () => {
-      clearTimeout(timeoutId);
       resizeObserver.disconnect();
       window.removeEventListener('resize', updateSize);
     };
-  }, [imageLoaded, layers]);
+  }, [imageLoaded, hasLayers]);
 
   // Draw text layer on canvas
   const drawTextLayer = useCallback((
@@ -204,7 +209,10 @@ export function TextPreviewOverlay({ imageUrl, layers, className = "" }: TextPre
   // Redraw when dependencies change
   useEffect(() => {
     if (imageLoaded && canvasSize.width > 0 && canvasSize.height > 0) {
-      draw();
+      // Use requestAnimationFrame to ensure we draw after the canvas has updated its dimensions
+      requestAnimationFrame(() => {
+        draw();
+      });
     }
   }, [imageLoaded, draw, canvasSize]);
 
