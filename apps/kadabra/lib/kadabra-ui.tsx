@@ -587,7 +587,7 @@ function MyAccountsView({
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "suspended" | "limited">("all");
-  const [connectionFilter, setConnectionFilter] = useState<"all" | "connected" | "not-connected">("connected");
+  const [connectionFilter, setConnectionFilter] = useState<"all" | "connected" | "not-connected">("all");
 
   // Filter accounts based on search and filters
   const filteredAccounts = accounts.filter((account) => {
