@@ -16,7 +16,10 @@ export async function GET() {
 
     const notifications = await prisma.notification.findMany({
       where: {
-        userId,
+        OR: [
+          { userId }, // User-specific notifications
+          { userId: null }, // System-wide notifications (e.g., decommission alerts)
+        ],
       },
       orderBy: {
         createdAt: "desc",
