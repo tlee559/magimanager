@@ -1417,7 +1417,7 @@ function IdentitiesListView({
                     <td className="px-4 py-3 text-sm text-slate-400 max-w-[150px] truncate">
                       {identity.website ? (
                         <span className="text-emerald-400" title={identity.website}>
-                          {identity.website.replace(/^https?:\/\//, '')}
+                          {identity.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
                         </span>
                       ) : (
                         <span className="text-slate-500">-</span>
