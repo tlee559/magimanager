@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/700.css";
-import { TextOverlayModal, TextLayer } from "./text-overlay";
+import { TextOverlayModal, TextLayer, TextPreviewOverlay } from "./text-overlay";
 
 type Provider = "google-imagen" | "replicate-flux";
 type AspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
@@ -203,6 +203,7 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
   const [error, setError] = useState<string | null>(null);
   const [savingIndex, setSavingIndex] = useState<number | null>(null);
   const [savedIndices, setSavedIndices] = useState<Set<number>>(new Set());
+  const [savedImageIds, setSavedImageIds] = useState<Map<number, string>>(new Map()); // index -> database ID
 
   // Preset state
   const [presetCategory, setPresetCategory] = useState<PresetCategory>("custom");
@@ -423,7 +424,7 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
   };
 
   // Handle text overlay from modal - stores layers WITHOUT burning into image
-  const handleApplyTextOverlay = (layers: TextLayer[]) => {
+  const handleApplyTextOverlay = async (layers: TextLayer[]) => {
     // Store layers for this image index (not burned in yet)
     setImageTextLayers((prev) => {
       const updated = new Map(prev);
@@ -434,6 +435,22 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
       }
       return updated;
     });
+
+    // If this image is already saved, update text layers in database
+    const savedId = savedImageIds.get(currentImageIndex);
+    if (savedId) {
+      try {
+        await fetch(`/api/ai/images/${savedId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            textLayers: layers.length > 0 ? layers : null,
+          }),
+        });
+      } catch (err) {
+        console.error("Failed to update text layers:", err);
+      }
+    }
 
     // Close modal
     setShowTextOverlayModal(false);
@@ -515,6 +532,8 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
       setGeneratedImages([]);
       setCurrentImageIndex(0);
       setSavedIndices(new Set());
+      setSavedImageIds(new Map());
+      setImageTextLayers(new Map());
     }
 
     try {
@@ -628,7 +647,16 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
       });
 
       if (response.ok) {
+        const data = await response.json();
         setSavedIndices((prev) => new Set([...prev, index]));
+        // Store the database ID so we can update text layers later
+        if (data.image?.id) {
+          setSavedImageIds((prev) => {
+            const updated = new Map(prev);
+            updated.set(index, data.image.id);
+            return updated;
+          });
+        }
       }
     } catch (err) {
       console.error("Failed to save image:", err);
@@ -1591,6 +1619,8 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                     alt={`Generated ${currentImageIndex + 1}`}
                     className="w-full h-full object-contain"
                   />
+                  {/* Text overlay preview - renders text layers on top of image */}
+                  <TextPreviewOverlay layers={getCurrentTextLayers()} />
                   {generatedImages.length > 1 && (
                     <>
                       <button
