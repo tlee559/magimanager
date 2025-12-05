@@ -37,6 +37,75 @@ type TextPosition =
   | "bottom-center"
   | "bottom-right";
 type FontWeight = "normal" | "bold";
+type BackgroundCategory = "studio" | "lifestyle" | "abstract" | "outdoor" | "custom";
+type BackgroundStyle = "minimal" | "elegant" | "bold" | "natural" | "modern";
+type BackgroundMood = "bright" | "warm" | "cool" | "dramatic" | "neutral";
+
+// Prompt template system for product backgrounds
+interface PromptTemplate {
+  category: BackgroundCategory;
+  style: BackgroundStyle;
+  mood: BackgroundMood;
+}
+
+const BACKGROUND_CATEGORIES: { value: BackgroundCategory; label: string; description: string }[] = [
+  { value: "studio", label: "Studio", description: "Clean professional backdrop" },
+  { value: "lifestyle", label: "Lifestyle", description: "Real-world context" },
+  { value: "abstract", label: "Abstract", description: "Artistic & creative" },
+  { value: "outdoor", label: "Outdoor", description: "Nature & architecture" },
+  { value: "custom", label: "Custom", description: "Write your own" },
+];
+
+const BACKGROUND_STYLES: { value: BackgroundStyle; label: string }[] = [
+  { value: "minimal", label: "Clean & Minimal" },
+  { value: "elegant", label: "Elegant & Luxurious" },
+  { value: "bold", label: "Bold & Vibrant" },
+  { value: "natural", label: "Natural & Organic" },
+  { value: "modern", label: "Modern & Sleek" },
+];
+
+const BACKGROUND_MOODS: { value: BackgroundMood; label: string }[] = [
+  { value: "bright", label: "Bright & Airy" },
+  { value: "warm", label: "Warm & Cozy" },
+  { value: "cool", label: "Cool & Calm" },
+  { value: "dramatic", label: "Dramatic & Bold" },
+  { value: "neutral", label: "Neutral & Balanced" },
+];
+
+// Generate prompt from template selections
+function generatePromptFromTemplate(
+  category: BackgroundCategory,
+  style: BackgroundStyle,
+  mood: BackgroundMood
+): string {
+  const categoryPrompts: Record<BackgroundCategory, string> = {
+    studio: "Professional studio photography setup, seamless backdrop",
+    lifestyle: "Lifestyle product photography in a real-world setting",
+    abstract: "Abstract artistic background with creative elements",
+    outdoor: "Outdoor setting with natural environment",
+    custom: "",
+  };
+
+  const stylePrompts: Record<BackgroundStyle, string> = {
+    minimal: "clean minimal aesthetic, simple composition, negative space",
+    elegant: "luxury elegant styling, premium feel, sophisticated details",
+    bold: "vibrant colors, eye-catching design, dynamic composition",
+    natural: "organic textures, earthy tones, natural materials",
+    modern: "contemporary design, sleek surfaces, geometric elements",
+  };
+
+  const moodPrompts: Record<BackgroundMood, string> = {
+    bright: "bright airy lighting, soft shadows, high key",
+    warm: "warm golden lighting, cozy atmosphere, inviting tones",
+    cool: "cool blue tones, calm serene mood, soft diffused light",
+    dramatic: "dramatic lighting, strong contrast, moody shadows",
+    neutral: "balanced neutral lighting, even tones, professional",
+  };
+
+  if (category === "custom") return "";
+
+  return `${categoryPrompts[category]}, ${stylePrompts[style]}, ${moodPrompts[mood]}, product photography, high quality, 8k`;
+}
 
 interface GeneratedImage {
   id: string;
@@ -144,6 +213,11 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
   const [bgOverlayColor, setBgOverlayColor] = useState("#000000");
   const [bgOverlayOpacity, setBgOverlayOpacity] = useState(0.5);
 
+  // Prompt template state (for composite mode)
+  const [bgCategory, setBgCategory] = useState<BackgroundCategory>("studio");
+  const [bgStyle, setBgStyle] = useState<BackgroundStyle>("minimal");
+  const [bgMood, setBgMood] = useState<BackgroundMood>("bright");
+
   // Text overlay state
   const [showTextOverlay, setShowTextOverlay] = useState(false);
   const [overlayText, setOverlayText] = useState("");
@@ -167,6 +241,13 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
       loadGalleryImages();
     }
   }, [viewMode, showFavoritesOnly]);
+
+  // Initialize prompt when entering composite mode with a product
+  useEffect(() => {
+    if (generationMode === "composite" && transparentProductUrl && !prompt && bgCategory !== "custom") {
+      setPrompt(generatePromptFromTemplate(bgCategory, bgStyle, bgMood));
+    }
+  }, [generationMode, transparentProductUrl, bgCategory, bgStyle, bgMood]);
 
   const loadGalleryImages = async () => {
     setGalleryLoading(true);
@@ -970,18 +1051,105 @@ export function AIImageGenerator({ onBack }: AIImageGeneratorProps) {
                   </div>
                 )}
 
-                {/* Background prompt */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    2. Describe Background
+                {/* Background prompt with template builder */}
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-slate-300">
+                    2. Choose Background Style
                   </label>
-                  <textarea
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="Modern kitchen countertop with soft natural lighting, lifestyle product photography..."
-                    className="w-full h-20 bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-3 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500/50 resize-none text-sm"
-                    disabled={isGenerating || !transparentProductUrl}
-                  />
+
+                  {/* Category selector */}
+                  <div className="flex flex-wrap gap-2">
+                    {BACKGROUND_CATEGORIES.map((cat) => (
+                      <button
+                        key={cat.value}
+                        onClick={() => {
+                          setBgCategory(cat.value);
+                          if (cat.value !== "custom") {
+                            setPrompt(generatePromptFromTemplate(cat.value, bgStyle, bgMood));
+                          }
+                        }}
+                        disabled={isGenerating || !transparentProductUrl}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                          bgCategory === cat.value
+                            ? "bg-teal-600/20 border border-teal-500/50 text-teal-400"
+                            : "bg-slate-900/50 border border-slate-700 text-slate-400 hover:border-slate-600"
+                        } disabled:opacity-50`}
+                      >
+                        {cat.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Style & Mood selectors (hidden for custom) */}
+                  {bgCategory !== "custom" && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Style</label>
+                        <select
+                          value={bgStyle}
+                          onChange={(e) => {
+                            const newStyle = e.target.value as BackgroundStyle;
+                            setBgStyle(newStyle);
+                            setPrompt(generatePromptFromTemplate(bgCategory, newStyle, bgMood));
+                          }}
+                          disabled={isGenerating || !transparentProductUrl}
+                          className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/50 disabled:opacity-50"
+                        >
+                          {BACKGROUND_STYLES.map((s) => (
+                            <option key={s.value} value={s.value}>
+                              {s.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Mood</label>
+                        <select
+                          value={bgMood}
+                          onChange={(e) => {
+                            const newMood = e.target.value as BackgroundMood;
+                            setBgMood(newMood);
+                            setPrompt(generatePromptFromTemplate(bgCategory, bgStyle, newMood));
+                          }}
+                          disabled={isGenerating || !transparentProductUrl}
+                          className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/50 disabled:opacity-50"
+                        >
+                          {BACKGROUND_MOODS.map((m) => (
+                            <option key={m.value} value={m.value}>
+                              {m.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Generated/Custom prompt preview */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs text-slate-500">
+                        {bgCategory === "custom" ? "Your prompt" : "Generated prompt (editable)"}
+                      </label>
+                      {bgCategory !== "custom" && prompt && (
+                        <button
+                          onClick={() => setPrompt(generatePromptFromTemplate(bgCategory, bgStyle, bgMood))}
+                          className="text-xs text-teal-400 hover:text-teal-300"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                    <textarea
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                      placeholder={bgCategory === "custom"
+                        ? "Modern kitchen countertop with soft natural lighting, lifestyle product photography..."
+                        : "Select options above to generate a prompt..."
+                      }
+                      className="w-full h-16 bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500/50 resize-none text-xs"
+                      disabled={isGenerating || !transparentProductUrl}
+                    />
+                  </div>
                 </div>
               </div>
             )}
