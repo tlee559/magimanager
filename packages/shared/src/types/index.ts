@@ -462,6 +462,7 @@ export interface AppSettings {
   decommissionAlertOnIdentityArchive: boolean;
   decommissionAlertViaApp: boolean;
   decommissionAlertViaTelegram: boolean;
+  decommissionAlertCustomMessage: string | null;
   updatedAt: Date;
 }
 

@@ -6321,6 +6321,7 @@ function SettingsView() {
   const [decommissionAlertOnIdentityArchive, setDecommissionAlertOnIdentityArchive] = useState(true);
   const [decommissionAlertViaApp, setDecommissionAlertViaApp] = useState(true);
   const [decommissionAlertViaTelegram, setDecommissionAlertViaTelegram] = useState(true);
+  const [decommissionAlertCustomMessage, setDecommissionAlertCustomMessage] = useState<string>("");
   // Visibility toggles for API keys
   const [showGologinKey, setShowGologinKey] = useState(false);
   const [showGoogleAdsKey, setShowGoogleAdsKey] = useState(false);
@@ -6350,6 +6351,7 @@ function SettingsView() {
         setDecommissionAlertOnIdentityArchive(data.decommissionAlertOnIdentityArchive ?? true);
         setDecommissionAlertViaApp(data.decommissionAlertViaApp ?? true);
         setDecommissionAlertViaTelegram(data.decommissionAlertViaTelegram ?? true);
+        setDecommissionAlertCustomMessage(data.decommissionAlertCustomMessage || "");
       }
     } catch (error) {
       console.error("Failed to fetch settings:", error);
@@ -6378,6 +6380,7 @@ function SettingsView() {
           decommissionAlertOnIdentityArchive,
           decommissionAlertViaApp,
           decommissionAlertViaTelegram,
+          decommissionAlertCustomMessage,
         }),
       });
 
@@ -6673,6 +6676,22 @@ function SettingsView() {
                   <span className="text-sm text-slate-200">Telegram bot</span>
                 </label>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide">
+                Custom Message (Optional)
+              </label>
+              <textarea
+                value={decommissionAlertCustomMessage}
+                onChange={(e) => setDecommissionAlertCustomMessage(e.target.value)}
+                rows={3}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none"
+                placeholder="e.g., Remember to cancel the hosting subscription!"
+              />
+              <p className="text-xs text-slate-500">
+                This message will be appended to all decommission alerts
+              </p>
             </div>
           </div>
         </div>

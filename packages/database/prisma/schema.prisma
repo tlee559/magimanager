@@ -224,6 +224,7 @@ model AppSettings {
   decommissionAlertOnIdentityArchive Boolean @default(true)  // Alert when identity is archived directly
   decommissionAlertViaApp            Boolean @default(true)  // Send in-app notification
   decommissionAlertViaTelegram       Boolean @default(true)  // Send Telegram notification
+  decommissionAlertCustomMessage     String? @db.Text        // Optional custom message to include in alerts
 
   updatedAt             DateTime @updatedAt
 }

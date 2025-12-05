@@ -61,6 +61,11 @@ async function fireDecommissionAlert(data: DecommissionAlertData): Promise<void>
       ? "Identity was archived directly"
       : "Last active account was decommissioned";
 
+  // Build custom message section if provided
+  const customMessageSection = settings.decommissionAlertCustomMessage
+    ? `\n\n${settings.decommissionAlertCustomMessage}`
+    : "";
+
   // In-app notification
   if (settings.decommissionAlertViaApp) {
     try {
@@ -68,7 +73,7 @@ async function fireDecommissionAlert(data: DecommissionAlertData): Promise<void>
         data: {
           type: "IDENTITY_DECOMMISSIONED",
           title: "🔴 Identity Decommissioned",
-          message: `${data.identityName} no longer has any active accounts.\n\n${websiteInfo}\n\nReason: ${reasonText}`,
+          message: `${data.identityName} no longer has any active accounts.\n\n${websiteInfo}\n\nReason: ${reasonText}${customMessageSection}`,
           entityId: data.identityId,
           entityType: "identity",
           priority: "high",
@@ -83,11 +88,15 @@ async function fireDecommissionAlert(data: DecommissionAlertData): Promise<void>
   // Telegram notification
   if (settings.decommissionAlertViaTelegram && settings.telegramBotToken && settings.telegramChatId) {
     try {
+      const telegramCustomMessage = settings.decommissionAlertCustomMessage
+        ? `\n\n${escapeMarkdown(settings.decommissionAlertCustomMessage)}`
+        : "";
+
       const telegramMessage =
         `🔴 *Identity Decommissioned*\n\n` +
         `*${escapeMarkdown(data.identityName)}*\n` +
         `${escapeMarkdown(websiteInfo)}\n\n` +
-        `_Reason: ${escapeMarkdown(reasonText)}_`;
+        `_Reason: ${escapeMarkdown(reasonText)}_${telegramCustomMessage}`;
 
       await sendTelegramMessage(telegramMessage, settings.telegramChatId);
       console.log(`[Decommission] Telegram notification sent for ${data.identityName}`);

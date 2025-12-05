@@ -49,6 +49,7 @@ export async function PATCH(request: NextRequest) {
       decommissionAlertOnIdentityArchive,
       decommissionAlertViaApp,
       decommissionAlertViaTelegram,
+      decommissionAlertCustomMessage,
     } = body;
 
     if (warmupTargetSpend !== undefined && warmupTargetSpend < 1) {
@@ -89,6 +90,7 @@ export async function PATCH(request: NextRequest) {
           ...(decommissionAlertOnIdentityArchive !== undefined && { decommissionAlertOnIdentityArchive }),
           ...(decommissionAlertViaApp !== undefined && { decommissionAlertViaApp }),
           ...(decommissionAlertViaTelegram !== undefined && { decommissionAlertViaTelegram }),
+          ...(decommissionAlertCustomMessage !== undefined && { decommissionAlertCustomMessage: decommissionAlertCustomMessage || null }),
         },
       });
     }
