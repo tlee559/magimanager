@@ -9027,10 +9027,10 @@ function TutorialView() {
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
                   <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
                     <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">2</span>
-                    Start the Browser Profile
+                    Run the Browser Profile
                   </h3>
                   <p className="text-slate-300 mb-3">
-                    Click <span className="text-white font-semibold">&quot;Start&quot;</span> to launch the browser with the identity&apos;s unique fingerprint.
+                    Click <span className="text-white font-semibold">&quot;Run&quot;</span> to launch the browser with the identity&apos;s unique fingerprint.
                     Wait for the browser to fully open.
                   </p>
                   <ScreenshotPlaceholder
