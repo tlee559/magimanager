@@ -30,7 +30,8 @@ export async function PATCH(
       );
     }
 
-    if (notification.userId !== userId) {
+    // Allow marking system-wide notifications (userId: null) or user's own notifications
+    if (notification.userId !== null && notification.userId !== userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
