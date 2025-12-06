@@ -6730,58 +6730,6 @@ function SettingsView() {
 
             <div className="space-y-1">
               <label className="block text-sm font-medium text-slate-200">
-                Google Ads API Key
-              </label>
-              <div className="relative">
-                <input
-                  type={showGoogleAdsKey ? "text" : "password"}
-                  value={googleAdsApiKey}
-                  onChange={(e) => setGoogleAdsApiKey(e.target.value)}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 pr-10 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                  placeholder="Enter Google Ads API key"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowGoogleAdsKey(!showGoogleAdsKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition"
-                  title={showGoogleAdsKey ? "Hide" : "Show"}
-                >
-                  {showGoogleAdsKey ? "👁️" : "👁️‍🗨️"}
-                </button>
-              </div>
-              <p className="text-xs text-slate-500 mt-1">
-                API key for Google Ads account management
-              </p>
-            </div>
-
-            <div className="space-y-1">
-              <label className="block text-sm font-medium text-slate-200">
-                Google API Key
-              </label>
-              <div className="relative">
-                <input
-                  type={showGoogleKey ? "text" : "password"}
-                  value={googleApiKey}
-                  onChange={(e) => setGoogleApiKey(e.target.value)}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 pr-10 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                  placeholder="Enter Google API key"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowGoogleKey(!showGoogleKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition"
-                  title={showGoogleKey ? "Hide" : "Show"}
-                >
-                  {showGoogleKey ? "👁️" : "👁️‍🗨️"}
-                </button>
-              </div>
-              <p className="text-xs text-slate-500 mt-1">
-                General Google API key for various Google services
-              </p>
-            </div>
-
-            <div className="space-y-1">
-              <label className="block text-sm font-medium text-slate-200">
                 TextVerified API Key
               </label>
               <div className="relative">

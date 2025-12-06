@@ -163,18 +163,22 @@ export async function fireIncompleteIdentityAlert(
   }
 
   // Telegram notification
-  if (settings.incompleteIdentityAlertViaTelegram && settings.telegramBotToken && settings.telegramChatId) {
-    try {
-      const telegramMessage =
-        `⚠️ *Incomplete Identity Profile*\n\n` +
-        `*${escapeMarkdown(data.identityName)}*\n` +
-        `Missing: ${escapeMarkdown(missingList)}\n\n` +
-        `_${escapeMarkdown(reasonText)}_`;
+  if (settings.incompleteIdentityAlertViaTelegram) {
+    if (!settings.telegramBotToken || !settings.telegramChatId) {
+      console.log("[IncompleteIdentity] Telegram enabled but not configured in Settings - skipping");
+    } else {
+      try {
+        const telegramMessage =
+          `⚠️ *Incomplete Identity Profile*\n\n` +
+          `*${escapeMarkdown(data.identityName)}*\n` +
+          `Missing: ${escapeMarkdown(missingList)}\n\n` +
+          `_${escapeMarkdown(reasonText)}_`;
 
-      await sendTelegramMessage(telegramMessage, settings.telegramChatId);
-      console.log(`[IncompleteIdentity] Telegram notification sent for ${data.identityName}`);
-    } catch (error) {
-      console.error("[IncompleteIdentity] Failed to send Telegram alert:", error);
+        await sendTelegramMessage(telegramMessage, settings.telegramChatId);
+        console.log(`[IncompleteIdentity] Telegram notification sent for ${data.identityName}`);
+      } catch (error) {
+        console.error("[IncompleteIdentity] Failed to send Telegram alert:", error);
+      }
     }
   }
 }
@@ -203,21 +207,25 @@ export async function fireDailyIncompleteIdentityAlerts(): Promise<{
   }
 
   // Send consolidated Telegram alert (single message with all incomplete identities)
-  if (settings.incompleteIdentityAlertViaTelegram && settings.telegramBotToken && settings.telegramChatId) {
-    try {
-      const identityList = incompleteIdentities
-        .map((i) => `• *${escapeMarkdown(i.identityName)}*: ${escapeMarkdown(i.missingItems.join(", "))}`)
-        .join("\n");
+  if (settings.incompleteIdentityAlertViaTelegram) {
+    if (!settings.telegramBotToken || !settings.telegramChatId) {
+      console.log("[IncompleteIdentity] Telegram enabled but not configured in Settings - skipping");
+    } else {
+      try {
+        const identityList = incompleteIdentities
+          .map((i) => `• *${escapeMarkdown(i.identityName)}*: ${escapeMarkdown(i.missingItems.join(", "))}`)
+          .join("\n");
 
-      const telegramMessage =
-        `⚠️ *Daily Incomplete Identity Report*\n\n` +
-        `${incompleteIdentities.length} identity profile${incompleteIdentities.length > 1 ? "s" : ""} need attention:\n\n` +
-        `${identityList}`;
+        const telegramMessage =
+          `⚠️ *Daily Incomplete Identity Report*\n\n` +
+          `${incompleteIdentities.length} identity profile${incompleteIdentities.length > 1 ? "s" : ""} need attention:\n\n` +
+          `${identityList}`;
 
-      await sendTelegramMessage(telegramMessage, settings.telegramChatId);
-      console.log(`[IncompleteIdentity] Telegram daily report sent for ${incompleteIdentities.length} identities`);
-    } catch (error) {
-      console.error("[IncompleteIdentity] Failed to send Telegram daily report:", error);
+        await sendTelegramMessage(telegramMessage, settings.telegramChatId);
+        console.log(`[IncompleteIdentity] Telegram daily report sent for ${incompleteIdentities.length} identities`);
+      } catch (error) {
+        console.error("[IncompleteIdentity] Failed to send Telegram daily report:", error);
+      }
     }
   }
 
