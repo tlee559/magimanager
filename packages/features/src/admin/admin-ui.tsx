@@ -9328,10 +9328,6 @@ function TutorialView() {
                       <span><span className="text-red-400">Delete</span> - Remove a document if needed</span>
                     </li>
                   </ul>
-                  <ScreenshotPlaceholder
-                    name="screenshot-docs-uploaded-list.png"
-                    description="Documents list showing uploaded documents with View and Delete options"
-                  />
                 </div>
 
                 <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
