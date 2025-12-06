@@ -457,6 +457,22 @@ export function YouTubeScraperView({ onBack }: YouTubeScraperViewProps) {
                     />
                   </div>
                 )}
+
+                {/* Debug info for failed/in-progress jobs */}
+                {job.debug && job.debug.length > 0 && (
+                  <details className="mt-3">
+                    <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-400">
+                      Debug logs ({job.debug.length} entries)
+                    </summary>
+                    <div className="mt-2 p-2 bg-slate-950 rounded text-xs font-mono text-slate-400 max-h-40 overflow-y-auto">
+                      {job.debug.map((log, i) => (
+                        <div key={i} className={log.includes("ERROR") ? "text-red-400" : ""}>
+                          {log}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
               </div>
             ))}
           </div>

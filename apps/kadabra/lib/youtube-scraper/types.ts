@@ -24,6 +24,7 @@ export interface DownloadJob {
   error?: string;
   createdAt: string;
   updatedAt: string;
+  debug?: string[];
 }
 
 export interface DownloadRequest {

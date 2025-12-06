@@ -40,6 +40,7 @@ const jobs = new Map<
     createdAt: string;
     updatedAt: string;
     userId: string;
+    debug?: string[];
   }
 >();
 
@@ -66,8 +67,9 @@ interface CobaltResponse {
   };
 }
 
-async function fetchFromCobalt(url: string): Promise<CobaltResponse | null> {
+async function fetchFromCobalt(url: string, addDebug: (msg: string) => void): Promise<CobaltResponse | null> {
   for (const instance of COBALT_INSTANCES) {
+    addDebug(`[COBALT] Trying instance: ${instance}`);
     try {
       const response = await fetch(instance, {
         method: "POST",
@@ -82,27 +84,41 @@ async function fetchFromCobalt(url: string): Promise<CobaltResponse | null> {
         }),
       });
 
+      addDebug(`[COBALT] Response status: ${response.status}`);
+
       if (response.ok) {
-        return await response.json();
+        const data = await response.json();
+        addDebug(`[COBALT] Response data: ${JSON.stringify(data)}`);
+        return data;
+      } else {
+        const errorText = await response.text();
+        addDebug(`[COBALT] Error response: ${errorText}`);
       }
     } catch (error) {
+      addDebug(`[COBALT] Instance ${instance} failed: ${error instanceof Error ? error.message : String(error)}`);
       console.error(`Cobalt instance ${instance} failed:`, error);
       continue;
     }
   }
+  addDebug("[COBALT] All instances failed");
   return null;
 }
 
-async function getYouTubeVideoInfo(videoId: string) {
+async function getYouTubeVideoInfo(videoId: string, addDebug: (msg: string) => void) {
+  addDebug(`[OEMBED] Fetching info for video: ${videoId}`);
   try {
     const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
     const response = await fetch(oembedUrl);
 
+    addDebug(`[OEMBED] Response status: ${response.status}`);
+
     if (!response.ok) {
+      addDebug(`[OEMBED] Failed to fetch video info`);
       return null;
     }
 
     const data = await response.json();
+    addDebug(`[OEMBED] Got video title: ${data.title}`);
 
     return {
       id: videoId,
@@ -118,21 +134,30 @@ async function getYouTubeVideoInfo(videoId: string) {
       channelUrl: data.author_url || "",
     };
   } catch (error) {
+    addDebug(`[OEMBED] Error: ${error instanceof Error ? error.message : String(error)}`);
     console.error("oEmbed fetch failed:", error);
     return null;
   }
 }
 
 export async function POST(req: NextRequest) {
+  console.log("[DOWNLOAD] POST request received");
+
   const session = await getServerSession(authOptions);
+  console.log("[DOWNLOAD] Session:", session?.user?.email || "none");
+
   if (!session?.user?.email) {
+    console.log("[DOWNLOAD] Unauthorized - no session");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const { url } = await req.json();
+    const body = await req.json();
+    console.log("[DOWNLOAD] Request body:", body);
+    const { url } = body;
 
     if (!url) {
+      console.log("[DOWNLOAD] No URL provided");
       return NextResponse.json(
         { success: false, error: "URL is required" },
         { status: 400 }
@@ -140,7 +165,10 @@ export async function POST(req: NextRequest) {
     }
 
     const videoId = extractVideoId(url);
+    console.log("[DOWNLOAD] Extracted video ID:", videoId);
+
     if (!videoId) {
+      console.log("[DOWNLOAD] Invalid YouTube URL");
       return NextResponse.json(
         { success: false, error: "Invalid YouTube URL" },
         { status: 400 }
@@ -150,6 +178,7 @@ export async function POST(req: NextRequest) {
     // Create a job
     const jobId = randomUUID();
     const now = new Date().toISOString();
+    console.log("[DOWNLOAD] Created job:", jobId);
 
     const job = {
       id: jobId,
@@ -159,27 +188,31 @@ export async function POST(req: NextRequest) {
       createdAt: now,
       updatedAt: now,
       userId: session.user.email,
+      debug: [`[${now}] Job created`],
     };
 
     jobs.set(jobId, job);
+    console.log("[DOWNLOAD] Job stored in memory, total jobs:", jobs.size);
 
     // Start download in background (non-blocking)
     processDownload(jobId, url, videoId, session.user.email).catch((error) => {
-      console.error("Download error:", error);
+      console.error("[DOWNLOAD] Background process error:", error);
       const existingJob = jobs.get(jobId);
       if (existingJob) {
         jobs.set(jobId, {
           ...existingJob,
           status: "failed",
           error: error instanceof Error ? error.message : "Download failed",
+          debug: [...(existingJob.debug || []), `[ERROR] ${error instanceof Error ? error.message : String(error)}`],
           updatedAt: new Date().toISOString(),
         });
       }
     });
 
+    console.log("[DOWNLOAD] Returning success response");
     return NextResponse.json({ success: true, job });
   } catch (error) {
-    console.error("Error starting download:", error);
+    console.error("[DOWNLOAD] Error starting download:", error);
     return NextResponse.json(
       { success: false, error: "Failed to start download" },
       { status: 500 }
@@ -193,11 +226,27 @@ async function processDownload(
   videoId: string,
   userId: string
 ) {
+  console.log(`[PROCESS] Starting download for job ${jobId}`);
+
   const job = jobs.get(jobId);
-  if (!job) return;
+  if (!job) {
+    console.log(`[PROCESS] Job ${jobId} not found!`);
+    return;
+  }
+
+  const addDebug = (msg: string) => {
+    const currentJob = jobs.get(jobId);
+    if (currentJob) {
+      const debug = currentJob.debug || [];
+      debug.push(`[${new Date().toISOString()}] ${msg}`);
+      jobs.set(jobId, { ...currentJob, debug });
+    }
+    console.log(`[PROCESS:${jobId.slice(0, 8)}] ${msg}`);
+  };
 
   try {
     // Update status to downloading
+    addDebug("Starting download process");
     jobs.set(jobId, {
       ...job,
       status: "downloading",
@@ -206,31 +255,43 @@ async function processDownload(
     });
 
     // Get video info
-    const videoInfo = await getYouTubeVideoInfo(videoId);
+    addDebug("Fetching video info from YouTube oEmbed");
+    const videoInfo = await getYouTubeVideoInfo(videoId, addDebug);
 
     if (videoInfo) {
+      addDebug(`Got video info: "${videoInfo.title}" by ${videoInfo.channel}`);
       jobs.set(jobId, {
         ...jobs.get(jobId)!,
         videoInfo,
         progress: 10,
         updatedAt: new Date().toISOString(),
       });
+    } else {
+      addDebug("Warning: Could not get video info, continuing anyway");
     }
 
     // Get download URL from Cobalt
-    const cobaltData = await fetchFromCobalt(url);
+    addDebug("Requesting download URL from Cobalt API");
+    const cobaltData = await fetchFromCobalt(url, addDebug);
 
     if (!cobaltData) {
-      throw new Error("Download service unavailable");
+      addDebug("ERROR: All Cobalt instances failed");
+      throw new Error("Download service unavailable - all Cobalt instances failed");
     }
 
+    addDebug(`Cobalt response status: ${cobaltData.status}`);
+
     if (cobaltData.status === "error") {
+      addDebug(`ERROR: Cobalt returned error: ${cobaltData.error?.code}`);
       throw new Error(cobaltData.error?.code || "Video cannot be downloaded");
     }
 
     if (!cobaltData.url) {
-      throw new Error("No download URL returned");
+      addDebug("ERROR: No download URL in Cobalt response");
+      throw new Error("No download URL returned from Cobalt");
     }
+
+    addDebug(`Got download URL: ${cobaltData.url.substring(0, 100)}...`);
 
     jobs.set(jobId, {
       ...jobs.get(jobId)!,
@@ -239,9 +300,13 @@ async function processDownload(
     });
 
     // Download the video from Cobalt's tunnel/redirect URL
+    addDebug("Starting video download from Cobalt URL");
     const videoResponse = await fetch(cobaltData.url);
 
+    addDebug(`Video download response status: ${videoResponse.status}`);
+
     if (!videoResponse.ok) {
+      addDebug(`ERROR: Video download failed with status ${videoResponse.status}`);
       throw new Error(`Failed to download video: ${videoResponse.status}`);
     }
 
@@ -249,15 +314,20 @@ async function processDownload(
     const contentLength = parseInt(
       videoResponse.headers.get("content-length") || "0"
     );
+    addDebug(`Content-Length: ${contentLength} bytes (${(contentLength / 1024 / 1024).toFixed(2)} MB)`);
 
     // Stream the response to a buffer
     const reader = videoResponse.body?.getReader();
     if (!reader) {
+      addDebug("ERROR: Cannot get reader from response body");
       throw new Error("Cannot read video stream");
     }
 
     const chunks: Uint8Array[] = [];
     let downloadedBytes = 0;
+    let lastProgressLog = 0;
+
+    addDebug("Starting to read video stream...");
 
     while (true) {
       const { done, value } = await reader.read();
@@ -269,13 +339,23 @@ async function processDownload(
       // Update progress (20-80%)
       if (contentLength > 0) {
         const progress = 20 + (downloadedBytes / contentLength) * 60;
+        const roundedProgress = Math.round(progress);
+
+        // Log every 10%
+        if (roundedProgress >= lastProgressLog + 10) {
+          lastProgressLog = roundedProgress;
+          addDebug(`Download progress: ${roundedProgress}% (${(downloadedBytes / 1024 / 1024).toFixed(2)} MB)`);
+        }
+
         jobs.set(jobId, {
           ...jobs.get(jobId)!,
-          progress: Math.round(progress),
+          progress: roundedProgress,
           updatedAt: new Date().toISOString(),
         });
       }
     }
+
+    addDebug(`Download complete: ${(downloadedBytes / 1024 / 1024).toFixed(2)} MB total`);
 
     // Update status to processing
     jobs.set(jobId, {
@@ -286,6 +366,7 @@ async function processDownload(
     });
 
     // Combine chunks into buffer
+    addDebug("Combining chunks into buffer...");
     const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
     const uint8Array = new Uint8Array(totalLength);
     let offset = 0;
@@ -297,6 +378,7 @@ async function processDownload(
     // Convert to Buffer for Vercel Blob
     const videoBuffer = Buffer.from(uint8Array);
     const fileSize = videoBuffer.length;
+    addDebug(`Buffer created: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
 
     jobs.set(jobId, {
       ...jobs.get(jobId)!,
@@ -310,14 +392,15 @@ async function processDownload(
       .replace(/\s+/g, "-")
       .substring(0, 50);
 
-    const blob = await put(
-      `youtube-downloads/${userId}/${safeTitle}-${videoId}.mp4`,
-      videoBuffer,
-      {
-        access: "public",
-        contentType: "video/mp4",
-      }
-    );
+    const blobPath = `youtube-downloads/${userId}/${safeTitle}-${videoId}.mp4`;
+    addDebug(`Uploading to Vercel Blob: ${blobPath}`);
+
+    const blob = await put(blobPath, videoBuffer, {
+      access: "public",
+      contentType: "video/mp4",
+    });
+
+    addDebug(`Upload complete! Blob URL: ${blob.url}`);
 
     // Update job with completed status
     jobs.set(jobId, {
@@ -328,12 +411,21 @@ async function processDownload(
       fileSize,
       updatedAt: new Date().toISOString(),
     });
+
+    addDebug("Job completed successfully!");
   } catch (error) {
-    console.error("Download processing error:", error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[PROCESS:${jobId.slice(0, 8)}] ERROR:`, error);
+
+    const currentJob = jobs.get(jobId);
+    const debug = currentJob?.debug || [];
+    debug.push(`[${new Date().toISOString()}] FATAL ERROR: ${errorMsg}`);
+
     jobs.set(jobId, {
       ...jobs.get(jobId)!,
       status: "failed",
-      error: error instanceof Error ? error.message : "Download failed",
+      error: errorMsg,
+      debug,
       updatedAt: new Date().toISOString(),
     });
   }
