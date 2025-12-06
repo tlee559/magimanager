@@ -50,6 +50,12 @@ export async function PATCH(request: NextRequest) {
       decommissionAlertViaApp,
       decommissionAlertViaTelegram,
       decommissionAlertCustomMessage,
+      // Incomplete identity alert settings
+      incompleteIdentityAlertEnabled,
+      incompleteIdentityAlertViaApp,
+      incompleteIdentityAlertViaTelegram,
+      incompleteIdentityAlertOnCreate,
+      incompleteIdentityAlertDaily,
     } = body;
 
     if (warmupTargetSpend !== undefined && warmupTargetSpend < 1) {
@@ -91,6 +97,12 @@ export async function PATCH(request: NextRequest) {
           ...(decommissionAlertViaApp !== undefined && { decommissionAlertViaApp }),
           ...(decommissionAlertViaTelegram !== undefined && { decommissionAlertViaTelegram }),
           ...(decommissionAlertCustomMessage !== undefined && { decommissionAlertCustomMessage: decommissionAlertCustomMessage || null }),
+          // Incomplete identity alert settings
+          ...(incompleteIdentityAlertEnabled !== undefined && { incompleteIdentityAlertEnabled }),
+          ...(incompleteIdentityAlertViaApp !== undefined && { incompleteIdentityAlertViaApp }),
+          ...(incompleteIdentityAlertViaTelegram !== undefined && { incompleteIdentityAlertViaTelegram }),
+          ...(incompleteIdentityAlertOnCreate !== undefined && { incompleteIdentityAlertOnCreate }),
+          ...(incompleteIdentityAlertDaily !== undefined && { incompleteIdentityAlertDaily }),
         },
       });
     }

@@ -226,6 +226,13 @@ model AppSettings {
   decommissionAlertViaTelegram       Boolean @default(true)  // Send Telegram notification
   decommissionAlertCustomMessage     String? @db.Text        // Optional custom message to include in alerts
 
+  // Incomplete Identity Alert Settings
+  incompleteIdentityAlertEnabled     Boolean @default(true)  // Enable alerts for incomplete identity profiles
+  incompleteIdentityAlertViaApp      Boolean @default(true)  // Send in-app notification
+  incompleteIdentityAlertViaTelegram Boolean @default(true)  // Send Telegram notification
+  incompleteIdentityAlertOnCreate    Boolean @default(true)  // Alert when identity is first created incomplete
+  incompleteIdentityAlertDaily       Boolean @default(true)  // Daily reminder for incomplete identities
+
   // MCC (Manager Account) Connection
   mccCustomerId        String?   // MCC ID e.g., "7325688009" (no dashes, stored normalized)
   mccConnectionId      String?   // FK to GoogleAdsConnection for MCC OAuth tokens
@@ -365,6 +372,7 @@ enum NotificationType {
   SYSTEM_ALERT
   VIDEO_CLIP_COMPLETED
   IDENTITY_DECOMMISSIONED
+  IDENTITY_INCOMPLETE
 }
 
 model Notification {

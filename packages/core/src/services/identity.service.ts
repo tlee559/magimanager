@@ -6,6 +6,7 @@ import { identityRepository, type IdentityFindOptions, type IdentityWithRelation
 import { getPrisma, type ServiceResult } from "../repositories/base.repository";
 import type { IdentityCreateInput, IdentityUpdateInput, IdentityDocument } from "@magimanager/shared";
 import { fireIdentityArchivedAlert } from "./decommission-alert.service";
+import { checkIdentityCompleteness, fireIncompleteIdentityAlert } from "./incomplete-identity-alert.service";
 
 class IdentityService {
   async getById(id: string): Promise<ServiceResult<IdentityWithRelations>> {
@@ -45,6 +46,20 @@ class IdentityService {
 
       // Log activity
       await this.logActivity(identity.id, "CREATED", `Identity "${identity.fullName}" created`, userId);
+
+      // Check if identity is incomplete and fire alert
+      const completeness = await checkIdentityCompleteness(identity.id);
+      if (!completeness.isComplete) {
+        await fireIncompleteIdentityAlert(
+          {
+            identityId: identity.id,
+            identityName: identity.fullName,
+            missingItems: completeness.missingItems,
+            createdAt: identity.createdAt,
+          },
+          "created"
+        );
+      }
 
       return { success: true, data: identity };
     } catch (error) {

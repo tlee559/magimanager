@@ -16,3 +16,6 @@ export * from "./google-ads.service";
 
 // Decommission Alert Service - Alerts when identities lose all active accounts
 export * from "./decommission-alert.service";
+
+// Incomplete Identity Alert Service - Alerts when identity profiles are missing items
+export * from "./incomplete-identity-alert.service";

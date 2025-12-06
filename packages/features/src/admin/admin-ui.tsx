@@ -6325,6 +6325,12 @@ function SettingsView() {
   const [decommissionAlertViaApp, setDecommissionAlertViaApp] = useState(true);
   const [decommissionAlertViaTelegram, setDecommissionAlertViaTelegram] = useState(true);
   const [decommissionAlertCustomMessage, setDecommissionAlertCustomMessage] = useState<string>("");
+  // Incomplete identity alert settings
+  const [incompleteIdentityAlertEnabled, setIncompleteIdentityAlertEnabled] = useState(true);
+  const [incompleteIdentityAlertViaApp, setIncompleteIdentityAlertViaApp] = useState(true);
+  const [incompleteIdentityAlertViaTelegram, setIncompleteIdentityAlertViaTelegram] = useState(true);
+  const [incompleteIdentityAlertOnCreate, setIncompleteIdentityAlertOnCreate] = useState(true);
+  const [incompleteIdentityAlertDaily, setIncompleteIdentityAlertDaily] = useState(true);
   // Visibility toggles for API keys
   const [showGologinKey, setShowGologinKey] = useState(false);
   const [showGoogleAdsKey, setShowGoogleAdsKey] = useState(false);
@@ -6380,6 +6386,12 @@ function SettingsView() {
         setDecommissionAlertViaApp(data.decommissionAlertViaApp ?? true);
         setDecommissionAlertViaTelegram(data.decommissionAlertViaTelegram ?? true);
         setDecommissionAlertCustomMessage(data.decommissionAlertCustomMessage || "");
+        // Incomplete identity alert settings
+        setIncompleteIdentityAlertEnabled(data.incompleteIdentityAlertEnabled ?? true);
+        setIncompleteIdentityAlertViaApp(data.incompleteIdentityAlertViaApp ?? true);
+        setIncompleteIdentityAlertViaTelegram(data.incompleteIdentityAlertViaTelegram ?? true);
+        setIncompleteIdentityAlertOnCreate(data.incompleteIdentityAlertOnCreate ?? true);
+        setIncompleteIdentityAlertDaily(data.incompleteIdentityAlertDaily ?? true);
       }
     } catch (error) {
       console.error("Failed to fetch settings:", error);
@@ -6488,6 +6500,12 @@ function SettingsView() {
           decommissionAlertViaApp,
           decommissionAlertViaTelegram,
           decommissionAlertCustomMessage,
+          // Incomplete identity alert settings
+          incompleteIdentityAlertEnabled,
+          incompleteIdentityAlertViaApp,
+          incompleteIdentityAlertViaTelegram,
+          incompleteIdentityAlertOnCreate,
+          incompleteIdentityAlertDaily,
         }),
       });
 
@@ -6947,6 +6965,86 @@ function SettingsView() {
               <p className="text-xs text-slate-500">
                 This message will be appended to all decommission alerts
               </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Incomplete Identity Alerts Section */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-100">
+                Incomplete Identity Alerts
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Get notified when identity profiles are missing documents, website, or GoLogin profile
+              </p>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <span className="text-xs text-slate-400">Enabled</span>
+              <input
+                type="checkbox"
+                checked={incompleteIdentityAlertEnabled}
+                onChange={(e) => setIncompleteIdentityAlertEnabled(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+              />
+            </label>
+          </div>
+
+          <div className={`space-y-4 ${!incompleteIdentityAlertEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide">
+                Triggers
+              </label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={incompleteIdentityAlertOnCreate}
+                    onChange={(e) => setIncompleteIdentityAlertOnCreate(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-200">When identity is first created</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={incompleteIdentityAlertDaily}
+                    onChange={(e) => setIncompleteIdentityAlertDaily(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-200">Daily reminder until complete</span>
+                </label>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Missing items: Documents, Website, GoLogin Profile
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide">
+                Notify via
+              </label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={incompleteIdentityAlertViaApp}
+                    onChange={(e) => setIncompleteIdentityAlertViaApp(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-200">In-app notification</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={incompleteIdentityAlertViaTelegram}
+                    onChange={(e) => setIncompleteIdentityAlertViaTelegram(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-200">Telegram bot</span>
+                </label>
+              </div>
             </div>
           </div>
         </div>
