@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
-import { getGoLoginClientFromSettings } from "@magimanager/core";
+import { getGoLoginClientFromSettings, fireIdentityProgressAlert } from "@magimanager/core";
 
 // GET - Get GoLogin profile for an identity
 export async function GET(
@@ -163,6 +163,16 @@ export async function POST(
           createdBy: currentUserId,
         },
       });
+
+      // Fire progress alert for GoLogin profile created
+      if (profileStatus === "ready") {
+        await fireIdentityProgressAlert({
+          identityId: identity.id,
+          identityName: identity.fullName,
+          progressType: "gologin_created",
+          details: profileName,
+        });
+      }
 
       return NextResponse.json({
         success: true,

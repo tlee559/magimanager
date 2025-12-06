@@ -6305,7 +6305,7 @@ function SystemView() {
 // SETTINGS VIEW
 // ============================================================================
 
-type SettingsTab = "general" | "google-ads" | "integrations";
+type SettingsTab = "general" | "google-ads" | "notifications" | "integrations";
 
 function SettingsView() {
   const { showSuccess, showError } = useModal();
@@ -6331,6 +6331,14 @@ function SettingsView() {
   const [incompleteIdentityAlertViaTelegram, setIncompleteIdentityAlertViaTelegram] = useState(true);
   const [incompleteIdentityAlertOnCreate, setIncompleteIdentityAlertOnCreate] = useState(true);
   const [incompleteIdentityAlertDaily, setIncompleteIdentityAlertDaily] = useState(true);
+  // Identity progress alert settings
+  const [identityProgressAlertEnabled, setIdentityProgressAlertEnabled] = useState(true);
+  const [identityProgressAlertViaApp, setIdentityProgressAlertViaApp] = useState(true);
+  const [identityProgressAlertViaTelegram, setIdentityProgressAlertViaTelegram] = useState(true);
+  const [identityProgressAlertOnDocAdded, setIdentityProgressAlertOnDocAdded] = useState(true);
+  const [identityProgressAlertOnWebsiteAdded, setIdentityProgressAlertOnWebsiteAdded] = useState(true);
+  const [identityProgressAlertOnGologinCreated, setIdentityProgressAlertOnGologinCreated] = useState(true);
+  const [identityProgressAlertOnAccountLinked, setIdentityProgressAlertOnAccountLinked] = useState(true);
   // Visibility toggles for API keys
   const [showGologinKey, setShowGologinKey] = useState(false);
   const [showGoogleAdsKey, setShowGoogleAdsKey] = useState(false);
@@ -6392,6 +6400,14 @@ function SettingsView() {
         setIncompleteIdentityAlertViaTelegram(data.incompleteIdentityAlertViaTelegram ?? true);
         setIncompleteIdentityAlertOnCreate(data.incompleteIdentityAlertOnCreate ?? true);
         setIncompleteIdentityAlertDaily(data.incompleteIdentityAlertDaily ?? true);
+        // Identity progress alert settings
+        setIdentityProgressAlertEnabled(data.identityProgressAlertEnabled ?? true);
+        setIdentityProgressAlertViaApp(data.identityProgressAlertViaApp ?? true);
+        setIdentityProgressAlertViaTelegram(data.identityProgressAlertViaTelegram ?? true);
+        setIdentityProgressAlertOnDocAdded(data.identityProgressAlertOnDocAdded ?? true);
+        setIdentityProgressAlertOnWebsiteAdded(data.identityProgressAlertOnWebsiteAdded ?? true);
+        setIdentityProgressAlertOnGologinCreated(data.identityProgressAlertOnGologinCreated ?? true);
+        setIdentityProgressAlertOnAccountLinked(data.identityProgressAlertOnAccountLinked ?? true);
       }
     } catch (error) {
       console.error("Failed to fetch settings:", error);
@@ -6506,6 +6522,14 @@ function SettingsView() {
           incompleteIdentityAlertViaTelegram,
           incompleteIdentityAlertOnCreate,
           incompleteIdentityAlertDaily,
+          // Identity progress alert settings
+          identityProgressAlertEnabled,
+          identityProgressAlertViaApp,
+          identityProgressAlertViaTelegram,
+          identityProgressAlertOnDocAdded,
+          identityProgressAlertOnWebsiteAdded,
+          identityProgressAlertOnGologinCreated,
+          identityProgressAlertOnAccountLinked,
         }),
       });
 
@@ -6539,6 +6563,7 @@ function SettingsView() {
   const tabs: { id: SettingsTab; label: string }[] = [
     { id: "general", label: "General" },
     { id: "google-ads", label: "Google Ads" },
+    { id: "notifications", label: "Notifications" },
     { id: "integrations", label: "Integrations" },
   ];
 
@@ -6756,11 +6781,35 @@ function SettingsView() {
           </div>
         </div>
 
+        <div className="pt-2">
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-lg bg-emerald-500 px-6 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400 transition disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save Settings"}
+          </button>
+        </div>
+
+        {settings && (
+          <p className="text-xs text-slate-500">
+            Last updated: {new Date(settings.updatedAt).toLocaleString()}
+          </p>
+        )}
+      </form>
+      )}
+
+      {/* Notifications Tab */}
+      {activeTab === "notifications" && (
+      <form
+        onSubmit={handleSave}
+        className="max-w-2xl space-y-6"
+      >
         {/* Telegram Bot Settings */}
-        <div>
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
           <div className="flex items-center gap-2 mb-4">
             <h2 className="text-sm font-semibold text-slate-100">
-              Telegram Notifications
+              Telegram Bot Configuration
             </h2>
             <div className="group relative">
               <span className="text-slate-400 cursor-help text-sm">ⓘ</span>
@@ -6822,8 +6871,8 @@ function SettingsView() {
           </div>
         </div>
 
-        {/* Decommission Alerts Settings */}
-        <div>
+        {/* Decommission Alerts */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
           <div className="flex items-center gap-2 mb-4">
             <h2 className="text-sm font-semibold text-slate-100">
               Decommission Alerts
@@ -6917,7 +6966,7 @@ function SettingsView() {
           </div>
         </div>
 
-        {/* Incomplete Identity Alerts Section */}
+        {/* Incomplete Identity Alerts */}
         <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
           <div className="flex items-start justify-between mb-4">
             <div>
@@ -6988,6 +7037,101 @@ function SettingsView() {
                     type="checkbox"
                     checked={incompleteIdentityAlertViaTelegram}
                     onChange={(e) => setIncompleteIdentityAlertViaTelegram(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-200">Telegram bot</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Identity Progress Alerts */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-100">
+                Identity Progress Alerts
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Get notified when items are added to identity profiles
+              </p>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <span className="text-xs text-slate-400">Enabled</span>
+              <input
+                type="checkbox"
+                checked={identityProgressAlertEnabled}
+                onChange={(e) => setIdentityProgressAlertEnabled(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+              />
+            </label>
+          </div>
+
+          <div className={`space-y-4 ${!identityProgressAlertEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide">
+                Triggers
+              </label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={identityProgressAlertOnDocAdded}
+                    onChange={(e) => setIdentityProgressAlertOnDocAdded(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-200">Document uploaded</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={identityProgressAlertOnWebsiteAdded}
+                    onChange={(e) => setIdentityProgressAlertOnWebsiteAdded(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-200">Website added</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={identityProgressAlertOnGologinCreated}
+                    onChange={(e) => setIdentityProgressAlertOnGologinCreated(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-200">GoLogin profile created</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={identityProgressAlertOnAccountLinked}
+                    onChange={(e) => setIdentityProgressAlertOnAccountLinked(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-200">Ad account linked</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide">
+                Notify via
+              </label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={identityProgressAlertViaApp}
+                    onChange={(e) => setIdentityProgressAlertViaApp(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-200">In-app notification</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={identityProgressAlertViaTelegram}
+                    onChange={(e) => setIdentityProgressAlertViaTelegram(e.target.checked)}
                     className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
                   />
                   <span className="text-sm text-slate-200">Telegram bot</span>

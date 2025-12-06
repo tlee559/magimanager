@@ -18,6 +18,7 @@ import type {
   AlertType,
 } from "@magimanager/shared";
 import { checkAndFireDecommissionAlert } from "./decommission-alert.service";
+import { fireIdentityProgressAlert } from "./identity-progress-alert.service";
 import { createCustomerClient } from "./google-ads.service";
 import { decryptToken } from "./oauth.service";
 import { getPrisma } from "../repositories/base.repository";
@@ -212,6 +213,19 @@ class AccountService {
         { ...data, identityProfileId: identityId, googleCid },
         userId
       );
+
+      // Fire progress alert if account was linked to an identity
+      if (identityId) {
+        const identity = await identityRepository.findById(identityId);
+        if (identity) {
+          await fireIdentityProgressAlert({
+            identityId,
+            identityName: identity.fullName,
+            progressType: "account_linked",
+            details: account.googleCid || `#${account.internalId}`,
+          });
+        }
+      }
 
       return { success: true, data: account };
     } catch (error) {

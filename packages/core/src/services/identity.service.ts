@@ -7,6 +7,7 @@ import { getPrisma, type ServiceResult } from "../repositories/base.repository";
 import type { IdentityCreateInput, IdentityUpdateInput, IdentityDocument } from "@magimanager/shared";
 import { fireIdentityArchivedAlert } from "./decommission-alert.service";
 import { checkIdentityCompleteness, fireIncompleteIdentityAlert } from "./incomplete-identity-alert.service";
+import { fireIdentityProgressAlert } from "./identity-progress-alert.service";
 
 class IdentityService {
   async getById(id: string): Promise<ServiceResult<IdentityWithRelations>> {
@@ -84,6 +85,16 @@ class IdentityService {
 
       // Log activity
       await this.logActivity(id, "UPDATED", "Identity profile updated", userId);
+
+      // Fire progress alert if website was added (was empty, now has value)
+      if (!existing.website && identity.website) {
+        await fireIdentityProgressAlert({
+          identityId: id,
+          identityName: identity.fullName,
+          progressType: "website_added",
+          details: identity.website,
+        });
+      }
 
       return { success: true, data: identity };
     } catch (error) {
@@ -164,6 +175,14 @@ class IdentityService {
 
       const document = await identityRepository.addDocument(identityId, type, filePath);
       await this.logActivity(identityId, "DOCUMENT_UPLOADED", `Document uploaded: ${type}`, userId);
+
+      // Fire progress alert for document added
+      await fireIdentityProgressAlert({
+        identityId,
+        identityName: existing.fullName,
+        progressType: "document_added",
+        details: type,
+      });
 
       return { success: true, data: document };
     } catch (error) {

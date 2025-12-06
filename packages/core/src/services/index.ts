@@ -19,3 +19,6 @@ export * from "./decommission-alert.service";
 
 // Incomplete Identity Alert Service - Alerts when identity profiles are missing items
 export * from "./incomplete-identity-alert.service";
+
+// Identity Progress Alert Service - Alerts when items are added to identity profiles
+export * from "./identity-progress-alert.service";

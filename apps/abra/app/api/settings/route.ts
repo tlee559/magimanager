@@ -56,6 +56,14 @@ export async function PATCH(request: NextRequest) {
       incompleteIdentityAlertViaTelegram,
       incompleteIdentityAlertOnCreate,
       incompleteIdentityAlertDaily,
+      // Identity progress alert settings
+      identityProgressAlertEnabled,
+      identityProgressAlertViaApp,
+      identityProgressAlertViaTelegram,
+      identityProgressAlertOnDocAdded,
+      identityProgressAlertOnWebsiteAdded,
+      identityProgressAlertOnGologinCreated,
+      identityProgressAlertOnAccountLinked,
     } = body;
 
     if (warmupTargetSpend !== undefined && warmupTargetSpend < 1) {
@@ -103,6 +111,14 @@ export async function PATCH(request: NextRequest) {
           ...(incompleteIdentityAlertViaTelegram !== undefined && { incompleteIdentityAlertViaTelegram }),
           ...(incompleteIdentityAlertOnCreate !== undefined && { incompleteIdentityAlertOnCreate }),
           ...(incompleteIdentityAlertDaily !== undefined && { incompleteIdentityAlertDaily }),
+          // Identity progress alert settings
+          ...(identityProgressAlertEnabled !== undefined && { identityProgressAlertEnabled }),
+          ...(identityProgressAlertViaApp !== undefined && { identityProgressAlertViaApp }),
+          ...(identityProgressAlertViaTelegram !== undefined && { identityProgressAlertViaTelegram }),
+          ...(identityProgressAlertOnDocAdded !== undefined && { identityProgressAlertOnDocAdded }),
+          ...(identityProgressAlertOnWebsiteAdded !== undefined && { identityProgressAlertOnWebsiteAdded }),
+          ...(identityProgressAlertOnGologinCreated !== undefined && { identityProgressAlertOnGologinCreated }),
+          ...(identityProgressAlertOnAccountLinked !== undefined && { identityProgressAlertOnAccountLinked }),
         },
       });
     }

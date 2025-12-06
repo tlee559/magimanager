@@ -233,6 +233,15 @@ model AppSettings {
   incompleteIdentityAlertOnCreate    Boolean @default(true)  // Alert when identity is first created incomplete
   incompleteIdentityAlertDaily       Boolean @default(true)  // Daily reminder for incomplete identities
 
+  // Identity Progress Alert Settings (notify when items are added to identity)
+  identityProgressAlertEnabled       Boolean @default(true)  // Enable alerts for identity progress
+  identityProgressAlertViaApp        Boolean @default(true)  // Send in-app notification
+  identityProgressAlertViaTelegram   Boolean @default(true)  // Send Telegram notification
+  identityProgressAlertOnDocAdded    Boolean @default(true)  // Alert when document is added
+  identityProgressAlertOnWebsiteAdded Boolean @default(true) // Alert when website is added
+  identityProgressAlertOnGologinCreated Boolean @default(true) // Alert when GoLogin profile is created
+  identityProgressAlertOnAccountLinked Boolean @default(true) // Alert when ad account is linked
+
   // MCC (Manager Account) Connection
   mccCustomerId        String?   // MCC ID e.g., "7325688009" (no dashes, stored normalized)
   mccConnectionId      String?   // FK to GoogleAdsConnection for MCC OAuth tokens
@@ -373,6 +382,7 @@ enum NotificationType {
   VIDEO_CLIP_COMPLETED
   IDENTITY_DECOMMISSIONED
   IDENTITY_INCOMPLETE
+  IDENTITY_PROGRESS
 }
 
 model Notification {
