@@ -506,22 +506,9 @@ export function AdminApp({
     if (userRole === "SUPER_ADMIN" || userRole === "ADMIN" || userRole === "MANAGER") {
       items.push(
         { id: "ad-accounts" as View, label: "Account Profiles", icon: "💳" },
-        { id: "identities" as View, label: "ID Profiles", icon: "👥" },
-        { id: "admin-requests" as View, label: "Account Requests", icon: "📥" }
+        { id: "identities" as View, label: "ID Profiles", icon: "👥" }
       );
     }
-
-    // Super Admin, Admin, and Media Buyer get My Accounts view
-    if (userRole === "SUPER_ADMIN" || userRole === "ADMIN" || userRole === "MEDIA_BUYER") {
-      items.push(
-        { id: "my-accounts" as View, label: "My Accounts", icon: "💼" }
-      );
-    }
-
-    // All users can see "My Requests"
-    items.push(
-      { id: "requests" as View, label: "My Requests", icon: "📝" }
-    );
 
     // SMS Dashboard - Super Admin and Admin only (Coming Soon teaser)
     if (userRole === "SUPER_ADMIN" || userRole === "ADMIN") {
@@ -537,6 +524,25 @@ export function AdminApp({
         { id: "team" as View, label: "Team", icon: "👨‍👩‍👧‍👦" }
       );
     }
+
+    // Account Requests - for admins and managers
+    if (userRole === "SUPER_ADMIN" || userRole === "ADMIN" || userRole === "MANAGER") {
+      items.push(
+        { id: "admin-requests" as View, label: "Account Requests", icon: "📥" }
+      );
+    }
+
+    // Super Admin, Admin, and Media Buyer get My Accounts view
+    if (userRole === "SUPER_ADMIN" || userRole === "ADMIN" || userRole === "MEDIA_BUYER") {
+      items.push(
+        { id: "my-accounts" as View, label: "My Accounts", icon: "💼" }
+      );
+    }
+
+    // All users can see "My Requests"
+    items.push(
+      { id: "requests" as View, label: "My Requests", icon: "📝" }
+    );
 
     // Settings always last for admins/managers
     if (userRole === "SUPER_ADMIN" || userRole === "ADMIN" || userRole === "MANAGER") {
