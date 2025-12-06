@@ -8364,8 +8364,7 @@ function TutorialView() {
     { id: "create-gologin-profile", title: "Create GoLogin Profile", icon: "🌐", step: 6 },
     { id: "ad-accounts-intro", title: "What are Ad Accounts?", icon: "💳", step: 7 },
     { id: "create-ad-account", title: "Create Ad Account Profile", icon: "➕", step: 8 },
-    { id: "link-id-to-account", title: "Link ID to Ad Account", icon: "🔗", step: 9 },
-    { id: "oauth-connection", title: "Connect via OAuth", icon: "🔐", step: 10 },
+    { id: "oauth-connection", title: "Connect via OAuth", icon: "🔐", step: 9 },
   ];
 
   return (
@@ -8737,91 +8736,6 @@ function TutorialView() {
             </div>
           )}
 
-          {activeSection === "link-id-to-account" && (
-            <div>
-              <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center gap-3">
-                <span className="text-3xl">🔗</span>
-                How to Connect ID Profiles to Ad Accounts
-              </h2>
-              <p className="text-slate-300 mb-6 leading-relaxed">
-                Linking an ID Profile to an Ad Account establishes which identity &quot;owns&quot; that advertising account.
-                This connection is essential for account management and verification.
-              </p>
-
-              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6">
-                <p className="text-amber-300 flex items-start gap-2">
-                  <span className="text-xl">⚠️</span>
-                  <span>You must create an ID Profile first before you can connect it to an Ad Account.</span>
-                </p>
-              </div>
-
-              <div className="space-y-6">
-                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
-                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
-                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">1</span>
-                    Go to Account Profiles
-                  </h3>
-                  <p className="text-slate-300">
-                    Navigate to <span className="text-emerald-400 font-semibold">Account Profiles</span> in the sidebar.
-                  </p>
-                  <ScreenshotPlaceholder
-                    name="screenshot-account-profiles-sidebar.png"
-                    description="Sidebar with Account Profiles highlighted"
-                  />
-                </div>
-
-                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
-                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
-                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">2</span>
-                    Select an Ad Account
-                  </h3>
-                  <p className="text-slate-300">
-                    Find the Ad Account you want to link and click on it to open the details panel.
-                  </p>
-                  <ScreenshotPlaceholder
-                    name="screenshot-account-profiles-list.png"
-                    description="Account Profiles list page"
-                  />
-                </div>
-
-                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
-                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
-                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">3</span>
-                    Link to ID Profile
-                  </h3>
-                  <p className="text-slate-300 mb-3">
-                    In the Ad Account details, find the <span className="text-white font-semibold">&quot;ID Profile&quot;</span> dropdown
-                    and select the ID Profile you want to associate with this account.
-                  </p>
-                  <ScreenshotPlaceholder
-                    name="screenshot-ad-account-id-profile-dropdown.png"
-                    description="Ad Account detail showing ID Profile dropdown"
-                  />
-                  <div className="bg-slate-900 rounded-lg p-4 border border-slate-600">
-                    <p className="text-sm text-slate-400">
-                      <span className="text-emerald-400">Tip:</span> Choose an ID Profile that matches the geographic location and identity used to create the ad account.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
-                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
-                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">4</span>
-                    Save Changes
-                  </h3>
-                  <p className="text-slate-300">
-                    Click <span className="text-emerald-400 font-semibold">Save</span> to confirm the connection.
-                    The ID Profile will now be linked to this Ad Account.
-                  </p>
-                  <ScreenshotPlaceholder
-                    name="screenshot-ad-account-linked-success.png"
-                    description="Ad Account showing linked ID Profile"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
           {activeSection === "ad-accounts-intro" && (
             <div>
               <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center gap-3">
@@ -8966,8 +8880,8 @@ function TutorialView() {
               <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 mt-6">
                 <h4 className="text-emerald-300 font-semibold mb-2">What&apos;s Next?</h4>
                 <p className="text-emerald-200/80 text-sm">
-                  After creating your Ad Account Profile, the next step is to link it to an ID Profile.
-                  Continue to Step 9 to learn how to link them together.
+                  After creating your Ad Account Profile, the next step is to connect it via OAuth.
+                  Continue to Step 9 to learn how to set up the OAuth connection.
                 </p>
               </div>
             </div>
