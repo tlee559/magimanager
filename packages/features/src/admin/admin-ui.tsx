@@ -200,7 +200,7 @@ type Notification = {
   createdAt: Date;
 };
 
-export type View = "dashboard" | "identities" | "create-identity" | "identity-detail" | "edit-identity" | "ad-accounts" | "team" | "settings" | "my-accounts" | "requests" | "admin-requests" | "system" | "sms-dashboard" | "authenticator";
+export type View = "dashboard" | "identities" | "create-identity" | "identity-detail" | "edit-identity" | "ad-accounts" | "team" | "settings" | "my-accounts" | "requests" | "admin-requests" | "system" | "sms-dashboard" | "authenticator" | "tutorial";
 
 // ============================================================================
 // LOGO COMPONENT
@@ -243,6 +243,7 @@ const VIEW_TO_PATH: Record<View, string> = {
   "system": "/admin/system",
   "sms-dashboard": "/admin/sms",
   "authenticator": "/admin/authenticator",
+  "tutorial": "/admin/tutorial",
 };
 
 const PATH_TO_VIEW: Record<string, View> = {
@@ -261,6 +262,7 @@ const PATH_TO_VIEW: Record<string, View> = {
   "/admin/system": "system",
   "/admin/sms": "sms-dashboard",
   "/admin/authenticator": "authenticator",
+  "/admin/tutorial": "tutorial",
 };
 
 function getViewFromPath(pathname: string): View {
@@ -521,13 +523,6 @@ export function AdminApp({
     if (userRole === "SUPER_ADMIN" || userRole === "ADMIN" || userRole === "MANAGER") {
       items.push(
         { id: "authenticator" as View, label: "Authenticator", icon: "🔐" }
-      );
-    }
-
-    // Only Super Admin gets the System view
-    if (userRole === "SUPER_ADMIN") {
-      items.push(
-        { id: "system" as View, label: "System", icon: "🔧" }
       );
     }
 
@@ -821,6 +816,18 @@ export function AdminApp({
                         </svg>
                         Settings
                       </button>
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          setView("tutorial");
+                        }}
+                        className="w-full px-4 py-2.5 text-left text-sm text-slate-200 hover:bg-slate-800 transition flex items-center gap-3"
+                      >
+                        <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                        </svg>
+                        Tutorial &amp; Guides
+                      </button>
                     </div>
                     <div className="border-t border-slate-800 py-1">
                       <button
@@ -944,6 +951,7 @@ export function AdminApp({
                 setView("identity-detail");
               }} />
             )}
+            {view === "tutorial" && <TutorialView />}
           </div>
         </div>
       </main>
@@ -6305,7 +6313,7 @@ function SystemView() {
 // SETTINGS VIEW
 // ============================================================================
 
-type SettingsTab = "general" | "google-ads" | "notifications" | "integrations";
+type SettingsTab = "general" | "google-ads" | "notifications" | "integrations" | "system";
 
 function SettingsView() {
   const { showSuccess, showError } = useModal();
@@ -6565,6 +6573,7 @@ function SettingsView() {
     { id: "google-ads", label: "Google Ads" },
     { id: "notifications", label: "Notifications" },
     { id: "integrations", label: "Integrations" },
+    { id: "system", label: "System" },
   ];
 
   return (
@@ -7208,6 +7217,11 @@ function SettingsView() {
           </div>
         </div>
       </div>
+      )}
+
+      {/* System Tab - Renders the existing SystemView component */}
+      {activeTab === "system" && (
+        <SystemView />
       )}
     </>
   );
@@ -8181,6 +8195,887 @@ function FirstLoginPasswordChangeModal({ onSuccess }: { onSuccess: () => void })
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// TUTORIAL VIEW
+// ============================================================================
+
+type TutorialSection =
+  | "overview"
+  | "gologin-setup"
+  | "id-profiles"
+  | "connect-id-to-accounts"
+  | "ad-account-profiles"
+  | "gologin-for-id-profiles"
+  | "oauth-connection"
+  | "upload-docs"
+  | "add-website";
+
+// Screenshot placeholder component
+function ScreenshotPlaceholder({ name, description }: { name: string; description: string }) {
+  return (
+    <div className="my-4 border-2 border-dashed border-slate-600 rounded-xl p-6 bg-slate-800/30">
+      <div className="flex flex-col items-center justify-center text-center">
+        <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center mb-3">
+          <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        </div>
+        <p className="text-slate-300 font-medium mb-1">{description}</p>
+        <p className="text-xs text-slate-500 font-mono bg-slate-900 px-2 py-1 rounded">{name}</p>
+      </div>
+    </div>
+  );
+}
+
+function TutorialView() {
+  const [activeSection, setActiveSection] = useState<TutorialSection>("overview");
+
+  const sections: { id: TutorialSection; title: string; icon: string }[] = [
+    { id: "overview", title: "Getting Started", icon: "🚀" },
+    { id: "gologin-setup", title: "Install GoLogin Desktop", icon: "💻" },
+    { id: "id-profiles", title: "What are ID Profiles?", icon: "👤" },
+    { id: "connect-id-to-accounts", title: "Connect ID Profiles to Ad Accounts", icon: "🔗" },
+    { id: "ad-account-profiles", title: "What are Ad Account Profiles?", icon: "💳" },
+    { id: "gologin-for-id-profiles", title: "Create GoLogin Profiles for ID Profiles", icon: "🌐" },
+    { id: "oauth-connection", title: "Connect Ad Profiles via OAuth", icon: "🔐" },
+    { id: "upload-docs", title: "Upload ID Profile Documents", icon: "📄" },
+    { id: "add-website", title: "Add a Website", icon: "🌍" },
+  ];
+
+  return (
+    <div className="flex gap-6 h-full">
+      {/* Sidebar Navigation */}
+      <div className="w-72 flex-shrink-0">
+        <div className="bg-slate-900 rounded-xl border border-slate-800 p-4">
+          <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
+            Tutorial Sections
+          </h3>
+          <nav className="space-y-1">
+            {sections.map((section) => (
+              <button
+                key={section.id}
+                onClick={() => setActiveSection(section.id)}
+                className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition ${
+                  activeSection === section.id
+                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                }`}
+              >
+                <span className="text-base">{section.icon}</span>
+                <span>{section.title}</span>
+              </button>
+            ))}
+          </nav>
+        </div>
+      </div>
+
+      {/* Content Area */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="bg-slate-900 rounded-xl border border-slate-800 p-8">
+          {activeSection === "overview" && (
+            <div>
+              <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center gap-3">
+                <span className="text-3xl">🚀</span>
+                Getting Started with Magimanager
+              </h2>
+              <p className="text-slate-300 mb-6 leading-relaxed">
+                Welcome to Magimanager! This tutorial will guide you through setting up your account management system.
+                Follow these steps in order to properly configure everything.
+              </p>
+
+              <ScreenshotPlaceholder
+                name="screenshot-overview-dashboard.png"
+                description="Magimanager Dashboard Overview"
+              />
+
+              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 mb-6">
+                <h3 className="text-lg font-semibold text-slate-200 mb-4">Before You Begin</h3>
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <span className="text-emerald-400 mt-0.5">✓</span>
+                    <p className="text-slate-300">Make sure you have access to the master Gmail account: <span className="text-emerald-400 font-mono">admin@automatedaa.com</span></p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="text-emerald-400 mt-0.5">✓</span>
+                    <p className="text-slate-300">You&apos;ll need to download and install GoLogin Desktop application</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="text-emerald-400 mt-0.5">✓</span>
+                    <p className="text-slate-300">Have your ID profile documents ready (driver&apos;s license, SSN card, etc.)</p>
+                  </div>
+                </div>
+              </div>
+
+              <h3 className="text-lg font-semibold text-slate-200 mb-3">Workflow Overview</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-slate-800/30 border border-slate-700/50 rounded-lg p-4">
+                  <div className="text-2xl mb-2">1️⃣</div>
+                  <h4 className="font-semibold text-slate-200 mb-1">Set Up GoLogin</h4>
+                  <p className="text-sm text-slate-400">Install GoLogin and log in with the master account</p>
+                </div>
+                <div className="bg-slate-800/30 border border-slate-700/50 rounded-lg p-4">
+                  <div className="text-2xl mb-2">2️⃣</div>
+                  <h4 className="font-semibold text-slate-200 mb-1">Create ID Profiles</h4>
+                  <p className="text-sm text-slate-400">Set up identity profiles in Magimanager</p>
+                </div>
+                <div className="bg-slate-800/30 border border-slate-700/50 rounded-lg p-4">
+                  <div className="text-2xl mb-2">3️⃣</div>
+                  <h4 className="font-semibold text-slate-200 mb-1">Connect Everything</h4>
+                  <p className="text-sm text-slate-400">Link profiles to Ad Accounts via OAuth</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeSection === "gologin-setup" && (
+            <div>
+              <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center gap-3">
+                <span className="text-3xl">💻</span>
+                Installing GoLogin Desktop
+              </h2>
+              <p className="text-slate-300 mb-6 leading-relaxed">
+                Before you can create GoLogin profiles on Magimanager.com, you need to download and install the GoLogin desktop application.
+              </p>
+
+              <div className="space-y-6">
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">1</span>
+                    Download GoLogin
+                  </h3>
+                  <p className="text-slate-300 mb-3">
+                    Go to <span className="text-emerald-400 font-mono">gologin.com</span> and download the desktop application for your operating system (Windows or Mac).
+                  </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-gologin-download-page.png"
+                    description="GoLogin website download page"
+                  />
+                  <div className="bg-slate-900 rounded-lg p-4 border border-slate-600">
+                    <p className="text-sm text-slate-400">
+                      <span className="text-amber-400">Note:</span> Make sure to download the official version from gologin.com
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">2</span>
+                    Install the Application
+                  </h3>
+                  <p className="text-slate-300">
+                    Run the installer and follow the on-screen instructions to complete the installation.
+                  </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-gologin-installer.png"
+                    description="GoLogin installation wizard"
+                  />
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">3</span>
+                    Login to Master Gmail Account
+                  </h3>
+                  <p className="text-slate-300 mb-3">
+                    First, open your browser and login to Gmail with the master account:
+                  </p>
+                  <div className="bg-slate-900 rounded-lg p-4 border border-emerald-500/30">
+                    <p className="text-emerald-400 font-mono text-lg">admin@automatedaa.com</p>
+                  </div>
+                  <ScreenshotPlaceholder
+                    name="screenshot-gmail-login.png"
+                    description="Gmail login page with master account"
+                  />
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">4</span>
+                    Login to GoLogin with Gmail
+                  </h3>
+                  <p className="text-slate-300 mb-3">
+                    Open the GoLogin desktop app and click <span className="text-white font-semibold">&quot;Sign in with Google&quot;</span>.
+                    Select the master Gmail account you just logged into.
+                  </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-gologin-signin-button.png"
+                    description="GoLogin app showing Sign in with Google button"
+                  />
+                  <ScreenshotPlaceholder
+                    name="screenshot-gologin-google-account-select.png"
+                    description="Google account selection popup"
+                  />
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">5</span>
+                    View All Accounts
+                  </h3>
+                  <p className="text-slate-300">
+                    Once logged in, you can now view all browser profiles/accounts that were created.
+                    These profiles maintain separate browser fingerprints and sessions for each identity.
+                  </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-gologin-profiles-list.png"
+                    description="GoLogin main dashboard showing all browser profiles"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeSection === "id-profiles" && (
+            <div>
+              <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center gap-3">
+                <span className="text-3xl">👤</span>
+                What are ID Profiles?
+              </h2>
+
+              <div className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/30 rounded-xl p-6 mb-6">
+                <p className="text-slate-200 text-lg leading-relaxed">
+                  An <span className="text-indigo-400 font-semibold">ID Profile</span> represents a unique identity used to manage Google Ads accounts.
+                  Each ID Profile contains personal information, credentials, and documents needed to verify and operate ad accounts.
+                </p>
+              </div>
+
+              <h3 className="text-lg font-semibold text-slate-200 mb-4">What&apos;s Included in an ID Profile</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                  <h4 className="font-semibold text-slate-200 mb-2 flex items-center gap-2">
+                    <span>📋</span> Personal Information
+                  </h4>
+                  <ul className="text-sm text-slate-400 space-y-1">
+                    <li>• Full legal name</li>
+                    <li>• Date of birth</li>
+                    <li>• Address (street, city, state, zip)</li>
+                    <li>• Geographic location (GEO)</li>
+                  </ul>
+                </div>
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                  <h4 className="font-semibold text-slate-200 mb-2 flex items-center gap-2">
+                    <span>🔐</span> Credentials
+                  </h4>
+                  <ul className="text-sm text-slate-400 space-y-1">
+                    <li>• Email address</li>
+                    <li>• Email password</li>
+                    <li>• Phone number</li>
+                    <li>• 2FA secret & backup codes</li>
+                  </ul>
+                </div>
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                  <h4 className="font-semibold text-slate-200 mb-2 flex items-center gap-2">
+                    <span>💳</span> Billing Information
+                  </h4>
+                  <ul className="text-sm text-slate-400 space-y-1">
+                    <li>• Credit card number</li>
+                    <li>• Expiration date</li>
+                    <li>• CVV</li>
+                    <li>• Billing zip code</li>
+                  </ul>
+                </div>
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                  <h4 className="font-semibold text-slate-200 mb-2 flex items-center gap-2">
+                    <span>📄</span> Documents
+                  </h4>
+                  <ul className="text-sm text-slate-400 space-y-1">
+                    <li>• Driver&apos;s license</li>
+                    <li>• SSN card</li>
+                    <li>• Utility bills</li>
+                    <li>• Other verification docs</li>
+                  </ul>
+                </div>
+              </div>
+
+              <h3 className="text-lg font-semibold text-slate-200 mb-4">How to Create an ID Profile</h3>
+              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                <ol className="space-y-4">
+                  <li className="flex items-start gap-3">
+                    <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">1</span>
+                    <div>
+                      <p className="text-slate-200">Navigate to <span className="text-emerald-400 font-semibold">ID Profiles</span> in the sidebar</p>
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">2</span>
+                    <div>
+                      <p className="text-slate-200">Click the <span className="text-emerald-400 font-semibold">+ New ID Profile</span> button</p>
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">3</span>
+                    <div>
+                      <p className="text-slate-200">Fill in all required personal information fields</p>
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">4</span>
+                    <div>
+                      <p className="text-slate-200">Add credentials (email, password, phone)</p>
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">5</span>
+                    <div>
+                      <p className="text-slate-200">Click <span className="text-emerald-400 font-semibold">Create ID Profile</span> to save</p>
+                    </div>
+                  </li>
+                </ol>
+              </div>
+            </div>
+          )}
+
+          {activeSection === "connect-id-to-accounts" && (
+            <div>
+              <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center gap-3">
+                <span className="text-3xl">🔗</span>
+                How to Connect ID Profiles to Ad Accounts
+              </h2>
+              <p className="text-slate-300 mb-6 leading-relaxed">
+                Linking an ID Profile to an Ad Account establishes which identity &quot;owns&quot; that advertising account.
+                This connection is essential for account management and verification.
+              </p>
+
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6">
+                <p className="text-amber-300 flex items-start gap-2">
+                  <span className="text-xl">⚠️</span>
+                  <span>You must create an ID Profile first before you can connect it to an Ad Account.</span>
+                </p>
+              </div>
+
+              <div className="space-y-6">
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">1</span>
+                    Go to Account Profiles
+                  </h3>
+                  <p className="text-slate-300">
+                    Navigate to <span className="text-emerald-400 font-semibold">Account Profiles</span> in the sidebar.
+                  </p>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">2</span>
+                    Select an Ad Account
+                  </h3>
+                  <p className="text-slate-300">
+                    Find the Ad Account you want to link and click on it to open the details panel.
+                  </p>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">3</span>
+                    Link to ID Profile
+                  </h3>
+                  <p className="text-slate-300 mb-3">
+                    In the Ad Account details, find the <span className="text-white font-semibold">&quot;ID Profile&quot;</span> dropdown
+                    and select the ID Profile you want to associate with this account.
+                  </p>
+                  <div className="bg-slate-900 rounded-lg p-4 border border-slate-600">
+                    <p className="text-sm text-slate-400">
+                      <span className="text-emerald-400">Tip:</span> Choose an ID Profile that matches the geographic location and identity used to create the ad account.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">4</span>
+                    Save Changes
+                  </h3>
+                  <p className="text-slate-300">
+                    Click <span className="text-emerald-400 font-semibold">Save</span> to confirm the connection.
+                    The ID Profile will now be linked to this Ad Account.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeSection === "ad-account-profiles" && (
+            <div>
+              <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center gap-3">
+                <span className="text-3xl">💳</span>
+                What are Ad Account Profiles?
+              </h2>
+
+              <div className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/30 rounded-xl p-6 mb-6">
+                <p className="text-slate-200 text-lg leading-relaxed">
+                  An <span className="text-emerald-400 font-semibold">Ad Account Profile</span> represents a Google Ads account
+                  in the Magimanager system. It tracks the account&apos;s status, spend, health, and connection to an ID Profile.
+                </p>
+              </div>
+
+              <h3 className="text-lg font-semibold text-slate-200 mb-4">Ad Account Profile Properties</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                  <h4 className="font-semibold text-slate-200 mb-2 flex items-center gap-2">
+                    <span>🔢</span> Account Identifiers
+                  </h4>
+                  <ul className="text-sm text-slate-400 space-y-1">
+                    <li>• Internal ID (auto-generated)</li>
+                    <li>• Google CID (Customer ID)</li>
+                    <li>• Origin (where account came from)</li>
+                  </ul>
+                </div>
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                  <h4 className="font-semibold text-slate-200 mb-2 flex items-center gap-2">
+                    <span>📊</span> Status Tracking
+                  </h4>
+                  <ul className="text-sm text-slate-400 space-y-1">
+                    <li>• Account status (Active, Suspended, etc.)</li>
+                    <li>• Health status</li>
+                    <li>• Billing status</li>
+                    <li>• Certification status</li>
+                  </ul>
+                </div>
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                  <h4 className="font-semibold text-slate-200 mb-2 flex items-center gap-2">
+                    <span>💰</span> Spend Tracking
+                  </h4>
+                  <ul className="text-sm text-slate-400 space-y-1">
+                    <li>• Current total spend</li>
+                    <li>• Warmup target spend</li>
+                    <li>• Number of active ads</li>
+                  </ul>
+                </div>
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                  <h4 className="font-semibold text-slate-200 mb-2 flex items-center gap-2">
+                    <span>👥</span> Connections
+                  </h4>
+                  <ul className="text-sm text-slate-400 space-y-1">
+                    <li>• Linked ID Profile</li>
+                    <li>• Assigned Media Buyer</li>
+                    <li>• Handoff status and notes</li>
+                  </ul>
+                </div>
+              </div>
+
+              <h3 className="text-lg font-semibold text-slate-200 mb-4">How to Create an Ad Account Profile</h3>
+              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                <ol className="space-y-4">
+                  <li className="flex items-start gap-3">
+                    <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">1</span>
+                    <div>
+                      <p className="text-slate-200">Navigate to <span className="text-emerald-400 font-semibold">Account Profiles</span> in the sidebar</p>
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">2</span>
+                    <div>
+                      <p className="text-slate-200">Click the <span className="text-emerald-400 font-semibold">+ New Account</span> button</p>
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">3</span>
+                    <div>
+                      <p className="text-slate-200">Select the origin (how you obtained the account)</p>
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">4</span>
+                    <div>
+                      <p className="text-slate-200">Link to an existing ID Profile (optional but recommended)</p>
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">5</span>
+                    <div>
+                      <p className="text-slate-200">Add any notes and click <span className="text-emerald-400 font-semibold">Create</span></p>
+                    </div>
+                  </li>
+                </ol>
+              </div>
+            </div>
+          )}
+
+          {activeSection === "gologin-for-id-profiles" && (
+            <div>
+              <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center gap-3">
+                <span className="text-3xl">🌐</span>
+                How to Create GoLogin Profiles for ID Profiles
+              </h2>
+              <p className="text-slate-300 mb-6 leading-relaxed">
+                Each ID Profile needs its own GoLogin browser profile. This creates a unique browser fingerprint
+                that maintains session separation between different identities.
+              </p>
+
+              <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-4 mb-6">
+                <p className="text-indigo-300 flex items-start gap-2">
+                  <span className="text-xl">💡</span>
+                  <span>GoLogin profiles are created directly from Magimanager using the GoLogin API integration.</span>
+                </p>
+              </div>
+
+              <div className="space-y-6">
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">1</span>
+                    Navigate to the ID Profile
+                  </h3>
+                  <p className="text-slate-300">
+                    Go to <span className="text-emerald-400 font-semibold">ID Profiles</span> and click on the profile
+                    you want to create a GoLogin profile for.
+                  </p>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">2</span>
+                    Find the GoLogin Section
+                  </h3>
+                  <p className="text-slate-300">
+                    In the ID Profile detail view, scroll down to find the <span className="text-white font-semibold">&quot;GoLogin Profile&quot;</span> section.
+                  </p>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">3</span>
+                    Create GoLogin Profile
+                  </h3>
+                  <p className="text-slate-300 mb-3">
+                    Click the <span className="text-emerald-400 font-semibold">Create GoLogin Profile</span> button.
+                    The system will:
+                  </p>
+                  <ul className="text-slate-400 text-sm space-y-2 ml-4">
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-400">•</span>
+                      <span>Generate a unique browser fingerprint</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-400">•</span>
+                      <span>Configure proxy settings based on the ID Profile&apos;s GEO</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-400">•</span>
+                      <span>Create the profile in your GoLogin account</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">4</span>
+                    Verify in GoLogin Desktop
+                  </h3>
+                  <p className="text-slate-300">
+                    Open your GoLogin desktop app. You should see the new profile appear in your profile list.
+                    The profile name will match the ID Profile name from Magimanager.
+                  </p>
+                </div>
+
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4">
+                  <p className="text-emerald-300 flex items-start gap-2">
+                    <span className="text-xl">✅</span>
+                    <span>Once created, you can launch this browser profile from GoLogin to perform actions as that identity.</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeSection === "oauth-connection" && (
+            <div>
+              <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center gap-3">
+                <span className="text-3xl">🔐</span>
+                How to Connect Ad Profiles to Google Ads via OAuth
+              </h2>
+
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6">
+                <p className="text-red-300 flex items-start gap-2">
+                  <span className="text-xl">🚨</span>
+                  <span className="font-semibold">IMPORTANT: You must be inside the GoLogin profile you created for this Ad Profile before connecting via OAuth!</span>
+                </p>
+              </div>
+
+              <p className="text-slate-300 mb-6 leading-relaxed">
+                Connecting via OAuth allows Magimanager to access and manage the Google Ads account on your behalf.
+                This is done from within the GoLogin browser profile to maintain session consistency.
+              </p>
+
+              <div className="space-y-6">
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">1</span>
+                    Open GoLogin Desktop
+                  </h3>
+                  <p className="text-slate-300">
+                    Launch the GoLogin desktop application and find the profile associated with
+                    the Ad Account you want to connect.
+                  </p>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">2</span>
+                    Start the Browser Profile
+                  </h3>
+                  <p className="text-slate-300 mb-3">
+                    Click <span className="text-white font-semibold">&quot;Start&quot;</span> to launch the browser with the identity&apos;s unique fingerprint.
+                    Wait for the browser to fully open.
+                  </p>
+                  <div className="bg-slate-900 rounded-lg p-4 border border-amber-500/30">
+                    <p className="text-sm text-amber-300">
+                      <span className="font-semibold">Note:</span> Make sure the proxy is connected and working before proceeding.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">3</span>
+                    Navigate to Magimanager
+                  </h3>
+                  <p className="text-slate-300">
+                    Inside the GoLogin browser, go to <span className="text-emerald-400 font-mono">magimanager.com</span> and log in to your account.
+                  </p>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">4</span>
+                    Find the Ad Account
+                  </h3>
+                  <p className="text-slate-300">
+                    Go to <span className="text-emerald-400 font-semibold">Account Profiles</span> and locate the
+                    Ad Account you want to connect. Click on it to open the details.
+                  </p>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">5</span>
+                    Initiate OAuth Connection
+                  </h3>
+                  <p className="text-slate-300 mb-3">
+                    Click the <span className="text-emerald-400 font-semibold">Connect Google Ads</span> button.
+                    This will redirect you to Google&apos;s OAuth authorization page.
+                  </p>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">6</span>
+                    Authorize Access
+                  </h3>
+                  <p className="text-slate-300 mb-3">
+                    On Google&apos;s page:
+                  </p>
+                  <ul className="text-slate-400 text-sm space-y-2 ml-4">
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-400">•</span>
+                      <span>Select the Google account that owns the Ads account</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-400">•</span>
+                      <span>Review the permissions requested</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-400">•</span>
+                      <span>Click <span className="text-white font-semibold">&quot;Allow&quot;</span> to grant access</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">7</span>
+                    Verify Connection
+                  </h3>
+                  <p className="text-slate-300">
+                    After authorization, you&apos;ll be redirected back to Magimanager.
+                    The Ad Account should now show as <span className="text-emerald-400 font-semibold">Connected</span>
+                    with the Google CID displayed.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeSection === "upload-docs" && (
+            <div>
+              <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center gap-3">
+                <span className="text-3xl">📄</span>
+                How to Upload ID Profile Documents
+              </h2>
+              <p className="text-slate-300 mb-6 leading-relaxed">
+                ID Profile documents are used for account verification with Google. Upload clear, legible copies
+                of identification documents for each identity.
+              </p>
+
+              <h3 className="text-lg font-semibold text-slate-200 mb-4">Accepted Document Types</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3 text-center">
+                  <span className="text-2xl mb-1 block">🪪</span>
+                  <span className="text-sm text-slate-300">Driver&apos;s License</span>
+                </div>
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3 text-center">
+                  <span className="text-2xl mb-1 block">💳</span>
+                  <span className="text-sm text-slate-300">SSN Card</span>
+                </div>
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3 text-center">
+                  <span className="text-2xl mb-1 block">📑</span>
+                  <span className="text-sm text-slate-300">Utility Bill</span>
+                </div>
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3 text-center">
+                  <span className="text-2xl mb-1 block">🏦</span>
+                  <span className="text-sm text-slate-300">Bank Statement</span>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">1</span>
+                    Open ID Profile Details
+                  </h3>
+                  <p className="text-slate-300">
+                    Navigate to <span className="text-emerald-400 font-semibold">ID Profiles</span> and click on
+                    the profile you want to add documents to.
+                  </p>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">2</span>
+                    Find the Documents Section
+                  </h3>
+                  <p className="text-slate-300">
+                    Scroll down to the <span className="text-white font-semibold">&quot;Documents&quot;</span> section
+                    in the profile detail view.
+                  </p>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">3</span>
+                    Upload a Document
+                  </h3>
+                  <p className="text-slate-300 mb-3">
+                    Click <span className="text-emerald-400 font-semibold">+ Add Document</span>, then:
+                  </p>
+                  <ul className="text-slate-400 text-sm space-y-2 ml-4">
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-400">•</span>
+                      <span>Select the document type from the dropdown</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-400">•</span>
+                      <span>Click to browse or drag and drop your file</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-400">•</span>
+                      <span>Wait for the upload to complete</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">4</span>
+                    Verify Upload
+                  </h3>
+                  <p className="text-slate-300">
+                    Once uploaded, the document will appear in the Documents list with its type and upload date.
+                    You can click to preview or delete documents as needed.
+                  </p>
+                </div>
+
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+                  <h4 className="text-amber-300 font-semibold mb-2 flex items-center gap-2">
+                    <span>💡</span> Tips for Document Uploads
+                  </h4>
+                  <ul className="text-amber-200/80 text-sm space-y-1">
+                    <li>• Ensure documents are clear and all text is readable</li>
+                    <li>• Use high resolution images or scans</li>
+                    <li>• Make sure the full document is visible in the image</li>
+                    <li>• Accepted formats: JPG, PNG, PDF</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeSection === "add-website" && (
+            <div>
+              <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center gap-3">
+                <span className="text-3xl">🌍</span>
+                How to Add a Website
+              </h2>
+              <p className="text-slate-300 mb-6 leading-relaxed">
+                Each ID Profile can have an associated website. This is typically the business website
+                that will be used for advertising campaigns associated with this identity.
+              </p>
+
+              <div className="space-y-6">
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">1</span>
+                    Open ID Profile for Editing
+                  </h3>
+                  <p className="text-slate-300">
+                    Navigate to <span className="text-emerald-400 font-semibold">ID Profiles</span>, click on
+                    the profile, and then click the <span className="text-white font-semibold">&quot;Edit&quot;</span> button.
+                  </p>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">2</span>
+                    Find the Website Field
+                  </h3>
+                  <p className="text-slate-300">
+                    In the edit form, locate the <span className="text-white font-semibold">&quot;Website&quot;</span> field.
+                  </p>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">3</span>
+                    Enter the Website URL
+                  </h3>
+                  <p className="text-slate-300 mb-3">
+                    Enter the full website URL including the protocol:
+                  </p>
+                  <div className="bg-slate-900 rounded-lg p-4 border border-slate-600">
+                    <code className="text-emerald-400">https://example.com</code>
+                  </div>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">4</span>
+                    Save Changes
+                  </h3>
+                  <p className="text-slate-300">
+                    Click <span className="text-emerald-400 font-semibold">Save Changes</span> to update the ID Profile
+                    with the website information.
+                  </p>
+                </div>
+
+                <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-4">
+                  <h4 className="text-indigo-300 font-semibold mb-2 flex items-center gap-2">
+                    <span>💡</span> Why Add a Website?
+                  </h4>
+                  <ul className="text-indigo-200/80 text-sm space-y-1">
+                    <li>• Used as the landing page for ad campaigns</li>
+                    <li>• Required for Google Ads verification in some cases</li>
+                    <li>• Helps organize which website belongs to which identity</li>
+                    <li>• Can be quickly referenced when setting up campaigns</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
