@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@magimanager/auth";
-import { Innertube } from "youtubei.js";
+import { extractVideoId, getVideoInfo } from "../../../../lib/youtube-scraper/youtube-client";
 
 export const maxDuration = 30;
 
-interface VideoInfo {
+interface VideoInfoResponse {
   id: string;
   url: string;
   title: string;
@@ -17,17 +17,6 @@ interface VideoInfo {
   likeCount?: number;
   channel: string;
   channelUrl: string;
-}
-
-function extractVideoId(url: string): string | null {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
-  ];
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match) return match[1];
-  }
-  return null;
 }
 
 export async function POST(req: NextRequest) {
@@ -59,28 +48,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Create Innertube instance
-    console.log("[INFO] Creating Innertube instance...");
-    const yt = await Innertube.create();
-    console.log("[INFO] Innertube created");
+    // Use our standalone YouTube client
+    console.log("[INFO] Fetching video info with standalone client...");
+    const info = await getVideoInfo(videoId);
+    console.log("[INFO] Got video info:", info.title);
 
-    // Get video info
-    console.log("[INFO] Fetching video info...");
-    const info = await yt.getBasicInfo(videoId);
-    console.log("[INFO] Got video info:", info.basic_info.title);
-
-    const video: VideoInfo = {
+    const video: VideoInfoResponse = {
       id: videoId,
       url: `https://www.youtube.com/watch?v=${videoId}`,
-      title: info.basic_info.title || "Unknown Title",
-      description: info.basic_info.short_description || "",
-      thumbnail: info.basic_info.thumbnail?.[0]?.url || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-      duration: info.basic_info.duration || 0,
-      uploadDate: info.basic_info.start_timestamp?.toISOString().split("T")[0] || "Unknown",
-      viewCount: info.basic_info.view_count || 0,
+      title: info.title || "Unknown Title",
+      description: info.description || "",
+      thumbnail: info.thumbnail || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+      duration: info.duration || 0,
+      uploadDate: "Unknown", // Not available from player API
+      viewCount: info.viewCount || 0,
       likeCount: undefined,
-      channel: info.basic_info.author || "Unknown",
-      channelUrl: info.basic_info.channel?.url || "",
+      channel: info.author || "Unknown",
+      channelUrl: "", // Not available from player API
     };
 
     console.log("[INFO] Returning video info");
