@@ -33,6 +33,7 @@ import {
   Unlink,
   BarChart3,
   ImageIcon,
+  Youtube,
 } from "lucide-react";
 import { ProfileModal } from "@magimanager/features";
 import { formatCid } from "@magimanager/shared";
@@ -1535,6 +1536,25 @@ function ToolsView({ onNavigate }: { onNavigate?: (view: View) => void }) {
             </span>
           </button>
 
+          {/* YouTube Scraper */}
+          <button
+            onClick={() => onNavigate?.("youtube-scraper")}
+            className="bg-slate-800/50 rounded-xl p-5 border border-red-500/30 hover:border-red-500/50 transition text-left group"
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-gradient-to-br from-red-500 to-orange-600 rounded-lg group-hover:scale-110 transition">
+                <Youtube className="w-5 h-5 text-white" />
+              </div>
+              <h3 className="text-sm font-medium text-slate-200">YouTube Scraper</h3>
+            </div>
+            <p className="text-xs text-slate-400 mb-3">
+              Download YouTube videos for ad research and creative inspiration. View and manage your downloaded content.
+            </p>
+            <span className="text-xs text-red-400 group-hover:text-red-300 transition">
+              Start Scraping →
+            </span>
+          </button>
+
           {/* Ad Spy - Coming Soon */}
           <div className="bg-slate-800/30 rounded-xl p-5 border border-slate-700/30 opacity-60">
             <div className="flex items-center gap-3 mb-3">
@@ -1841,7 +1861,7 @@ function RequestModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (j
 // MAIN KADABRA APP
 // ============================================================================
 
-type View = "dashboard" | "accounts" | "account-detail" | "automations" | "tools" | "campaign-planner" | "video-clipper" | "ai-image-generator" | "action-queue" | "requests" | "notifications";
+type View = "dashboard" | "accounts" | "account-detail" | "automations" | "tools" | "campaign-planner" | "video-clipper" | "ai-image-generator" | "youtube-scraper" | "action-queue" | "requests" | "notifications";
 
 // ============================================================================
 // SKELETON LOADERS

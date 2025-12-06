@@ -24,6 +24,8 @@ export default function ToolsPage() {
             router.push("/admin/tools/video-clipper");
           } else if (view === "ai-image-generator") {
             router.push("/admin/tools/ai-image-generator");
+          } else if (view === "youtube-scraper") {
+            router.push("/admin/tools/youtube-scraper");
           }
         }}
       />
