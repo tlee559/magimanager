@@ -646,7 +646,7 @@ function LinkIdentityModal({
     async function fetchIdentities() {
       setLoadingIdentities(true);
       try {
-        const res = await fetch("/api/identities?available=true");
+        const res = await fetch("/api/identities");
         if (res.ok) {
           const data = await res.json();
           setIdentities(data.identities || []);
@@ -2913,7 +2913,7 @@ export function AdAccountsView({ onDataChange, onNavigate }: AdAccountsViewProps
   const fetchAccounts = useCallback(async () => {
     try {
       // Always fetch all accounts including archived - filter client-side
-      const res = await fetch("/api/accounts?include=identity,checkins&includeArchived=true");
+      const res = await fetch("/api/accounts?includeArchived=true");
       if (res.ok) {
         const data = await res.json();
         setAccounts(data.accounts || data || []);

@@ -234,7 +234,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       request: newRequest,
-    });
+    }, { status: 201 });
   } catch (error) {
     console.error("Failed to create request:", error);
     return NextResponse.json(
