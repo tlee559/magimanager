@@ -8207,13 +8207,15 @@ function FirstLoginPasswordChangeModal({ onSuccess }: { onSuccess: () => void })
 type TutorialSection =
   | "overview"
   | "gologin-setup"
-  | "id-profiles"
-  | "connect-id-to-accounts"
-  | "ad-account-profiles"
-  | "gologin-for-id-profiles"
-  | "oauth-connection"
+  | "id-profiles-intro"
+  | "create-id-profile"
   | "upload-docs"
-  | "add-website";
+  | "add-website"
+  | "create-gologin-profile"
+  | "ad-accounts-intro"
+  | "create-ad-account"
+  | "link-id-to-account"
+  | "oauth-connection";
 
 // Screenshot placeholder component
 function ScreenshotPlaceholder({ name, description }: { name: string; description: string }) {
@@ -8235,16 +8237,18 @@ function ScreenshotPlaceholder({ name, description }: { name: string; descriptio
 function TutorialView() {
   const [activeSection, setActiveSection] = useState<TutorialSection>("overview");
 
-  const sections: { id: TutorialSection; title: string; icon: string }[] = [
+  const sections: { id: TutorialSection; title: string; icon: string; step?: number }[] = [
     { id: "overview", title: "Getting Started", icon: "🚀" },
-    { id: "gologin-setup", title: "Set Up GoLogin Desktop", icon: "💻" },
-    { id: "id-profiles", title: "What are ID Profiles?", icon: "👤" },
-    { id: "connect-id-to-accounts", title: "Connect ID Profiles to Ad Accounts", icon: "🔗" },
-    { id: "ad-account-profiles", title: "What are Ad Account Profiles?", icon: "💳" },
-    { id: "gologin-for-id-profiles", title: "Create GoLogin Profiles for ID Profiles", icon: "🌐" },
-    { id: "oauth-connection", title: "Connect Ad Profiles via OAuth", icon: "🔐" },
-    { id: "upload-docs", title: "Upload ID Profile Documents", icon: "📄" },
-    { id: "add-website", title: "Add a Website", icon: "🌍" },
+    { id: "gologin-setup", title: "Set Up GoLogin", icon: "💻", step: 1 },
+    { id: "id-profiles-intro", title: "What are ID Profiles?", icon: "👤", step: 2 },
+    { id: "create-id-profile", title: "Create an ID Profile", icon: "➕", step: 3 },
+    { id: "upload-docs", title: "Upload Documents", icon: "📄", step: 4 },
+    { id: "add-website", title: "Add a Website", icon: "🌍", step: 5 },
+    { id: "create-gologin-profile", title: "Create GoLogin Profile", icon: "🌐", step: 6 },
+    { id: "ad-accounts-intro", title: "What are Ad Accounts?", icon: "💳", step: 7 },
+    { id: "create-ad-account", title: "Create Ad Account Profile", icon: "➕", step: 8 },
+    { id: "link-id-to-account", title: "Link ID to Ad Account", icon: "🔗", step: 9 },
+    { id: "oauth-connection", title: "Connect via OAuth", icon: "🔐", step: 10 },
   ];
 
   return (
@@ -8253,21 +8257,31 @@ function TutorialView() {
       <div className="w-72 flex-shrink-0">
         <div className="bg-slate-900 rounded-xl border border-slate-800 p-4">
           <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
-            Tutorial Sections
+            Pipeline Steps
           </h3>
           <nav className="space-y-1">
             {sections.map((section) => (
               <button
                 key={section.id}
                 onClick={() => setActiveSection(section.id)}
-                className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition ${
+                className={`w-full text-left flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm transition ${
                   activeSection === section.id
                     ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                     : "text-slate-300 hover:bg-slate-800 hover:text-white"
                 }`}
               >
-                <span className="text-base">{section.icon}</span>
-                <span>{section.title}</span>
+                {section.step ? (
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                    activeSection === section.id
+                      ? "bg-emerald-500 text-slate-950"
+                      : "bg-slate-700 text-slate-300"
+                  }`}>
+                    {section.step}
+                  </span>
+                ) : (
+                  <span className="text-base">{section.icon}</span>
+                )}
+                <span className="truncate">{section.title}</span>
               </button>
             ))}
           </nav>
@@ -8449,7 +8463,7 @@ function TutorialView() {
             </div>
           )}
 
-          {activeSection === "id-profiles" && (
+          {activeSection === "id-profiles-intro" && (
             <div>
               <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center gap-3">
                 <span className="text-3xl">👤</span>
@@ -8511,12 +8525,32 @@ function TutorialView() {
                 </div>
               </div>
 
-              <h3 className="text-lg font-semibold text-slate-200 mb-4">How to Create an ID Profile</h3>
+              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4">
+                <h4 className="text-emerald-300 font-semibold mb-2">What&apos;s Next?</h4>
+                <p className="text-emerald-200/80 text-sm">
+                  Now that you understand what ID Profiles are, the next step is to create one.
+                  Continue to Step 3 to learn how to create your first ID Profile.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {activeSection === "create-id-profile" && (
+            <div>
+              <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center gap-3">
+                <span className="text-3xl">➕</span>
+                Create an ID Profile
+              </h2>
+              <p className="text-slate-300 mb-6 leading-relaxed">
+                Follow these steps to create a new ID Profile in Magimanager.
+              </p>
+
               <ScreenshotPlaceholder
                 name="screenshot-id-profiles-list.png"
                 description="ID Profiles list page in Magimanager"
               />
-              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+
+              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 my-6">
                 <ol className="space-y-4">
                   <li className="flex items-start gap-3">
                     <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">1</span>
@@ -8534,30 +8568,62 @@ function TutorialView() {
                     <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">3</span>
                     <div>
                       <p className="text-slate-200">Fill in all required personal information fields</p>
+                      <ul className="text-sm text-slate-400 mt-2 space-y-1 ml-4">
+                        <li>• Full name</li>
+                        <li>• Date of birth</li>
+                        <li>• Address (street, city, state, zip)</li>
+                        <li>• GEO location</li>
+                      </ul>
                     </div>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">4</span>
                     <div>
-                      <p className="text-slate-200">Add credentials (email, password, phone)</p>
+                      <p className="text-slate-200">Add credentials</p>
+                      <ul className="text-sm text-slate-400 mt-2 space-y-1 ml-4">
+                        <li>• Email address</li>
+                        <li>• Email password</li>
+                        <li>• Phone number</li>
+                        <li>• 2FA secret (optional)</li>
+                      </ul>
                     </div>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">5</span>
+                    <div>
+                      <p className="text-slate-200">Add billing information (if available)</p>
+                      <ul className="text-sm text-slate-400 mt-2 space-y-1 ml-4">
+                        <li>• Credit card number</li>
+                        <li>• Expiration date</li>
+                        <li>• CVV</li>
+                      </ul>
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">6</span>
                     <div>
                       <p className="text-slate-200">Click <span className="text-emerald-400 font-semibold">Create ID Profile</span> to save</p>
                     </div>
                   </li>
                 </ol>
               </div>
+
               <ScreenshotPlaceholder
                 name="screenshot-create-id-profile-form.png"
                 description="Create New ID Profile form"
               />
+
+              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 mt-6">
+                <h4 className="text-emerald-300 font-semibold mb-2">What&apos;s Next?</h4>
+                <p className="text-emerald-200/80 text-sm">
+                  After creating your ID Profile, the next step is to upload verification documents.
+                  Continue to Step 4 to learn how to upload documents.
+                </p>
+              </div>
             </div>
           )}
 
-          {activeSection === "connect-id-to-accounts" && (
+          {activeSection === "link-id-to-account" && (
             <div>
               <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center gap-3">
                 <span className="text-3xl">🔗</span>
@@ -8642,7 +8708,7 @@ function TutorialView() {
             </div>
           )}
 
-          {activeSection === "ad-account-profiles" && (
+          {activeSection === "ad-accounts-intro" && (
             <div>
               <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center gap-3">
                 <span className="text-3xl">💳</span>
@@ -8701,8 +8767,32 @@ function TutorialView() {
                 </div>
               </div>
 
-              <h3 className="text-lg font-semibold text-slate-200 mb-4">How to Create an Ad Account Profile</h3>
-              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4">
+                <h4 className="text-emerald-300 font-semibold mb-2">What&apos;s Next?</h4>
+                <p className="text-emerald-200/80 text-sm">
+                  Now that you understand what Ad Account Profiles are, the next step is to create one.
+                  Continue to Step 8 to learn how to create an Ad Account Profile.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {activeSection === "create-ad-account" && (
+            <div>
+              <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center gap-3">
+                <span className="text-3xl">➕</span>
+                Create an Ad Account Profile
+              </h2>
+              <p className="text-slate-300 mb-6 leading-relaxed">
+                Follow these steps to create a new Ad Account Profile in Magimanager.
+              </p>
+
+              <ScreenshotPlaceholder
+                name="screenshot-account-profiles-list.png"
+                description="Account Profiles list page in Magimanager"
+              />
+
+              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 my-6">
                 <ol className="space-y-4">
                   <li className="flex items-start gap-3">
                     <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">1</span>
@@ -8720,30 +8810,56 @@ function TutorialView() {
                     <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">3</span>
                     <div>
                       <p className="text-slate-200">Select the origin (how you obtained the account)</p>
+                      <ul className="text-sm text-slate-400 mt-2 space-y-1 ml-4">
+                        <li>• <span className="text-white">Created</span> - You created this account fresh</li>
+                        <li>• <span className="text-white">Purchased</span> - You bought this account</li>
+                        <li>• <span className="text-white">Other</span> - Some other source</li>
+                      </ul>
                     </div>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">4</span>
                     <div>
-                      <p className="text-slate-200">Link to an existing ID Profile (optional but recommended)</p>
+                      <p className="text-slate-200">Link to an ID Profile</p>
+                      <p className="text-sm text-slate-400 mt-1">
+                        Select the ID Profile that will &quot;own&quot; this ad account. This is recommended for proper account management.
+                      </p>
                     </div>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">5</span>
                     <div>
-                      <p className="text-slate-200">Add any notes and click <span className="text-emerald-400 font-semibold">Create</span></p>
+                      <p className="text-slate-200">Add any relevant notes</p>
+                      <p className="text-sm text-slate-400 mt-1">
+                        Notes help you track important information about the account.
+                      </p>
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">6</span>
+                    <div>
+                      <p className="text-slate-200">Click <span className="text-emerald-400 font-semibold">Create</span> to save</p>
                     </div>
                   </li>
                 </ol>
               </div>
+
               <ScreenshotPlaceholder
                 name="screenshot-create-ad-account-form.png"
                 description="Create New Ad Account form"
               />
+
+              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 mt-6">
+                <h4 className="text-emerald-300 font-semibold mb-2">What&apos;s Next?</h4>
+                <p className="text-emerald-200/80 text-sm">
+                  After creating your Ad Account Profile, the next step is to link it to an ID Profile.
+                  Continue to Step 9 to learn how to link them together.
+                </p>
+              </div>
             </div>
           )}
 
-          {activeSection === "gologin-for-id-profiles" && (
+          {activeSection === "create-gologin-profile" && (
             <div>
               <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center gap-3">
                 <span className="text-3xl">🌐</span>
