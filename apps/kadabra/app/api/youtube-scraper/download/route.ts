@@ -2,14 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@magimanager/auth";
 import { put } from "@vercel/blob";
-import { exec, spawn } from "child_process";
-import { promisify } from "util";
 import { randomUUID } from "crypto";
-import { unlink, readFile } from "fs/promises";
-import { tmpdir } from "os";
-import { join } from "path";
-
-const execAsync = promisify(exec);
+import ytdl from "ytdl-core";
 
 export const maxDuration = 300; // 5 minutes
 
@@ -54,11 +48,19 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { url, quality = "best", format = "mp4" } = await req.json();
+    const { url } = await req.json();
 
     if (!url) {
       return NextResponse.json(
         { success: false, error: "URL is required" },
+        { status: 400 }
+      );
+    }
+
+    // Validate YouTube URL
+    if (!ytdl.validateURL(url)) {
+      return NextResponse.json(
+        { success: false, error: "Invalid YouTube URL" },
         { status: 400 }
       );
     }
@@ -79,21 +81,19 @@ export async function POST(req: NextRequest) {
 
     jobs.set(jobId, job);
 
-    // Start download in background
-    processDownload(jobId, url, quality, format, session.user.email).catch(
-      (error) => {
-        console.error("Download error:", error);
-        const existingJob = jobs.get(jobId);
-        if (existingJob) {
-          jobs.set(jobId, {
-            ...existingJob,
-            status: "failed",
-            error: error instanceof Error ? error.message : "Download failed",
-            updatedAt: new Date().toISOString(),
-          });
-        }
+    // Start download in background (non-blocking)
+    processDownload(jobId, url, session.user.email).catch((error) => {
+      console.error("Download error:", error);
+      const existingJob = jobs.get(jobId);
+      if (existingJob) {
+        jobs.set(jobId, {
+          ...existingJob,
+          status: "failed",
+          error: error instanceof Error ? error.message : "Download failed",
+          updatedAt: new Date().toISOString(),
+        });
       }
-    );
+    });
 
     return NextResponse.json({ success: true, job });
   } catch (error) {
@@ -105,13 +105,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function processDownload(
-  jobId: string,
-  url: string,
-  quality: string,
-  format: string,
-  userId: string
-) {
+async function processDownload(jobId: string, url: string, userId: string) {
   const job = jobs.get(jobId);
   if (!job) return;
 
@@ -125,25 +119,21 @@ async function processDownload(
     });
 
     // Get video info first
-    const { stdout: infoJson } = await execAsync(`yt-dlp --dump-json --no-download "${url}"`, {
-      timeout: 30000,
-    });
-    const videoData = JSON.parse(infoJson);
+    const info = await ytdl.getInfo(url);
+    const videoDetails = info.videoDetails;
 
     const videoInfo = {
-      id: videoData.id,
-      url: videoData.webpage_url || url,
-      title: videoData.title || "Unknown Title",
-      description: videoData.description || "",
-      thumbnail: videoData.thumbnail || videoData.thumbnails?.[0]?.url || "",
-      duration: videoData.duration || 0,
-      uploadDate: videoData.upload_date
-        ? `${videoData.upload_date.slice(0, 4)}-${videoData.upload_date.slice(4, 6)}-${videoData.upload_date.slice(6, 8)}`
-        : "Unknown",
-      viewCount: videoData.view_count || 0,
-      likeCount: videoData.like_count,
-      channel: videoData.uploader || videoData.channel || "Unknown",
-      channelUrl: videoData.uploader_url || videoData.channel_url || "",
+      id: videoDetails.videoId,
+      url: videoDetails.video_url,
+      title: videoDetails.title || "Unknown Title",
+      description: videoDetails.description || "",
+      thumbnail: videoDetails.thumbnails?.[videoDetails.thumbnails.length - 1]?.url || "",
+      duration: parseInt(videoDetails.lengthSeconds) || 0,
+      uploadDate: videoDetails.publishDate || "Unknown",
+      viewCount: parseInt(videoDetails.viewCount) || 0,
+      likeCount: undefined,
+      channel: videoDetails.author?.name || "Unknown",
+      channelUrl: videoDetails.author?.channel_url || "",
     };
 
     jobs.set(jobId, {
@@ -153,68 +143,50 @@ async function processDownload(
       updatedAt: new Date().toISOString(),
     });
 
-    // Create temp file path
-    const tempFile = join(tmpdir(), `yt-${jobId}.${format}`);
+    // Download video using ytdl-core
+    // Get the best format with both video and audio
+    const format = ytdl.chooseFormat(info.formats, {
+      quality: "highest",
+      filter: (format) => format.container === "mp4" && format.hasVideo && format.hasAudio,
+    });
 
-    // Download video using yt-dlp
-    const formatArg = quality === "best"
-      ? "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
-      : `bestvideo[height<=${quality.replace("p", "")}][ext=mp4]+bestaudio[ext=m4a]/best[height<=${quality.replace("p", "")}][ext=mp4]/best`;
+    // If no combined format, try to get best video
+    const selectedFormat = format || ytdl.chooseFormat(info.formats, {
+      quality: "highestvideo",
+      filter: "videoandaudio",
+    });
+
+    if (!selectedFormat) {
+      throw new Error("No suitable video format found");
+    }
+
+    jobs.set(jobId, {
+      ...jobs.get(jobId)!,
+      progress: 20,
+      updatedAt: new Date().toISOString(),
+    });
+
+    // Download as a stream and collect chunks
+    const chunks: Buffer[] = [];
+    let downloadedBytes = 0;
+    const totalBytes = parseInt(selectedFormat.contentLength || "0") || 10000000; // Default 10MB estimate
+
+    const stream = ytdl.downloadFromInfo(info, { format: selectedFormat });
 
     await new Promise<void>((resolve, reject) => {
-      const proc = spawn("yt-dlp", [
-        "-f",
-        formatArg,
-        "--merge-output-format",
-        format,
-        "-o",
-        tempFile,
-        "--no-playlist",
-        "--progress",
-        url,
-      ]);
-
-      let lastProgress = 10;
-
-      proc.stdout.on("data", (data) => {
-        const output = data.toString();
-        // Parse progress from yt-dlp output
-        const match = output.match(/(\d+\.?\d*)%/);
-        if (match) {
-          const downloadProgress = parseFloat(match[1]);
-          // Map download progress to 10-80%
-          lastProgress = 10 + (downloadProgress * 0.7);
-          jobs.set(jobId, {
-            ...jobs.get(jobId)!,
-            progress: Math.round(lastProgress),
-            updatedAt: new Date().toISOString(),
-          });
-        }
+      stream.on("data", (chunk: Buffer) => {
+        chunks.push(chunk);
+        downloadedBytes += chunk.length;
+        const progress = Math.min(20 + (downloadedBytes / totalBytes) * 60, 80);
+        jobs.set(jobId, {
+          ...jobs.get(jobId)!,
+          progress: Math.round(progress),
+          updatedAt: new Date().toISOString(),
+        });
       });
 
-      proc.stderr.on("data", (data) => {
-        const output = data.toString();
-        const match = output.match(/(\d+\.?\d*)%/);
-        if (match) {
-          const downloadProgress = parseFloat(match[1]);
-          lastProgress = 10 + (downloadProgress * 0.7);
-          jobs.set(jobId, {
-            ...jobs.get(jobId)!,
-            progress: Math.round(lastProgress),
-            updatedAt: new Date().toISOString(),
-          });
-        }
-      });
-
-      proc.on("close", (code) => {
-        if (code === 0) {
-          resolve();
-        } else {
-          reject(new Error(`yt-dlp exited with code ${code}`));
-        }
-      });
-
-      proc.on("error", reject);
+      stream.on("end", () => resolve());
+      stream.on("error", (err) => reject(err));
     });
 
     // Update status to processing
@@ -225,9 +197,9 @@ async function processDownload(
       updatedAt: new Date().toISOString(),
     });
 
-    // Read the file and upload to Vercel Blob
-    const fileBuffer = await readFile(tempFile);
-    const fileSize = fileBuffer.length;
+    // Combine chunks into buffer
+    const videoBuffer = Buffer.concat(chunks);
+    const fileSize = videoBuffer.length;
 
     jobs.set(jobId, {
       ...jobs.get(jobId)!,
@@ -241,17 +213,14 @@ async function processDownload(
       .replace(/\s+/g, "-")
       .substring(0, 50);
 
-    const blob = await put(`youtube-downloads/${userId}/${safeTitle}-${videoInfo.id}.${format}`, fileBuffer, {
-      access: "public",
-      contentType: format === "mp4" ? "video/mp4" : "video/webm",
-    });
-
-    // Clean up temp file
-    try {
-      await unlink(tempFile);
-    } catch {
-      // Ignore cleanup errors
-    }
+    const blob = await put(
+      `youtube-downloads/${userId}/${safeTitle}-${videoInfo.id}.mp4`,
+      videoBuffer,
+      {
+        access: "public",
+        contentType: "video/mp4",
+      }
+    );
 
     // Update job with completed status
     jobs.set(jobId, {

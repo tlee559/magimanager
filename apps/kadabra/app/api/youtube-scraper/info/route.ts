@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@magimanager/auth";
-import { exec } from "child_process";
-import { promisify } from "util";
-
-const execAsync = promisify(exec);
+import ytdl from "ytdl-core";
 
 export const maxDuration = 30;
 
@@ -38,29 +35,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Use yt-dlp to get video info (JSON only, no download)
-    const command = `yt-dlp --dump-json --no-download "${url}"`;
+    // Validate YouTube URL
+    if (!ytdl.validateURL(url)) {
+      return NextResponse.json(
+        { success: false, error: "Invalid YouTube URL" },
+        { status: 400 }
+      );
+    }
 
-    const { stdout } = await execAsync(command, {
-      timeout: 25000, // 25 second timeout
-    });
-
-    const data = JSON.parse(stdout);
+    // Get video info using ytdl-core
+    const info = await ytdl.getInfo(url);
+    const videoDetails = info.videoDetails;
 
     const video: VideoInfo = {
-      id: data.id,
-      url: data.webpage_url || url,
-      title: data.title || "Unknown Title",
-      description: data.description || "",
-      thumbnail: data.thumbnail || data.thumbnails?.[0]?.url || "",
-      duration: data.duration || 0,
-      uploadDate: data.upload_date
-        ? `${data.upload_date.slice(0, 4)}-${data.upload_date.slice(4, 6)}-${data.upload_date.slice(6, 8)}`
-        : "Unknown",
-      viewCount: data.view_count || 0,
-      likeCount: data.like_count,
-      channel: data.uploader || data.channel || "Unknown",
-      channelUrl: data.uploader_url || data.channel_url || "",
+      id: videoDetails.videoId,
+      url: videoDetails.video_url,
+      title: videoDetails.title || "Unknown Title",
+      description: videoDetails.description || "",
+      thumbnail: videoDetails.thumbnails?.[videoDetails.thumbnails.length - 1]?.url || "",
+      duration: parseInt(videoDetails.lengthSeconds) || 0,
+      uploadDate: videoDetails.publishDate || "Unknown",
+      viewCount: parseInt(videoDetails.viewCount) || 0,
+      likeCount: undefined,
+      channel: videoDetails.author?.name || "Unknown",
+      channelUrl: videoDetails.author?.channel_url || "",
     };
 
     return NextResponse.json({ success: true, video });
@@ -69,17 +67,6 @@ export async function POST(req: NextRequest) {
 
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
-    // Check for common errors
-    if (errorMessage.includes("command not found") || errorMessage.includes("yt-dlp")) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "yt-dlp is not installed on the server. Please install it with: brew install yt-dlp",
-        },
-        { status: 500 }
-      );
-    }
-
     if (errorMessage.includes("Video unavailable") || errorMessage.includes("Private video")) {
       return NextResponse.json(
         { success: false, error: "This video is unavailable or private" },
@@ -87,8 +74,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (errorMessage.includes("age-restricted")) {
+      return NextResponse.json(
+        { success: false, error: "This video is age-restricted and cannot be accessed" },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(
-      { success: false, error: "Failed to fetch video info" },
+      { success: false, error: "Failed to fetch video info. The video may be restricted or unavailable." },
       { status: 500 }
     );
   }
