@@ -12,3 +12,11 @@ export type {
   VideoDetails,
   YouTubeVideoInfo,
 } from "./youtube-client";
+export {
+  getAuthContext,
+  clearAuthContext,
+  generateColdStartToken,
+  generateVisitorId,
+  fetchVisitorData,
+} from "./botguard-auth";
+export type { AuthContext } from "./botguard-auth";
