@@ -9008,6 +9008,33 @@ function TutorialView() {
                 This is done from within the GoLogin browser profile to maintain session consistency.
               </p>
 
+              <div className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/30 rounded-xl p-6 mb-6">
+                <h4 className="text-indigo-300 font-semibold mb-3 flex items-center gap-2">
+                  <span>✨</span> Why OAuth Connection Matters
+                </h4>
+                <p className="text-slate-300 mb-3">
+                  Once connected via OAuth, Magimanager can pull <span className="text-white font-semibold">real-time data</span> directly from your live Google Ads accounts:
+                </p>
+                <ul className="text-indigo-200/80 text-sm space-y-2">
+                  <li className="flex items-start gap-2">
+                    <span className="text-emerald-400">•</span>
+                    <span><span className="text-white font-medium">Live spend reports</span> - Track actual ad spend across all connected accounts</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-emerald-400">•</span>
+                    <span><span className="text-white font-medium">Performance metrics</span> - Impressions, clicks, conversions, and more</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-emerald-400">•</span>
+                    <span><span className="text-white font-medium">Account health status</span> - Policy violations, suspensions, and billing issues</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-emerald-400">•</span>
+                    <span><span className="text-white font-medium">Campaign management</span> - Create, edit, and monitor campaigns from one dashboard</span>
+                  </li>
+                </ul>
+              </div>
+
               <div className="space-y-6">
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
                   <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
