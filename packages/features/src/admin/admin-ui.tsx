@@ -8493,6 +8493,10 @@ function TutorialView() {
               </div>
 
               <h3 className="text-lg font-semibold text-slate-200 mb-4">How to Create an ID Profile</h3>
+              <ScreenshotPlaceholder
+                name="screenshot-id-profiles-list.png"
+                description="ID Profiles list page in Magimanager"
+              />
               <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
                 <ol className="space-y-4">
                   <li className="flex items-start gap-3">
@@ -8527,6 +8531,10 @@ function TutorialView() {
                   </li>
                 </ol>
               </div>
+              <ScreenshotPlaceholder
+                name="screenshot-create-id-profile-form.png"
+                description="Create New ID Profile form"
+              />
             </div>
           )}
 
@@ -8557,6 +8565,10 @@ function TutorialView() {
                   <p className="text-slate-300">
                     Navigate to <span className="text-emerald-400 font-semibold">Account Profiles</span> in the sidebar.
                   </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-account-profiles-sidebar.png"
+                    description="Sidebar with Account Profiles highlighted"
+                  />
                 </div>
 
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
