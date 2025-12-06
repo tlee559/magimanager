@@ -538,7 +538,11 @@ export async function getVideoInfo(videoId: string): Promise<YouTubeVideoInfo> {
   let authContext: AuthContext | undefined;
   try {
     authContext = await getAuthContext();
-    debug("INFO", `Auth context ready: visitorData=${authContext.visitorData.substring(0, 15)}...`);
+    if (authContext?.visitorData) {
+      debug("INFO", `Auth context ready: visitorData=${authContext.visitorData.substring(0, 15)}...`);
+    } else {
+      debug("INFO", "Auth context ready but missing visitorData");
+    }
   } catch (error) {
     debug("INFO", "Failed to get auth context, continuing without it:", error);
   }

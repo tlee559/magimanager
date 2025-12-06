@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "500mb",
     },
   },
+  // Exclude these packages from server-side bundling
+  serverExternalPackages: ['jsdom', 'bgutils-js', 'youtubei.js', 'canvas'],
   // Expose Vercel system env vars to the browser
   env: {
     NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA: process.env.VERCEL_GIT_COMMIT_SHA,
