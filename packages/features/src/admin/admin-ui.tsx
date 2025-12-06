@@ -9229,7 +9229,7 @@ function TutorialView() {
               </h2>
               <p className="text-slate-300 mb-6 leading-relaxed">
                 ID Profile documents are used for account verification with Google. Upload clear, legible copies
-                of identification documents for each identity.
+                of identification documents for each identity directly from the ID Profile detail view.
               </p>
 
               <h3 className="text-lg font-semibold text-slate-200 mb-4">Accepted Document Types</h3>
@@ -9259,7 +9259,7 @@ function TutorialView() {
                     Open ID Profile Details
                   </h3>
                   <p className="text-slate-300">
-                    Navigate to <span className="text-emerald-400 font-semibold">ID Profiles</span> and click on
+                    Navigate to <span className="text-emerald-400 font-semibold">ID Profiles</span> in the sidebar and click on
                     the profile you want to add documents to.
                   </p>
                   <ScreenshotPlaceholder
@@ -9271,15 +9271,14 @@ function TutorialView() {
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
                   <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
                     <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">2</span>
-                    Find the Documents Section
+                    Find the Attached Documents Section
                   </h3>
                   <p className="text-slate-300">
-                    Scroll down to the <span className="text-white font-semibold">&quot;Documents&quot;</span> section
-                    in the profile detail view.
+                    On the right side of the profile detail view, you&apos;ll see the <span className="text-white font-semibold">&quot;Attached Documents&quot;</span> section.
                   </p>
                   <ScreenshotPlaceholder
                     name="screenshot-docs-section-location.png"
-                    description="Documents section in ID Profile detail view"
+                    description="Attached Documents section in ID Profile detail view"
                   />
                 </div>
 
@@ -9289,16 +9288,16 @@ function TutorialView() {
                     Upload a Document
                   </h3>
                   <p className="text-slate-300 mb-3">
-                    Click <span className="text-emerald-400 font-semibold">+ Add Document</span>, then:
+                    Click the <span className="text-emerald-400 font-semibold">Upload Document</span> button to select a file from your computer.
                   </p>
                   <ul className="text-slate-400 text-sm space-y-2 ml-4">
                     <li className="flex items-start gap-2">
                       <span className="text-emerald-400">•</span>
-                      <span>Select the document type from the dropdown</span>
+                      <span>Click the upload button</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-emerald-400">•</span>
-                      <span>Click to browse or drag and drop your file</span>
+                      <span>Select your document file (JPEG, PNG, WebP, or PDF)</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-emerald-400">•</span>
@@ -9306,23 +9305,32 @@ function TutorialView() {
                     </li>
                   </ul>
                   <ScreenshotPlaceholder
-                    name="screenshot-docs-upload-modal.png"
-                    description="Document upload modal with type selection"
+                    name="screenshot-docs-upload-button.png"
+                    description="Upload Document button in Attached Documents section"
                   />
                 </div>
 
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
                   <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
                     <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">4</span>
-                    Verify Upload
+                    Manage Your Documents
                   </h3>
-                  <p className="text-slate-300">
-                    Once uploaded, the document will appear in the Documents list with its type and upload date.
-                    You can click to preview or delete documents as needed.
+                  <p className="text-slate-300 mb-3">
+                    Once uploaded, documents appear in the list with their filename and upload date. You can:
                   </p>
+                  <ul className="text-slate-400 text-sm space-y-2 ml-4">
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-400">•</span>
+                      <span><span className="text-emerald-400">View</span> - Click to open and preview the document</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-400">•</span>
+                      <span><span className="text-red-400">Delete</span> - Remove a document if needed</span>
+                    </li>
+                  </ul>
                   <ScreenshotPlaceholder
                     name="screenshot-docs-uploaded-list.png"
-                    description="Documents list showing uploaded documents"
+                    description="Documents list showing uploaded documents with View and Delete options"
                   />
                 </div>
 
@@ -9334,8 +9342,17 @@ function TutorialView() {
                     <li>• Ensure documents are clear and all text is readable</li>
                     <li>• Use high resolution images or scans</li>
                     <li>• Make sure the full document is visible in the image</li>
-                    <li>• Accepted formats: JPG, PNG, PDF</li>
+                    <li>• Accepted formats: JPEG, PNG, WebP, PDF (max 10MB)</li>
+                    <li>• Name your files descriptively (e.g., &quot;john-doe-drivers-license.jpg&quot;)</li>
                   </ul>
+                </div>
+
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4">
+                  <h4 className="text-emerald-300 font-semibold mb-2">What&apos;s Next?</h4>
+                  <p className="text-emerald-200/80 text-sm">
+                    After uploading your documents, the next step is to add a website to the ID Profile.
+                    Continue to Step 5 to learn how to add a website.
+                  </p>
                 </div>
               </div>
             </div>
