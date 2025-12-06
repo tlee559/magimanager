@@ -8334,19 +8334,17 @@ type TutorialSection =
   | "link-id-to-account"
   | "oauth-connection";
 
-// Screenshot placeholder component
+// Screenshot component - displays actual images from /tutorial folder
 function ScreenshotPlaceholder({ name, description }: { name: string; description: string }) {
   return (
-    <div className="my-4 border-2 border-dashed border-slate-600 rounded-xl p-6 bg-slate-800/30">
-      <div className="flex flex-col items-center justify-center text-center">
-        <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center mb-3">
-          <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-        </div>
-        <p className="text-slate-300 font-medium mb-1">{description}</p>
-        <p className="text-xs text-slate-500 font-mono bg-slate-900 px-2 py-1 rounded">{name}</p>
-      </div>
+    <div className="my-4 rounded-xl overflow-hidden border border-slate-700">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`/tutorial/${name}`}
+        alt={description}
+        className="w-full h-auto"
+        loading="lazy"
+      />
     </div>
   );
 }
@@ -8668,7 +8666,7 @@ function TutorialView() {
                   <li className="flex items-start gap-3">
                     <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">1</span>
                     <div>
-                      <p className="text-slate-200">Navigate to <span className="text-emerald-400 font-semibold">ID Profiles</span> in the sidebar</p>
+                      <p className="text-slate-200">Navigate to <a href="/admin/identities" target="_blank" rel="noopener noreferrer" className="text-emerald-400 font-semibold hover:underline">ID Profiles</a> in the sidebar</p>
                     </div>
                   </li>
                   <li className="flex items-start gap-3">
@@ -8825,7 +8823,7 @@ function TutorialView() {
                   <li className="flex items-start gap-3">
                     <span className="bg-emerald-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">1</span>
                     <div>
-                      <p className="text-slate-200">Navigate to <span className="text-emerald-400 font-semibold">Account Profiles</span> in the sidebar</p>
+                      <p className="text-slate-200">Navigate to <a href="/admin/accounts" target="_blank" rel="noopener noreferrer" className="text-emerald-400 font-semibold hover:underline">Account Profiles</a> in the sidebar</p>
                     </div>
                   </li>
                   <li className="flex items-start gap-3">
@@ -8912,7 +8910,7 @@ function TutorialView() {
                     Navigate to the ID Profile
                   </h3>
                   <p className="text-slate-300">
-                    Go to <span className="text-emerald-400 font-semibold">ID Profiles</span> and click on the profile
+                    Go to <a href="/admin/identities" target="_blank" rel="noopener noreferrer" className="text-emerald-400 font-semibold hover:underline">ID Profiles</a> and click on the profile
                     you want to create a GoLogin profile for.
                   </p>
                   <ScreenshotPlaceholder
@@ -9091,7 +9089,7 @@ function TutorialView() {
                     Find the Ad Account
                   </h3>
                   <p className="text-slate-300">
-                    Go to <span className="text-emerald-400 font-semibold">Account Profiles</span> and locate the
+                    Go to <a href="/admin/accounts" target="_blank" rel="noopener noreferrer" className="text-emerald-400 font-semibold hover:underline">Account Profiles</a> and locate the
                     Ad Account you want to connect. Click on it to open the details.
                   </p>
                   <ScreenshotPlaceholder
@@ -9153,10 +9151,6 @@ function TutorialView() {
                     The Ad Account should now show as <span className="text-emerald-400 font-semibold">Connected</span>
                     with the Google CID displayed.
                   </p>
-                  <ScreenshotPlaceholder
-                    name="screenshot-oauth-connected-success.png"
-                    description="Ad Account showing Connected status with Google CID"
-                  />
                 </div>
               </div>
             </div>
@@ -9200,7 +9194,7 @@ function TutorialView() {
                     Open ID Profile Details
                   </h3>
                   <p className="text-slate-300">
-                    Navigate to <span className="text-emerald-400 font-semibold">ID Profiles</span> in the sidebar and click on
+                    Navigate to <a href="/admin/identities" target="_blank" rel="noopener noreferrer" className="text-emerald-400 font-semibold hover:underline">ID Profiles</a> in the sidebar and click on
                     the profile you want to add documents to.
                   </p>
                   <ScreenshotPlaceholder
@@ -9313,7 +9307,7 @@ function TutorialView() {
                     Open ID Profile for Editing
                   </h3>
                   <p className="text-slate-300">
-                    Navigate to <span className="text-emerald-400 font-semibold">ID Profiles</span>, click on
+                    Navigate to <a href="/admin/identities" target="_blank" rel="noopener noreferrer" className="text-emerald-400 font-semibold hover:underline">ID Profiles</a>, click on
                     the profile, and then click the <span className="text-white font-semibold">&quot;Edit&quot;</span> button.
                   </p>
                   <ScreenshotPlaceholder
