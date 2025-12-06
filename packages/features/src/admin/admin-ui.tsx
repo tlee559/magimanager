@@ -9421,10 +9421,6 @@ function TutorialView() {
                     Click <span className="text-emerald-400 font-semibold">Save Changes</span> to update the ID Profile
                     with the website information.
                   </p>
-                  <ScreenshotPlaceholder
-                    name="screenshot-website-save-button.png"
-                    description="Save Changes button"
-                  />
                 </div>
 
                 <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-4">
