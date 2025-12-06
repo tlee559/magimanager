@@ -528,10 +528,130 @@ async function processFormat(format: VideoFormat): Promise<VideoFormat> {
 }
 
 /**
+ * Try to get video info using youtubei.js library directly
+ * This is a fallback when BotGuard auth fails in serverless environments
+ */
+async function getVideoInfoWithInnertube(videoId: string): Promise<YouTubeVideoInfo | null> {
+  debug("INFO", "Trying youtubei.js library directly...");
+
+  try {
+    const { Innertube } = await import("youtubei.js");
+    const innertube = await Innertube.create({
+      retrieve_player: true,
+      generate_session_locally: true,
+    });
+
+    const info = await innertube.getBasicInfo(videoId);
+
+    if (!info.basic_info || !info.streaming_data) {
+      debug("INFO", "youtubei.js: No basic_info or streaming_data");
+      return null;
+    }
+
+    const playability = info.playability_status;
+    if (playability?.status !== "OK") {
+      debug("INFO", `youtubei.js: Playability status: ${playability?.status} - ${playability?.reason || "unknown"}`);
+      return null;
+    }
+
+    // Convert formats
+    const formats: VideoFormat[] = [];
+    const adaptiveFormats: VideoFormat[] = [];
+
+    // Process combined formats
+    if (info.streaming_data.formats) {
+      for (const fmt of info.streaming_data.formats) {
+        let url: string | undefined;
+        try {
+          url = await fmt.decipher(innertube.session.player);
+        } catch {
+          url = undefined;
+        }
+        formats.push({
+          itag: fmt.itag || 0,
+          url,
+          mimeType: fmt.mime_type || "",
+          bitrate: fmt.bitrate || 0,
+          width: fmt.width,
+          height: fmt.height,
+          qualityLabel: fmt.quality_label || undefined,
+          quality: fmt.quality || "unknown",
+          fps: fmt.fps,
+          hasAudio: true,
+          hasVideo: true,
+        });
+      }
+    }
+
+    // Process adaptive formats
+    if (info.streaming_data.adaptive_formats) {
+      for (const fmt of info.streaming_data.adaptive_formats) {
+        const hasVideo = fmt.mime_type?.startsWith("video/") ?? false;
+        const hasAudio = fmt.mime_type?.startsWith("audio/") ?? false;
+        let url: string | undefined;
+        try {
+          url = await fmt.decipher(innertube.session.player);
+        } catch {
+          url = undefined;
+        }
+        adaptiveFormats.push({
+          itag: fmt.itag || 0,
+          url,
+          mimeType: fmt.mime_type || "",
+          bitrate: fmt.bitrate || 0,
+          width: fmt.width,
+          height: fmt.height,
+          qualityLabel: fmt.quality_label || undefined,
+          quality: fmt.quality || "unknown",
+          fps: fmt.fps,
+          audioQuality: fmt.audio_quality,
+          audioSampleRate: fmt.audio_sample_rate?.toString(),
+          audioChannels: fmt.audio_channels,
+          contentLength: fmt.content_length?.toString(),
+          hasVideo,
+          hasAudio,
+        });
+      }
+    }
+
+    const usableFormats = formats.filter(f => f.url).length;
+    const usableAdaptive = adaptiveFormats.filter(f => f.url).length;
+
+    if (usableFormats === 0 && usableAdaptive === 0) {
+      debug("INFO", "youtubei.js: No usable format URLs");
+      return null;
+    }
+
+    debug("INFO", `youtubei.js SUCCESS! ${usableFormats} muxed, ${usableAdaptive} adaptive formats`);
+
+    return {
+      videoId,
+      title: info.basic_info.title || "Unknown",
+      description: info.basic_info.short_description || "",
+      thumbnail: info.basic_info.thumbnail?.[0]?.url || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+      duration: info.basic_info.duration || 0,
+      author: info.basic_info.author || "Unknown",
+      viewCount: info.basic_info.view_count || 0,
+      formats,
+      adaptiveFormats,
+    };
+  } catch (error) {
+    debug("INFO", "youtubei.js error:", error);
+    return null;
+  }
+}
+
+/**
  * Get video information and streaming URLs
  */
 export async function getVideoInfo(videoId: string): Promise<YouTubeVideoInfo> {
   debug("INFO", `Getting video info for: ${videoId}`);
+
+  // First try youtubei.js library directly (works better in serverless)
+  const innertubeResult = await getVideoInfoWithInnertube(videoId);
+  if (innertubeResult) {
+    return innertubeResult;
+  }
 
   // Get authentication context (visitor data + PO token)
   debug("INFO", "Getting authentication context...");
