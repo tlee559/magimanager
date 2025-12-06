@@ -8237,7 +8237,7 @@ function TutorialView() {
 
   const sections: { id: TutorialSection; title: string; icon: string }[] = [
     { id: "overview", title: "Getting Started", icon: "🚀" },
-    { id: "gologin-setup", title: "Install GoLogin Desktop", icon: "💻" },
+    { id: "gologin-setup", title: "Set Up GoLogin Desktop", icon: "💻" },
     { id: "id-profiles", title: "What are ID Profiles?", icon: "👤" },
     { id: "connect-id-to-accounts", title: "Connect ID Profiles to Ad Accounts", icon: "🔗" },
     { id: "ad-account-profiles", title: "What are Ad Account Profiles?", icon: "💳" },
@@ -8298,36 +8298,55 @@ function TutorialView() {
                 <div className="space-y-3">
                   <div className="flex items-start gap-3">
                     <span className="text-emerald-400 mt-0.5">✓</span>
-                    <p className="text-slate-300">Make sure you have access to the master Gmail account: <span className="text-emerald-400 font-mono">admin@automatedaa.com</span></p>
+                    <p className="text-slate-300">You&apos;ll need a <span className="text-emerald-400 font-semibold">GoLogin account</span> with an active subscription</p>
                   </div>
                   <div className="flex items-start gap-3">
                     <span className="text-emerald-400 mt-0.5">✓</span>
-                    <p className="text-slate-300">You&apos;ll need to download and install GoLogin Desktop application</p>
+                    <p className="text-slate-300">Download and install the <span className="text-emerald-400 font-semibold">GoLogin Desktop</span> application</p>
                   </div>
                   <div className="flex items-start gap-3">
                     <span className="text-emerald-400 mt-0.5">✓</span>
                     <p className="text-slate-300">Have your ID profile documents ready (driver&apos;s license, SSN card, etc.)</p>
                   </div>
+                  <div className="flex items-start gap-3">
+                    <span className="text-emerald-400 mt-0.5">✓</span>
+                    <p className="text-slate-300">Access to <span className="text-emerald-400 font-semibold">Google Ads accounts</span> you want to manage</p>
+                  </div>
                 </div>
               </div>
 
-              <h3 className="text-lg font-semibold text-slate-200 mb-3">Workflow Overview</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <h3 className="text-lg font-semibold text-slate-200 mb-3">Magimanager Workflow</h3>
+              <p className="text-slate-400 text-sm mb-4">
+                Magimanager helps you organize and manage multiple Google Ads accounts with unique identities.
+                Here&apos;s the typical workflow:
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div className="bg-slate-800/30 border border-slate-700/50 rounded-lg p-4">
                   <div className="text-2xl mb-2">1️⃣</div>
                   <h4 className="font-semibold text-slate-200 mb-1">Set Up GoLogin</h4>
-                  <p className="text-sm text-slate-400">Install GoLogin and log in with the master account</p>
+                  <p className="text-sm text-slate-400">Install GoLogin and log in to your account</p>
                 </div>
                 <div className="bg-slate-800/30 border border-slate-700/50 rounded-lg p-4">
                   <div className="text-2xl mb-2">2️⃣</div>
                   <h4 className="font-semibold text-slate-200 mb-1">Create ID Profiles</h4>
-                  <p className="text-sm text-slate-400">Set up identity profiles in Magimanager</p>
+                  <p className="text-sm text-slate-400">Set up identity profiles with credentials and documents</p>
                 </div>
                 <div className="bg-slate-800/30 border border-slate-700/50 rounded-lg p-4">
                   <div className="text-2xl mb-2">3️⃣</div>
                   <h4 className="font-semibold text-slate-200 mb-1">Connect Everything</h4>
                   <p className="text-sm text-slate-400">Link profiles to Ad Accounts via OAuth</p>
                 </div>
+              </div>
+
+              <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-4">
+                <h4 className="text-indigo-300 font-semibold mb-2">Why Use This System?</h4>
+                <ul className="text-indigo-200/80 text-sm space-y-1">
+                  <li>• Centralize management of multiple ad accounts and identities</li>
+                  <li>• Track account status, spend, and health in one place</li>
+                  <li>• Maintain browser fingerprint separation with GoLogin integration</li>
+                  <li>• Store and organize identity documents securely</li>
+                  <li>• Coordinate team access and account assignments</li>
+                </ul>
               </div>
             </div>
           )}
@@ -8336,11 +8355,19 @@ function TutorialView() {
             <div>
               <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center gap-3">
                 <span className="text-3xl">💻</span>
-                Installing GoLogin Desktop
+                Setting Up GoLogin Desktop
               </h2>
               <p className="text-slate-300 mb-6 leading-relaxed">
-                Before you can create GoLogin profiles on Magimanager.com, you need to download and install the GoLogin desktop application.
+                GoLogin is essential for maintaining separate browser fingerprints for each identity.
+                Before creating profiles in Magimanager, you need to set up the GoLogin desktop application.
               </p>
+
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6">
+                <p className="text-amber-300 flex items-start gap-2">
+                  <span className="text-xl">💡</span>
+                  <span>You&apos;ll need an active GoLogin subscription to use all features. Visit <span className="font-mono">gologin.com</span> to sign up if you haven&apos;t already.</span>
+                </p>
+              </div>
 
               <div className="space-y-6">
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
@@ -8379,52 +8406,44 @@ function TutorialView() {
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
                   <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
                     <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">3</span>
-                    Login to Master Gmail Account
+                    Sign In to GoLogin
                   </h3>
                   <p className="text-slate-300 mb-3">
-                    First, open your browser and login to Gmail with the master account:
+                    Open the GoLogin desktop app and sign in with your GoLogin account.
+                    You can use email/password or sign in with Google.
                   </p>
-                  <div className="bg-slate-900 rounded-lg p-4 border border-emerald-500/30">
-                    <p className="text-emerald-400 font-mono text-lg">admin@automatedaa.com</p>
-                  </div>
                   <ScreenshotPlaceholder
-                    name="screenshot-gmail-login.png"
-                    description="Gmail login page with master account"
+                    name="screenshot-gologin-signin-button.png"
+                    description="GoLogin app sign in screen"
                   />
+                  <div className="bg-slate-900 rounded-lg p-4 border border-slate-600 mt-3">
+                    <p className="text-sm text-slate-400">
+                      <span className="text-emerald-400">Tip:</span> If your team shares a GoLogin account, make sure you&apos;re signed into the correct account that has access to your organization&apos;s profiles.
+                    </p>
+                  </div>
                 </div>
 
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
                   <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
                     <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">4</span>
-                    Login to GoLogin with Gmail
-                  </h3>
-                  <p className="text-slate-300 mb-3">
-                    Open the GoLogin desktop app and click <span className="text-white font-semibold">&quot;Sign in with Google&quot;</span>.
-                    Select the master Gmail account you just logged into.
-                  </p>
-                  <ScreenshotPlaceholder
-                    name="screenshot-gologin-signin-button.png"
-                    description="GoLogin app showing Sign in with Google button"
-                  />
-                  <ScreenshotPlaceholder
-                    name="screenshot-gologin-google-account-select.png"
-                    description="Google account selection popup"
-                  />
-                </div>
-
-                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
-                  <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
-                    <span className="bg-emerald-500 text-slate-950 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">5</span>
-                    View All Accounts
+                    View Your Profiles
                   </h3>
                   <p className="text-slate-300">
-                    Once logged in, you can now view all browser profiles/accounts that were created.
+                    Once logged in, you&apos;ll see the GoLogin dashboard with all your browser profiles.
                     These profiles maintain separate browser fingerprints and sessions for each identity.
                   </p>
                   <ScreenshotPlaceholder
                     name="screenshot-gologin-profiles-list.png"
-                    description="GoLogin main dashboard showing all browser profiles"
+                    description="GoLogin main dashboard showing browser profiles"
                   />
+                </div>
+
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4">
+                  <h4 className="text-emerald-300 font-semibold mb-2">What&apos;s Next?</h4>
+                  <p className="text-emerald-200/80 text-sm">
+                    With GoLogin set up, you can now create ID Profiles in Magimanager and generate corresponding
+                    GoLogin browser profiles for each identity. Continue to the next section to learn about ID Profiles.
+                  </p>
                 </div>
               </div>
             </div>
