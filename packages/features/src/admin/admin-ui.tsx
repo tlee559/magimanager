@@ -9148,7 +9148,7 @@ function TutorialView() {
                   </h3>
                   <p className="text-slate-300">
                     After authorization, you&apos;ll be redirected back to Magimanager.
-                    The Ad Account should now show as <span className="text-emerald-400 font-semibold">Connected</span>
+                    The Ad Account should now show as <span className="text-emerald-400 font-semibold">Connected</span>{" "}
                     with the Google CID displayed.
                   </p>
                 </div>
