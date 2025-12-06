@@ -18,12 +18,12 @@
   "dependencies": {
     "@magimanager/auth": "*",
     "@magimanager/database": "*",
-    "@magimanager/shared": "*",
     "@magimanager/realtime": "*",
+    "@magimanager/shared": "*",
     "bcryptjs": "^3.0.3"
   },
   "peerDependencies": {
-    "next": "^15.0.0"
+    "next": "^15.5.7"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

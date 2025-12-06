@@ -9,13 +9,13 @@
     "./admin": "./src/admin/index.ts"
   },
   "dependencies": {
-    "@magimanager/shared": "*",
     "@magimanager/core": "*",
-    "next-auth": "^4.24.7",
-    "jsqr": "^1.4.0"
+    "@magimanager/shared": "*",
+    "jsqr": "^1.4.0",
+    "next-auth": "^4.24.7"
   },
   "peerDependencies": {
-    "react": "^18.0.0 || ^19.0.0",
-    "next": "^15.0.0"
+    "next": "^15.5.7",
+    "react": "^18.0.0 || ^19.0.0"
   }
 }

@@ -9,13 +9,13 @@
   },
   "dependencies": {
     "@magimanager/database": "*",
-    "next-auth": "^4.24.13",
-    "bcryptjs": "^3.0.3"
+    "bcryptjs": "^3.0.3",
+    "next-auth": "^4.24.13"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6"
   },
   "peerDependencies": {
-    "next": "^15.0.0"
+    "next": "^15.5.7"
   }
 }
