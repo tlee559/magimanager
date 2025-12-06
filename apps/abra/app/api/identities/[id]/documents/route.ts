@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/db';
 import { put, del } from '@vercel/blob';
+import { fireIdentityProgressAlert } from '@magimanager/core/services';
 
 /**
  * GET /api/identities/[id]/documents
@@ -123,6 +124,14 @@ export async function POST(
         action: 'DOCUMENT_UPLOADED',
         details: `Document uploaded: ${type}`,
       },
+    });
+
+    // Fire progress alert
+    await fireIdentityProgressAlert({
+      identityId: id,
+      identityName: identity.fullName,
+      progressType: 'document_added',
+      details: file.name,
     });
 
     return NextResponse.json(document, { status: 201 });
