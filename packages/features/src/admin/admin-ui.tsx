@@ -8418,10 +8418,6 @@ function TutorialView() {
                   <p className="text-slate-300">
                     Run the installer and follow the on-screen instructions to complete the installation.
                   </p>
-                  <ScreenshotPlaceholder
-                    name="screenshot-gologin-installer.png"
-                    description="GoLogin installation wizard"
-                  />
                 </div>
 
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
