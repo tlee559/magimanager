@@ -507,22 +507,7 @@ export function AdminApp({
       items.push(
         { id: "ad-accounts" as View, label: "Account Profiles", icon: "💳" },
         { id: "identities" as View, label: "ID Profiles", icon: "👥" },
-        { id: "admin-requests" as View, label: "Account Requests", icon: "📥" },
-        { id: "team" as View, label: "Team", icon: "👨‍👩‍👧‍👦" }
-      );
-    }
-
-    // SMS Dashboard - Super Admin and Admin only (Coming Soon teaser)
-    if (userRole === "SUPER_ADMIN" || userRole === "ADMIN") {
-      items.push(
-        { id: "sms-dashboard" as View, label: "SMS", icon: "📱", comingSoon: true }
-      );
-    }
-
-    // Authenticator - for admins and managers
-    if (userRole === "SUPER_ADMIN" || userRole === "ADMIN" || userRole === "MANAGER") {
-      items.push(
-        { id: "authenticator" as View, label: "Authenticator", icon: "🔐" }
+        { id: "admin-requests" as View, label: "Account Requests", icon: "📥" }
       );
     }
 
@@ -537,6 +522,21 @@ export function AdminApp({
     items.push(
       { id: "requests" as View, label: "My Requests", icon: "📝" }
     );
+
+    // SMS Dashboard - Super Admin and Admin only (Coming Soon teaser)
+    if (userRole === "SUPER_ADMIN" || userRole === "ADMIN") {
+      items.push(
+        { id: "sms-dashboard" as View, label: "SMS", icon: "📱", comingSoon: true }
+      );
+    }
+
+    // Authenticator - for admins and managers
+    if (userRole === "SUPER_ADMIN" || userRole === "ADMIN" || userRole === "MANAGER") {
+      items.push(
+        { id: "authenticator" as View, label: "Authenticator", icon: "🔐" },
+        { id: "team" as View, label: "Team", icon: "👨‍👩‍👧‍👦" }
+      );
+    }
 
     // Settings always last for admins/managers
     if (userRole === "SUPER_ADMIN" || userRole === "ADMIN" || userRole === "MANAGER") {
@@ -559,7 +559,7 @@ export function AdminApp({
               Magimanager
             </span>
             <span className="text-xs text-slate-400">
-              Account Factory Console
+              Account Management Console
             </span>
           </div>
         </div>
@@ -8295,10 +8295,11 @@ function TutorialView() {
             <div>
               <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center gap-3">
                 <span className="text-3xl">🚀</span>
-                Getting Started with Magimanager
+                Getting Started with MagiManager
               </h2>
               <p className="text-slate-300 mb-6 leading-relaxed">
-                Welcome to Magimanager! This tutorial will guide you through setting up your account management system.
+                Welcome to <span className="text-emerald-400 font-semibold">MagiManager - Account Management Console</span>!
+                This tutorial will guide you through setting up and managing your Google Ads accounts with unique identities.
                 Follow these steps in order to properly configure everything.
               </p>
 
