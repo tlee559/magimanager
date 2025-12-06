@@ -8579,6 +8579,10 @@ function TutorialView() {
                   <p className="text-slate-300">
                     Find the Ad Account you want to link and click on it to open the details panel.
                   </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-account-profiles-list.png"
+                    description="Account Profiles list page"
+                  />
                 </div>
 
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
@@ -8590,6 +8594,10 @@ function TutorialView() {
                     In the Ad Account details, find the <span className="text-white font-semibold">&quot;ID Profile&quot;</span> dropdown
                     and select the ID Profile you want to associate with this account.
                   </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-ad-account-id-profile-dropdown.png"
+                    description="Ad Account detail showing ID Profile dropdown"
+                  />
                   <div className="bg-slate-900 rounded-lg p-4 border border-slate-600">
                     <p className="text-sm text-slate-400">
                       <span className="text-emerald-400">Tip:</span> Choose an ID Profile that matches the geographic location and identity used to create the ad account.
@@ -8606,6 +8614,10 @@ function TutorialView() {
                     Click <span className="text-emerald-400 font-semibold">Save</span> to confirm the connection.
                     The ID Profile will now be linked to this Ad Account.
                   </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-ad-account-linked-success.png"
+                    description="Ad Account showing linked ID Profile"
+                  />
                 </div>
               </div>
             </div>
@@ -8705,6 +8717,10 @@ function TutorialView() {
                   </li>
                 </ol>
               </div>
+              <ScreenshotPlaceholder
+                name="screenshot-create-ad-account-form.png"
+                description="Create New Ad Account form"
+              />
             </div>
           )}
 
@@ -8736,6 +8752,10 @@ function TutorialView() {
                     Go to <span className="text-emerald-400 font-semibold">ID Profiles</span> and click on the profile
                     you want to create a GoLogin profile for.
                   </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-id-profile-detail-view.png"
+                    description="ID Profile detail view page"
+                  />
                 </div>
 
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
@@ -8746,6 +8766,10 @@ function TutorialView() {
                   <p className="text-slate-300">
                     In the ID Profile detail view, scroll down to find the <span className="text-white font-semibold">&quot;GoLogin Profile&quot;</span> section.
                   </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-id-profile-gologin-section.png"
+                    description="GoLogin Profile section in ID Profile detail"
+                  />
                 </div>
 
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
@@ -8771,6 +8795,10 @@ function TutorialView() {
                       <span>Create the profile in your GoLogin account</span>
                     </li>
                   </ul>
+                  <ScreenshotPlaceholder
+                    name="screenshot-create-gologin-button.png"
+                    description="Create GoLogin Profile button"
+                  />
                 </div>
 
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
@@ -8782,6 +8810,10 @@ function TutorialView() {
                     Open your GoLogin desktop app. You should see the new profile appear in your profile list.
                     The profile name will match the ID Profile name from Magimanager.
                   </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-gologin-new-profile-created.png"
+                    description="GoLogin desktop showing newly created profile"
+                  />
                 </div>
 
                 <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4">
@@ -8823,6 +8855,10 @@ function TutorialView() {
                     Launch the GoLogin desktop application and find the profile associated with
                     the Ad Account you want to connect.
                   </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-oauth-gologin-find-profile.png"
+                    description="GoLogin desktop - find the profile for this account"
+                  />
                 </div>
 
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
@@ -8834,6 +8870,10 @@ function TutorialView() {
                     Click <span className="text-white font-semibold">&quot;Start&quot;</span> to launch the browser with the identity&apos;s unique fingerprint.
                     Wait for the browser to fully open.
                   </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-oauth-gologin-start-button.png"
+                    description="GoLogin Start button for profile"
+                  />
                   <div className="bg-slate-900 rounded-lg p-4 border border-amber-500/30">
                     <p className="text-sm text-amber-300">
                       <span className="font-semibold">Note:</span> Make sure the proxy is connected and working before proceeding.
@@ -8849,6 +8889,10 @@ function TutorialView() {
                   <p className="text-slate-300">
                     Inside the GoLogin browser, go to <span className="text-emerald-400 font-mono">magimanager.com</span> and log in to your account.
                   </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-oauth-magimanager-login-gologin.png"
+                    description="Magimanager login page inside GoLogin browser"
+                  />
                 </div>
 
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
@@ -8860,6 +8904,10 @@ function TutorialView() {
                     Go to <span className="text-emerald-400 font-semibold">Account Profiles</span> and locate the
                     Ad Account you want to connect. Click on it to open the details.
                   </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-oauth-select-ad-account.png"
+                    description="Account Profiles page - select the account to connect"
+                  />
                 </div>
 
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
@@ -8871,6 +8919,10 @@ function TutorialView() {
                     Click the <span className="text-emerald-400 font-semibold">Connect Google Ads</span> button.
                     This will redirect you to Google&apos;s OAuth authorization page.
                   </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-oauth-connect-button.png"
+                    description="Connect Google Ads button in account details"
+                  />
                 </div>
 
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
@@ -8895,6 +8947,10 @@ function TutorialView() {
                       <span>Click <span className="text-white font-semibold">&quot;Allow&quot;</span> to grant access</span>
                     </li>
                   </ul>
+                  <ScreenshotPlaceholder
+                    name="screenshot-oauth-google-permission-page.png"
+                    description="Google OAuth permission request page"
+                  />
                 </div>
 
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
@@ -8907,6 +8963,10 @@ function TutorialView() {
                     The Ad Account should now show as <span className="text-emerald-400 font-semibold">Connected</span>
                     with the Google CID displayed.
                   </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-oauth-connected-success.png"
+                    description="Ad Account showing Connected status with Google CID"
+                  />
                 </div>
               </div>
             </div>
@@ -8953,6 +9013,10 @@ function TutorialView() {
                     Navigate to <span className="text-emerald-400 font-semibold">ID Profiles</span> and click on
                     the profile you want to add documents to.
                   </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-docs-id-profile-select.png"
+                    description="ID Profiles list - select profile for documents"
+                  />
                 </div>
 
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
@@ -8964,6 +9028,10 @@ function TutorialView() {
                     Scroll down to the <span className="text-white font-semibold">&quot;Documents&quot;</span> section
                     in the profile detail view.
                   </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-docs-section-location.png"
+                    description="Documents section in ID Profile detail view"
+                  />
                 </div>
 
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
@@ -8988,6 +9056,10 @@ function TutorialView() {
                       <span>Wait for the upload to complete</span>
                     </li>
                   </ul>
+                  <ScreenshotPlaceholder
+                    name="screenshot-docs-upload-modal.png"
+                    description="Document upload modal with type selection"
+                  />
                 </div>
 
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
@@ -8999,6 +9071,10 @@ function TutorialView() {
                     Once uploaded, the document will appear in the Documents list with its type and upload date.
                     You can click to preview or delete documents as needed.
                   </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-docs-uploaded-list.png"
+                    description="Documents list showing uploaded documents"
+                  />
                 </div>
 
                 <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
@@ -9037,6 +9113,10 @@ function TutorialView() {
                     Navigate to <span className="text-emerald-400 font-semibold">ID Profiles</span>, click on
                     the profile, and then click the <span className="text-white font-semibold">&quot;Edit&quot;</span> button.
                   </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-website-edit-button.png"
+                    description="ID Profile detail with Edit button highlighted"
+                  />
                 </div>
 
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
@@ -9047,6 +9127,10 @@ function TutorialView() {
                   <p className="text-slate-300">
                     In the edit form, locate the <span className="text-white font-semibold">&quot;Website&quot;</span> field.
                   </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-website-field-location.png"
+                    description="Edit form showing Website field"
+                  />
                 </div>
 
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
@@ -9060,6 +9144,10 @@ function TutorialView() {
                   <div className="bg-slate-900 rounded-lg p-4 border border-slate-600">
                     <code className="text-emerald-400">https://example.com</code>
                   </div>
+                  <ScreenshotPlaceholder
+                    name="screenshot-website-url-entered.png"
+                    description="Website field with URL entered"
+                  />
                 </div>
 
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
@@ -9071,6 +9159,10 @@ function TutorialView() {
                     Click <span className="text-emerald-400 font-semibold">Save Changes</span> to update the ID Profile
                     with the website information.
                   </p>
+                  <ScreenshotPlaceholder
+                    name="screenshot-website-save-button.png"
+                    description="Save Changes button"
+                  />
                 </div>
 
                 <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-4">
