@@ -27,7 +27,18 @@ export async function GET() {
       take: 50, // Limit to last 50 notifications
     });
 
-    return NextResponse.json({ notifications });
+    // Count unread notifications
+    const unreadCount = await prisma.notification.count({
+      where: {
+        OR: [
+          { userId },
+          { userId: null },
+        ],
+        isRead: false,
+      },
+    });
+
+    return NextResponse.json({ notifications, unreadCount });
   } catch (error) {
     console.error("Failed to fetch notifications:", error);
     return NextResponse.json(
