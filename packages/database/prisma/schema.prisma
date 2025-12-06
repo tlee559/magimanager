@@ -1405,3 +1405,52 @@ model AdTemplate {
   @@index([isActive])
   @@index([usageCount])
 }
+
+// ============================================================================
+// KADABRA: YOUTUBE SCRAPER
+// ============================================================================
+
+enum YouTubeDownloadStatus {
+  PENDING
+  DOWNLOADING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model YouTubeDownloadJob {
+  id              String                @id @default(cuid())
+  userId          String
+  url             String
+
+  // Video info
+  videoId         String?               // YouTube video ID
+  title           String?
+  description     String?               @db.Text
+  thumbnail       String?
+  duration        Int?                  // seconds
+  uploadDate      String?
+  viewCount       Int?
+  likeCount       Int?
+  channel         String?
+  channelUrl      String?
+
+  // Job status
+  status          YouTubeDownloadStatus @default(PENDING)
+  progress        Int                   @default(0)  // 0-100
+  error           String?               @db.Text
+
+  // Output
+  blobUrl         String?               // Vercel Blob URL
+  fileSize        Int?                  // bytes
+
+  // Debug
+  debug           String[]              // Array of debug log entries
+
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
