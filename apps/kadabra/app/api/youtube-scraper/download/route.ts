@@ -72,10 +72,16 @@ export async function POST(req: NextRequest) {
 
     console.log("[DOWNLOAD] Created job:", job.id);
 
-    // Start download in background (non-blocking)
-    processDownload(job.id, url, videoId, quality, session.user.email).catch((error) => {
-      console.error("[DOWNLOAD] Background process error:", error);
-      prisma.youTubeDownloadJob.update({
+    // Run download synchronously (don't return until done)
+    // This keeps the serverless function alive for the full download
+    console.log("[DOWNLOAD] Starting synchronous download process...");
+
+    try {
+      await processDownload(job.id, url, videoId, quality, session.user.email);
+      console.log("[DOWNLOAD] Download completed successfully");
+    } catch (error) {
+      console.error("[DOWNLOAD] Download process error:", error);
+      await prisma.youTubeDownloadJob.update({
         where: { id: job.id },
         data: {
           status: "FAILED",
@@ -84,22 +90,31 @@ export async function POST(req: NextRequest) {
             push: `[${new Date().toISOString()}] ERROR: ${error instanceof Error ? error.message : String(error)}`,
           },
         },
-      }).catch(console.error);
+      });
+    }
+
+    // Fetch updated job
+    const updatedJob = await prisma.youTubeDownloadJob.findUnique({
+      where: { id: job.id },
     });
 
-    console.log("[DOWNLOAD] Returning success response");
+    console.log("[DOWNLOAD] Returning response with status:", updatedJob?.status);
 
     // Return job in the format expected by the frontend
     return NextResponse.json({
       success: true,
       job: {
-        id: job.id,
-        url: job.url,
-        status: job.status.toLowerCase(),
-        progress: job.progress,
-        createdAt: job.createdAt.toISOString(),
-        updatedAt: job.updatedAt.toISOString(),
-        debug: job.debug,
+        id: updatedJob?.id || job.id,
+        url: updatedJob?.url || job.url,
+        status: (updatedJob?.status || job.status).toLowerCase(),
+        progress: updatedJob?.progress || job.progress,
+        blobUrl: updatedJob?.blobUrl,
+        fileSize: updatedJob?.fileSize,
+        title: updatedJob?.title,
+        thumbnail: updatedJob?.thumbnail,
+        createdAt: (updatedJob?.createdAt || job.createdAt).toISOString(),
+        updatedAt: (updatedJob?.updatedAt || job.updatedAt).toISOString(),
+        debug: updatedJob?.debug || job.debug,
       },
     });
   } catch (error) {
@@ -176,6 +191,7 @@ async function processDownload(
     await addDebug("Starting video download from YouTube CDN...");
 
     const response = await fetch(downloadInfo.url, {
+      redirect: "follow", // Follow 302 redirects
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "*/*",
@@ -188,6 +204,8 @@ async function processDownload(
     if (!response.ok) {
       throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
     }
+
+    await addDebug(`Response OK - Status: ${response.status}`);
 
     await addDebug("Downloading video stream...");
 
@@ -205,6 +223,8 @@ async function processDownload(
     const chunks: Uint8Array[] = [];
     let downloadedBytes = 0;
     let lastProgressUpdate = 15;
+    let lastDebugUpdate = Date.now();
+    const startTime = Date.now();
 
     while (true) {
       const { done, value } = await reader.read();
@@ -218,12 +238,16 @@ async function processDownload(
         ? Math.round(15 + (downloadedBytes / totalSize) * 65) // 15-80%
         : Math.min(15 + Math.floor(downloadedBytes / 1000000) * 5, 80);
 
-      // Update every 5%
-      if (progressPercent >= lastProgressUpdate + 5) {
+      const now = Date.now();
+      // Update every 2% or every 3 seconds
+      if (progressPercent >= lastProgressUpdate + 2 || now - lastDebugUpdate > 3000) {
         lastProgressUpdate = progressPercent;
+        lastDebugUpdate = now;
         const downloadedMB = (downloadedBytes / 1024 / 1024).toFixed(2);
         const totalMB = totalSize ? (totalSize / 1024 / 1024).toFixed(2) : "?";
-        await addDebug(`Download progress: ${downloadedMB} / ${totalMB} MB`);
+        const elapsedSec = ((now - startTime) / 1000).toFixed(1);
+        const speedMbps = (downloadedBytes / 1024 / 1024 / ((now - startTime) / 1000)).toFixed(2);
+        await addDebug(`Downloading: ${downloadedMB}/${totalMB} MB (${progressPercent}%) - ${speedMbps} MB/s - ${elapsedSec}s`);
 
         await prisma.youTubeDownloadJob.update({
           where: { id: jobId },
