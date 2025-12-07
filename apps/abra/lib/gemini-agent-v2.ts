@@ -1246,8 +1246,12 @@ export async function runAgent(
           continue;
         }
 
-        // Other errors - don't try more models
-        break;
+        // Other errors - don't try more models, return with a friendly message
+        return {
+          response: "My brain glitched for a moment 🤖 Try again, or use /report if you need data quick!",
+          toolsUsed,
+          context,
+        };
       } catch (fetchError) {
         clearTimeout(timeoutId);
         lastError = fetchError instanceof Error ? fetchError : new Error(String(fetchError));
@@ -1277,16 +1281,7 @@ export async function runAgent(
       };
     }
 
-    if (!response.ok) {
-      const error = await response.text();
-      console.error("[Agent] All models failed:", error.slice(0, 200));
-      return {
-        response: "My brain glitched for a moment 🤖 Try again, or use /report if you need data quick!",
-        toolsUsed,
-        context,
-      };
-    }
-
+    // At this point, response is guaranteed to be ok (non-ok cases returned early)
     let data;
     try {
       data = await response.json();
