@@ -217,7 +217,8 @@ async function processDownload(
       .replace(/\s+/g, "-")
       .substring(0, 50);
 
-    const blobPath = `youtube-downloads/${userId}/${safeTitle}-${videoId}.mp4`;
+    const timestamp = Date.now();
+    const blobPath = `youtube-downloads/${userId}/${safeTitle}-${videoId}-${timestamp}.mp4`;
     await addDebug(`Uploading to Vercel Blob: ${blobPath}`);
 
     const blob = await put(blobPath, videoBuffer, {
