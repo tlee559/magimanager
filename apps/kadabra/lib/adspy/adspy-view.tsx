@@ -45,7 +45,6 @@ const LOCATION_OPTIONS: { code: string; name: string }[] = [
 export function AdSpyView({ onBack }: AdSpyViewProps) {
   const [keyword, setKeyword] = useState("");
   const [location, setLocation] = useState("us");
-  const [businessContext, setBusinessContext] = useState("");
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [jobs, setJobs] = useState<AdSpyJob[]>([]);
@@ -122,7 +121,6 @@ export function AdSpyView({ onBack }: AdSpyViewProps) {
         body: JSON.stringify({
           keyword: keyword.trim(),
           location,
-          businessContext: businessContext.trim() || undefined,
         }),
       });
 
@@ -156,7 +154,6 @@ export function AdSpyView({ onBack }: AdSpyViewProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           jobId: selectedJob.id,
-          businessContext: businessContext.trim() || undefined,
         }),
       });
 
@@ -283,16 +280,6 @@ export function AdSpyView({ onBack }: AdSpyViewProps) {
                   </option>
                 ))}
               </select>
-            </div>
-
-            <div>
-              <textarea
-                value={businessContext}
-                onChange={(e) => setBusinessContext(e.target.value)}
-                placeholder="Optional: Describe your business for better AI recommendations..."
-                rows={2}
-                className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 text-sm resize-none"
-              />
             </div>
 
             <button

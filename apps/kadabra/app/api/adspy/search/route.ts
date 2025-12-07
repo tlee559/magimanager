@@ -12,20 +12,46 @@ const ADSPY_SERVICE_API_KEY = process.env.ADSPY_SERVICE_API_KEY || "adspy-dev-ke
 interface AdSpySearchRequest {
   keyword: string;
   location?: string;
-  businessContext?: string;
 }
 
 export async function POST(req: NextRequest) {
-  console.log("[ADSPY:SEARCH] POST request received");
+  console.log("[ADSPY:SEARCH] ========== POST request received ==========");
+  console.log("[ADSPY:SEARCH] ADSPY_SERVICE_URL:", ADSPY_SERVICE_URL);
 
-  const session = await getServerSession(authOptions);
+  // Check auth
+  let session;
+  try {
+    session = await getServerSession(authOptions);
+    console.log("[ADSPY:SEARCH] Session user:", session?.user?.email || "NO SESSION");
+  } catch (authError) {
+    console.error("[ADSPY:SEARCH] Auth error:", authError);
+    return NextResponse.json({
+      success: false,
+      error: "Authentication error",
+      debug: { authError: String(authError) }
+    }, { status: 500 });
+  }
+
   if (!session?.user?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const body: AdSpySearchRequest = await req.json();
-    const { keyword, location = "us", businessContext } = body;
+    // Parse request body
+    let body: AdSpySearchRequest;
+    try {
+      body = await req.json();
+      console.log("[ADSPY:SEARCH] Request body:", JSON.stringify(body));
+    } catch (parseError) {
+      console.error("[ADSPY:SEARCH] JSON parse error:", parseError);
+      return NextResponse.json({
+        success: false,
+        error: "Invalid JSON in request body",
+        debug: { parseError: String(parseError) }
+      }, { status: 400 });
+    }
+
+    const { keyword, location = "us" } = body;
 
     if (!keyword || keyword.trim().length === 0) {
       return NextResponse.json(
@@ -35,50 +61,78 @@ export async function POST(req: NextRequest) {
     }
 
     // Create job in database
-    const job = await prisma.adSpyJob.create({
-      data: {
-        userId: session.user.email,
-        keyword: keyword.trim(),
-        location,
-        businessContext,
-        status: "PENDING",
-        progress: 0,
-        debug: [`[${new Date().toISOString()}] Job created`],
-      },
-    });
-
-    console.log("[ADSPY:SEARCH] Created job:", job.id);
+    console.log("[ADSPY:SEARCH] Creating job in database...");
+    let job;
+    try {
+      job = await prisma.adSpyJob.create({
+        data: {
+          userId: session.user.email,
+          keyword: keyword.trim(),
+          location,
+          status: "PENDING",
+          progress: 0,
+          debug: [`[${new Date().toISOString()}] Job created`],
+        },
+      });
+      console.log("[ADSPY:SEARCH] Created job:", job.id);
+    } catch (dbError) {
+      console.error("[ADSPY:SEARCH] Database error creating job:", dbError);
+      return NextResponse.json({
+        success: false,
+        error: "Database error: Failed to create job",
+        debug: { dbError: String(dbError) }
+      }, { status: 500 });
+    }
 
     // Process the search synchronously
     try {
       await processSearch(job.id, keyword.trim(), location, session.user.email);
-    } catch (error) {
-      console.error("[ADSPY:SEARCH] Process error:", error);
-      await prisma.adSpyJob.update({
-        where: { id: job.id },
-        data: {
-          status: "FAILED",
-          error: error instanceof Error ? error.message : "Search failed",
-          debug: {
-            push: `[${new Date().toISOString()}] ERROR: ${error instanceof Error ? error.message : String(error)}`,
+    } catch (processError) {
+      console.error("[ADSPY:SEARCH] Process error:", processError);
+      try {
+        await prisma.adSpyJob.update({
+          where: { id: job.id },
+          data: {
+            status: "FAILED",
+            error: processError instanceof Error ? processError.message : "Search failed",
+            debug: {
+              push: `[${new Date().toISOString()}] ERROR: ${processError instanceof Error ? processError.message : String(processError)}`,
+            },
           },
-        },
-      });
+        });
+      } catch (updateError) {
+        console.error("[ADSPY:SEARCH] Failed to update job with error:", updateError);
+      }
     }
 
     // Fetch and return updated job
-    const updatedJob = await prisma.adSpyJob.findUnique({
-      where: { id: job.id },
-    });
+    let updatedJob;
+    try {
+      updatedJob = await prisma.adSpyJob.findUnique({
+        where: { id: job.id },
+      });
+    } catch (fetchError) {
+      console.error("[ADSPY:SEARCH] Failed to fetch updated job:", fetchError);
+      updatedJob = job;
+    }
+
+    console.log("[ADSPY:SEARCH] Returning job status:", updatedJob?.status);
 
     return NextResponse.json({
       success: true,
       job: formatJob(updatedJob || job),
     });
   } catch (error) {
-    console.error("[ADSPY:SEARCH] Error:", error);
+    console.error("[ADSPY:SEARCH] Unhandled error:", error);
     return NextResponse.json(
-      { success: false, error: "Failed to start search" },
+      {
+        success: false,
+        error: "Failed to start search",
+        debug: {
+          error: String(error),
+          stack: error instanceof Error ? error.stack : undefined
+        }
+      },
       { status: 500 }
     );
   }
@@ -91,12 +145,16 @@ async function processSearch(
   userId: string
 ) {
   const addDebug = async (msg: string) => {
-    await prisma.adSpyJob.update({
-      where: { id: jobId },
-      data: {
-        debug: { push: `[${new Date().toISOString()}] ${msg}` },
-      },
-    });
+    try {
+      await prisma.adSpyJob.update({
+        where: { id: jobId },
+        data: {
+          debug: { push: `[${new Date().toISOString()}] ${msg}` },
+        },
+      });
+    } catch (e) {
+      // Ignore debug update failures
+    }
     console.log(`[ADSPY:${jobId.slice(0, 8)}] ${msg}`);
   };
 
@@ -109,25 +167,37 @@ async function processSearch(
     });
 
     // Call Python service
-    await addDebug(`Calling AdSpy Python service...`);
+    await addDebug(`Calling AdSpy Python service at ${ADSPY_SERVICE_URL}/search`);
+
+    const fetchBody = JSON.stringify({
+      api_key: ADSPY_SERVICE_API_KEY,
+      keyword,
+      location,
+      num_results: 10,
+    });
+
+    console.log(`[ADSPY:${jobId.slice(0, 8)}] Fetch body:`, fetchBody);
+
     const response = await fetch(`${ADSPY_SERVICE_URL}/search`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        api_key: ADSPY_SERVICE_API_KEY,
-        keyword,
-        location,
-        num_results: 10,
-      }),
+      body: fetchBody,
     });
+
+    await addDebug(`Python service responded with status: ${response.status}`);
 
     if (!response.ok) {
       const errorText = await response.text();
+      await addDebug(`Python service error response: ${errorText}`);
       throw new Error(`Python service error: ${response.status} - ${errorText}`);
     }
 
     const result = await response.json();
-    await addDebug(`Got ${result.ads?.length || 0} ads from SerpApi`);
+    await addDebug(`Got ${result.ads?.length || 0} ads from service (source: ${result.source})`);
+
+    if (result.debug_info) {
+      await addDebug(`Debug info: ${JSON.stringify(result.debug_info)}`);
+    }
 
     if (!result.success) {
       throw new Error(result.error || "Search failed");
@@ -214,7 +284,6 @@ function formatJob(job: any) {
     id: job.id,
     keyword: job.keyword,
     location: job.location,
-    businessContext: job.businessContext,
     status: job.status.toLowerCase(),
     progress: job.progress,
     ads: job.ads,
