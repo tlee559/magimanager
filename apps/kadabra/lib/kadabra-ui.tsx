@@ -34,6 +34,7 @@ import {
   BarChart3,
   ImageIcon,
   Youtube,
+  Search,
 } from "lucide-react";
 import { ProfileModal } from "@magimanager/features";
 import { formatCid } from "@magimanager/shared";
@@ -1555,21 +1556,24 @@ function ToolsView({ onNavigate }: { onNavigate?: (view: View) => void }) {
             </span>
           </button>
 
-          {/* Ad Spy - Coming Soon */}
-          <div className="bg-slate-800/30 rounded-xl p-5 border border-slate-700/30 opacity-60">
+          {/* Ad Spy */}
+          <button
+            onClick={() => onNavigate?.("adspy")}
+            className="bg-slate-800/50 rounded-xl p-5 border border-cyan-500/30 hover:border-cyan-500/50 transition text-left group"
+          >
             <div className="flex items-center gap-3 mb-3">
-              <div className="p-2 bg-slate-700/50 rounded-lg">
-                <Eye className="w-5 h-5 text-slate-400" />
+              <div className="p-2 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg group-hover:scale-110 transition">
+                <Search className="w-5 h-5 text-white" />
               </div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-medium text-slate-400">Ad Spy</h3>
-                <ComingSoonBadge size="sm" />
-              </div>
+              <h3 className="text-sm font-medium text-slate-200">Ad Spy</h3>
             </div>
-            <p className="text-xs text-slate-500">
-              Research competitor ads and discover winning creative strategies.
+            <p className="text-xs text-slate-400 mb-3">
+              Research competitor Google Ads and get AI-powered copywriting recommendations.
             </p>
-          </div>
+            <span className="text-xs text-cyan-400 group-hover:text-cyan-300 transition">
+              Spy on Ads →
+            </span>
+          </button>
         </div>
       </div>
 
@@ -1861,7 +1865,7 @@ function RequestModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (j
 // MAIN KADABRA APP
 // ============================================================================
 
-type View = "dashboard" | "accounts" | "account-detail" | "automations" | "tools" | "campaign-planner" | "video-clipper" | "ai-image-generator" | "youtube-scraper" | "action-queue" | "requests" | "notifications";
+type View = "dashboard" | "accounts" | "account-detail" | "automations" | "tools" | "campaign-planner" | "video-clipper" | "ai-image-generator" | "youtube-scraper" | "adspy" | "action-queue" | "requests" | "notifications";
 
 // ============================================================================
 // SKELETON LOADERS

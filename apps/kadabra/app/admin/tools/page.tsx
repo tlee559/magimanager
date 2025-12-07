@@ -26,6 +26,8 @@ export default function ToolsPage() {
             router.push("/admin/tools/ai-image-generator");
           } else if (view === "youtube-scraper") {
             router.push("/admin/tools/youtube-scraper");
+          } else if (view === "adspy") {
+            router.push("/admin/tools/adspy");
           }
         }}
       />

@@ -1454,3 +1454,50 @@ model YouTubeDownloadJob {
   @@index([status])
   @@index([createdAt])
 }
+
+// ============================================================================
+// KADABRA: ADSPY TOOL
+// ============================================================================
+
+enum AdSpyStatus {
+  PENDING
+  SEARCHING
+  SCREENSHOTTING
+  ANALYZING
+  COMPLETED
+  FAILED
+}
+
+model AdSpyJob {
+  id              String      @id @default(cuid())
+  userId          String
+
+  // Search params
+  keyword         String
+  location        String      @default("us")
+  businessContext String?     @db.Text  // Optional user context for AI analysis
+
+  // Status
+  status          AdSpyStatus @default(PENDING)
+  progress        Int         @default(0)  // 0-100
+  error           String?     @db.Text
+
+  // Results from SerpApi (JSON array of ads)
+  ads             Json?       // Array of ad objects with all fields
+
+  // AI Analysis results (JSON)
+  aiAnalysis      Json?       // Gemini analysis with recommendations
+
+  // Screenshots stored in Vercel Blob
+  screenshotUrls  Json?       // Map of {adIndex: blobUrl} for landing page screenshots
+
+  // Debugging
+  debug           String[]
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
