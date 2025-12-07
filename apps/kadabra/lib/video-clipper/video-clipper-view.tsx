@@ -36,6 +36,7 @@ import {
   SkipBack,
   SkipForward,
   RefreshCw,
+  Link2,
 } from 'lucide-react';
 import { UploadedVideo, UploadStatus, Transcript, TranscribeStatus, ClipSuggestion, AnalyzeStatus, GeneratedClip, SavedJob, SaveJobStatus, ClipExports, ExportKey, ExportStatesMap, ClipExportsWithProcessing, ExportProcessingState, MarketingContext, TrimAdjustment } from './types';
 import {
@@ -109,12 +110,38 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
   // Expanded suggestion details: Set<clipIndex>
   const [expandedSuggestions, setExpandedSuggestions] = useState<Set<number>>(new Set());
 
+  // YouTube URL input state
+  const [inputMethod, setInputMethod] = useState<'upload' | 'youtube'>('upload');
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [youtubeLoading, setYoutubeLoading] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // Phase 5: Load saved jobs on mount
   useEffect(() => {
     loadJobs();
+  }, []);
+
+  // Check for pre-loaded video from YouTube Scraper
+  useEffect(() => {
+    const stored = localStorage.getItem('videoClipper_sourceVideo');
+    if (stored) {
+      try {
+        const videoData = JSON.parse(stored);
+        console.log('[VideoClipper] Loading video from YouTube Scraper:', videoData.title);
+        setVideo({
+          url: videoData.url,
+          filename: videoData.title || 'YouTube Video',
+          size: 0,
+          duration: videoData.duration || null,
+        });
+        setStatus('success');
+        localStorage.removeItem('videoClipper_sourceVideo');
+      } catch (err) {
+        console.error('[VideoClipper] Failed to parse pre-loaded video:', err);
+      }
+    }
   }, []);
 
   const loadJobs = async () => {
@@ -377,6 +404,60 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Handle YouTube URL download
+  const handleYoutubeUrl = async () => {
+    if (!youtubeUrl.trim()) return;
+
+    console.log('[VideoClipper] Downloading YouTube video:', youtubeUrl);
+    setYoutubeLoading(true);
+    setError(null);
+
+    try {
+      // Call the YouTube scraper download endpoint
+      const response = await fetch('/api/youtube-scraper/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: youtubeUrl, quality: 'best' }),
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to download YouTube video');
+      }
+
+      // The download endpoint now waits for completion
+      if (data.job.status === 'completed' && data.job.blobUrl) {
+        console.log('[VideoClipper] YouTube video ready:', data.job.title);
+
+        // Extract duration from video
+        let duration: number | null = data.job.duration || null;
+        if (!duration && data.job.blobUrl) {
+          try {
+            duration = await extractDuration(data.job.blobUrl);
+          } catch (e) {
+            console.log('[VideoClipper] Could not extract duration:', e);
+          }
+        }
+
+        setVideo({
+          url: data.job.blobUrl,
+          filename: data.job.title || 'YouTube Video',
+          size: data.job.fileSize || 0,
+          duration,
+        });
+        setStatus('success');
+        setYoutubeUrl('');
+      } else {
+        throw new Error(`Download failed: ${data.job.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('[VideoClipper] YouTube download error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to download YouTube video');
+    } finally {
+      setYoutubeLoading(false);
+    }
   };
 
   // Combined flow status for the unified analyze button
@@ -1284,38 +1365,123 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
       {!showJobHistory && (
         <div className="space-y-6">
           {/* Upload Zone - shown when no video */}
-          {!video && status !== 'uploading' && (
-            <div
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`
-                bg-slate-800/50 rounded-xl border-2 border-dashed p-12 text-center cursor-pointer transition
-                ${isDragging
-                  ? 'border-violet-500 bg-violet-500/10'
-                  : 'border-slate-700 hover:border-slate-600 hover:bg-slate-800/70'
-                }
-              `}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="video/mp4,video/webm,video/quicktime"
-                onChange={handleFileSelect}
-                className="hidden"
-              />
-              <div className={`mx-auto w-16 h-16 rounded-xl flex items-center justify-center mb-4 ${
-                isDragging ? 'bg-violet-500/20' : 'bg-slate-700/50'
-              }`}>
-                <Upload className={`w-8 h-8 ${isDragging ? 'text-violet-400' : 'text-slate-400'}`} />
+          {!video && status !== 'uploading' && !youtubeLoading && (
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
+              {/* Tabs */}
+              <div className="flex border-b border-slate-700/50">
+                <button
+                  onClick={() => setInputMethod('upload')}
+                  className={`flex-1 px-4 py-3 text-sm font-medium transition flex items-center justify-center gap-2 ${
+                    inputMethod === 'upload'
+                      ? 'text-violet-400 bg-slate-700/30 border-b-2 border-violet-500'
+                      : 'text-slate-400 hover:text-slate-300 hover:bg-slate-700/20'
+                  }`}
+                >
+                  <Upload className="w-4 h-4" />
+                  Upload File
+                </button>
+                <button
+                  onClick={() => setInputMethod('youtube')}
+                  className={`flex-1 px-4 py-3 text-sm font-medium transition flex items-center justify-center gap-2 ${
+                    inputMethod === 'youtube'
+                      ? 'text-red-400 bg-slate-700/30 border-b-2 border-red-500'
+                      : 'text-slate-400 hover:text-slate-300 hover:bg-slate-700/20'
+                  }`}
+                >
+                  <Link2 className="w-4 h-4" />
+                  YouTube URL
+                </button>
               </div>
-              <p className="text-lg font-medium text-slate-200">
-                Drop video here or click to browse
-              </p>
-              <p className="text-sm text-slate-500 mt-2">
-                MP4, MOV, WebM (max 1GB, 30 minutes)
-              </p>
+
+              {/* Upload Tab Content */}
+              {inputMethod === 'upload' && (
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`p-12 text-center cursor-pointer transition border-2 border-dashed m-4 rounded-xl ${
+                    isDragging
+                      ? 'border-violet-500 bg-violet-500/10'
+                      : 'border-slate-700 hover:border-slate-600 hover:bg-slate-800/70'
+                  }`}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="video/mp4,video/webm,video/quicktime"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                  <div className={`mx-auto w-16 h-16 rounded-xl flex items-center justify-center mb-4 ${
+                    isDragging ? 'bg-violet-500/20' : 'bg-slate-700/50'
+                  }`}>
+                    <Upload className={`w-8 h-8 ${isDragging ? 'text-violet-400' : 'text-slate-400'}`} />
+                  </div>
+                  <p className="text-lg font-medium text-slate-200">
+                    Drop video here or click to browse
+                  </p>
+                  <p className="text-sm text-slate-500 mt-2">
+                    MP4, MOV, WebM (max 1GB, 30 minutes)
+                  </p>
+                </div>
+              )}
+
+              {/* YouTube Tab Content */}
+              {inputMethod === 'youtube' && (
+                <div className="p-6">
+                  <div className="flex gap-3">
+                    <div className="flex-1 relative">
+                      <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                      <input
+                        type="text"
+                        value={youtubeUrl}
+                        onChange={(e) => setYoutubeUrl(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !youtubeLoading) {
+                            handleYoutubeUrl();
+                          }
+                        }}
+                        placeholder="Paste YouTube URL here..."
+                        className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-10 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/50"
+                      />
+                    </div>
+                    <button
+                      onClick={handleYoutubeUrl}
+                      disabled={youtubeLoading || !youtubeUrl.trim()}
+                      className="px-6 py-3 bg-gradient-to-r from-red-500 to-orange-500 text-white font-medium rounded-lg hover:from-red-600 hover:to-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-2"
+                    >
+                      {youtubeLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-4 h-4" />
+                          Load Video
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-sm text-slate-500 mt-3 text-center">
+                    Downloads video from YouTube for AI clipping (may take a few minutes)
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* YouTube Loading State */}
+          {youtubeLoading && (
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-8">
+              <div className="text-center">
+                <div className="w-16 h-16 mx-auto rounded-xl bg-red-500/20 flex items-center justify-center mb-4">
+                  <Loader2 className="w-8 h-8 text-red-400 animate-spin" />
+                </div>
+                <p className="text-lg font-medium text-slate-200">Downloading YouTube video...</p>
+                <p className="text-sm text-slate-500 mt-1">This may take a few minutes depending on video length</p>
+              </div>
             </div>
           )}
 

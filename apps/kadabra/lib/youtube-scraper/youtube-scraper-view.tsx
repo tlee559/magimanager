@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Download,
@@ -19,6 +20,7 @@ import {
   VolumeX,
   Maximize,
   Pause,
+  Scissors,
 } from "lucide-react";
 import type { DownloadJob, YouTubeVideo } from "./types";
 
@@ -27,6 +29,7 @@ interface YouTubeScraperViewProps {
 }
 
 export function YouTubeScraperView({ onBack }: YouTubeScraperViewProps) {
+  const router = useRouter();
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [videoInfo, setVideoInfo] = useState<YouTubeVideo | null>(null);
@@ -430,12 +433,32 @@ export function YouTubeScraperView({ onBack }: YouTubeScraperViewProps) {
                         </button>
                         <a
                           href={job.blobUrl}
-                          download
+                          download={`${job.videoInfo?.title || "video"}.mp4`}
+                          target="_blank"
+                          rel="noopener noreferrer"
                           className="p-2 text-slate-400 hover:text-blue-400 hover:bg-slate-700/50 rounded-lg transition"
                           title="Download"
                         >
                           <Download className="w-4 h-4" />
                         </a>
+                        <button
+                          onClick={() => {
+                            localStorage.setItem(
+                              "videoClipper_sourceVideo",
+                              JSON.stringify({
+                                url: job.blobUrl,
+                                title: job.videoInfo?.title,
+                                duration: job.videoInfo?.duration,
+                                thumbnail: job.videoInfo?.thumbnail,
+                              })
+                            );
+                            router.push("/tools/video-clipper");
+                          }}
+                          className="p-2 text-slate-400 hover:text-purple-400 hover:bg-slate-700/50 rounded-lg transition"
+                          title="Send to Video Clipper"
+                        >
+                          <Scissors className="w-4 h-4" />
+                        </button>
                       </>
                     )}
                     <button
