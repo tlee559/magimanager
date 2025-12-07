@@ -132,7 +132,7 @@ const TOOLS = {
   },
   get_account_details: {
     name: "get_account_details",
-    description: "Get detailed information about a specific account by name, ID, or CID",
+    description: "Get full details about a specific ad account by name, ID, or CID. Returns: internal ID, name, geo, Google CID, health status, billing status, cert status, total spend, today's spend, warmup target, warmup progress, ads count, campaigns count, handoff status, assigned media buyer, and recent check-ins. Use this when asked about a specific account's status, spend, billing, or any account field.",
     parameters: {
       type: "object",
       properties: {
@@ -238,7 +238,7 @@ const TOOLS = {
   },
   get_identity_details: {
     name: "get_identity_details",
-    description: "Get details about a specific identity by name",
+    description: "Get full details about a specific identity profile by name. Returns: name, birthdate (DOB), address, city, state, zipcode, geo/country, email status, phone status, GoLogin profile status, document count, and linked ad accounts. Use this when asked about birthdate, address, location, or any identity profile field.",
     parameters: {
       type: "object",
       properties: {
@@ -874,8 +874,14 @@ async function executeToolCallInner(
       return JSON.stringify({
         found: true,
         name: identity.fullName,
+        birthdate: identity.dob.toISOString().split("T")[0], // Format: YYYY-MM-DD
+        address: identity.address,
+        city: identity.city,
+        state: identity.state,
+        zipcode: identity.zipcode,
         geo: identity.geo,
         email: identity.email ? "Set" : "Not set",
+        phone: identity.phone ? "Set" : "Not set",
         hasGoLogin: !!identity.gologinProfile,
         goLoginStatus: identity.gologinProfile?.status,
         documentCount: identity._count.documents,
@@ -1092,15 +1098,29 @@ async function saveConversationContext(
 // AGENT SYSTEM PROMPT
 // ============================================================================
 
-const SYSTEM_PROMPT = `You are MagiManager Bot - a chill assistant for a Google Ads team.
+const SYSTEM_PROMPT = `You are MagiManager Bot - a chill assistant for a Google Ads account management team.
 
 RULE: Just answer. Use a tool. Don't ask questions.
 
 TOOLS:
-- get_account_stats → counts and totals
+- get_account_stats → overall counts and totals
 - get_accounts_by_status("active"|"suspended"|"all") → list accounts with details
-- get_accounts_needing_attention → problems
+- get_account_details(identifier) → full details for one account (by name, MM ID, or CID)
+- get_identity_details(name) → full details for one identity (birthdate, address, geo, email, phone, GoLogin status, linked accounts)
+- get_accounts_needing_attention → problems/alerts
 - get_top_performers → top spenders
+- get_media_buyer_accounts(name) → accounts for a media buyer
+- get_team_overview → all media buyers and their stats
+- get_todays_spend → today's spend breakdown
+- get_spend_by_period(days) → spend for 7/14/30 days
+- get_all_time_spend → lifetime total spend
+
+SPECIFIC FIELD QUERIES:
+- "birthdate for [name]" → get_identity_details(name), then tell them the birthdate
+- "address for [name]" → get_identity_details(name), then tell them the address
+- "status of [account]" → get_account_details(identifier)
+- "spend for [account]" → get_account_details(identifier)
+- "billing for [account]" → get_account_details(identifier)
 
 WHAT TO DO:
 - "tell me about my accounts" → get_account_stats
@@ -1108,8 +1128,10 @@ WHAT TO DO:
 - "who owns active accounts" → get_accounts_by_status("active")
 - "suspended accounts" → get_accounts_by_status("suspended")
 - "any issues?" → get_accounts_needing_attention
+- "Alan Carmichael birthdate" → get_identity_details("Alan Carmichael")
+- "details on MM001" → get_account_details("MM001")
 
-FORMAT: Short answers. *bold* for emphasis. Bullets for lists. Plain $ for money.
+FORMAT: Short answers. *bold* for emphasis. Bullets for lists. Plain $ for money. Format birthdates as "Month Day, Year".
 
 If tool fails: "Couldn't grab that, try /report"`;
 
