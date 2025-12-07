@@ -168,7 +168,7 @@ export async function POST(req: NextRequest) {
     const resizedProduct = await sharp(productBuffer)
       .resize(maxProductWidth, maxProductHeight, {
         fit: "inside",
-        withoutEnlargement: true,
+        withoutEnlargement: false, // Allow enlargement so product size slider works correctly
       })
       .toBuffer();
 
