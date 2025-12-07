@@ -330,15 +330,23 @@ async function handleNaturalLanguage(text: string, chatId: string, userId?: stri
 
   try {
     // 30s timeout - should be plenty for most queries
+    console.log(`[Bot] Running agent for message: "${text.slice(0, 100)}"`);
     const result = await withGlobalTimeout(runAgent(text, chatId, userId), 30000);
 
     if (result.toolsUsed.length > 0) {
       console.log(`[Bot] Tools used: ${result.toolsUsed.join(", ")}`);
     }
 
+    console.log(`[Bot] Agent response: "${result.response.slice(0, 100)}..."`);
     await sendMessage(result.response, chatId);
   } catch (error) {
-    console.error("Agent error:", error);
+    // Log the full error details
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error("[Bot] Agent error:", errorMessage);
+    if (errorStack) {
+      console.error("[Bot] Stack:", errorStack);
+    }
 
     // Check if it was a timeout
     const isTimeout = error instanceof Error && error.message === "GLOBAL_TIMEOUT";
