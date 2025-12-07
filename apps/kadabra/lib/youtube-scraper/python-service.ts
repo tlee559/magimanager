@@ -9,7 +9,7 @@ const YOUTUBE_SERVICE_URL =
   process.env.YOUTUBE_SERVICE_URL ||
   "https://youtube-downloader-production-4222.up.railway.app";
 const YOUTUBE_SERVICE_API_KEY =
-  process.env.YOUTUBE_SERVICE_API_KEY || "dev-key-change-me";
+  process.env.YOUTUBE_SERVICE_API_KEY || "yt-magi-secret-2024";
 
 export interface PythonVideoFormat {
   format_id: string;
