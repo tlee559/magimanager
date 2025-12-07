@@ -86,7 +86,6 @@ const TOOLS = {
       properties: {
         days: {
           type: "number",
-          enum: [7, 14, 30],
           description: "Number of days to look back (7, 14, or 30)",
         },
         include_breakdown: {
