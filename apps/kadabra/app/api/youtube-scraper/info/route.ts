@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@magimanager/auth";
-import { extractVideoId, getVideoInfo } from "../../../../lib/youtube-scraper/youtube-client";
+import { getVideoInfoFromPython } from "../../../../lib/youtube-scraper/python-service";
 
 export const maxDuration = 30;
 
@@ -17,6 +17,19 @@ interface VideoInfoResponse {
   likeCount?: number;
   channel: string;
   channelUrl: string;
+}
+
+function extractVideoId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+    /^([a-zA-Z0-9_-]{11})$/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
 }
 
 export async function POST(req: NextRequest) {
@@ -48,23 +61,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Use our standalone YouTube client
-    console.log("[INFO] Fetching video info with standalone client...");
-    const info = await getVideoInfo(videoId);
+    // Use Python service (Railway) for video info
+    console.log("[INFO] Fetching video info from Python service...");
+    const info = await getVideoInfoFromPython(url);
     console.log("[INFO] Got video info:", info.title);
 
     const video: VideoInfoResponse = {
-      id: videoId,
-      url: `https://www.youtube.com/watch?v=${videoId}`,
+      id: info.id,
+      url: `https://www.youtube.com/watch?v=${info.id}`,
       title: info.title || "Unknown Title",
       description: info.description || "",
-      thumbnail: info.thumbnail || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+      thumbnail: info.thumbnail || `https://img.youtube.com/vi/${info.id}/maxresdefault.jpg`,
       duration: info.duration || 0,
-      uploadDate: "Unknown", // Not available from player API
-      viewCount: info.viewCount || 0,
+      uploadDate: "Unknown",
+      viewCount: info.view_count || 0,
       likeCount: undefined,
-      channel: info.author || "Unknown",
-      channelUrl: "", // Not available from player API
+      channel: info.uploader || "Unknown",
+      channelUrl: "",
     };
 
     console.log("[INFO] Returning video info");

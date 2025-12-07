@@ -4,13 +4,24 @@ import { authOptions } from "@magimanager/auth";
 import { put } from "@vercel/blob";
 import { prisma } from "@magimanager/database";
 import {
-  extractVideoId,
-  getVideoInfo,
-  selectBestFormat,
-  downloadStream,
-} from "../../../../lib/youtube-scraper/youtube-client";
+  getVideoInfoFromPython,
+  getDownloadUrlFromPython,
+} from "../../../../lib/youtube-scraper/python-service";
 
 export const maxDuration = 300; // 5 minutes
+
+function extractVideoId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+    /^([a-zA-Z0-9_-]{11})$/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
 
 export async function POST(req: NextRequest) {
   console.log("[DOWNLOAD] POST request received");
@@ -55,14 +66,14 @@ export async function POST(req: NextRequest) {
         videoId,
         status: "PENDING",
         progress: 0,
-        debug: [`[${new Date().toISOString()}] Job created (standalone client)`],
+        debug: [`[${new Date().toISOString()}] Job created (Python service)`],
       },
     });
 
     console.log("[DOWNLOAD] Created job:", job.id);
 
     // Start download in background (non-blocking)
-    processDownload(job.id, videoId, quality, session.user.email).catch((error) => {
+    processDownload(job.id, url, videoId, quality, session.user.email).catch((error) => {
       console.error("[DOWNLOAD] Background process error:", error);
       prisma.youTubeDownloadJob.update({
         where: { id: job.id },
@@ -102,6 +113,7 @@ export async function POST(req: NextRequest) {
 
 async function processDownload(
   jobId: string,
+  url: string,
   videoId: string,
   quality: "best" | "720p" | "480p" | "360p",
   userId: string
@@ -120,7 +132,7 @@ async function processDownload(
 
   try {
     // Update status to downloading
-    await addDebug("Starting download process (standalone client)");
+    await addDebug("Starting download process (Python service)");
     await prisma.youTubeDownloadJob.update({
       where: { id: jobId },
       data: {
@@ -129,11 +141,10 @@ async function processDownload(
       },
     });
 
-    // Get video info using standalone client
-    await addDebug(`Fetching video info for: ${videoId}`);
-    const info = await getVideoInfo(videoId);
+    // Get video info from Python service
+    await addDebug(`Fetching video info from Python service...`);
+    const info = await getVideoInfoFromPython(url);
     await addDebug(`Got video info: "${info.title}"`);
-    await addDebug(`Available formats: ${info.formats.length} muxed, ${info.adaptiveFormats.length} adaptive`);
 
     // Update job with video info
     await prisma.youTubeDownloadJob.update({
@@ -144,46 +155,74 @@ async function processDownload(
         thumbnail: info.thumbnail || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
         duration: info.duration || 0,
         uploadDate: "Unknown",
-        viewCount: info.viewCount || 0,
-        channel: info.author || "Unknown",
+        viewCount: info.view_count || 0,
+        channel: info.uploader || "Unknown",
         channelUrl: "",
         progress: 10,
       },
     });
 
-    // Select best format
-    await addDebug("Selecting best format...");
-    const { video, audio } = selectBestFormat(info, { quality, preferMuxed: true });
-
-    if (!video?.url) {
-      throw new Error("No downloadable format found");
-    }
-
-    await addDebug(`Selected format: ${video.qualityLabel || video.quality} (${video.mimeType})`);
-
-    if (audio && !video.hasAudio) {
-      await addDebug(`Note: Separate audio format available: ${audio.audioQuality}`);
-    }
+    // Get download URL from Python service
+    await addDebug(`Getting download URL (quality: ${quality})...`);
+    const downloadInfo = await getDownloadUrlFromPython(url, quality, "mp4");
+    await addDebug(`Got download URL for format: ${downloadInfo.format_id}`);
 
     await prisma.youTubeDownloadJob.update({
       where: { id: jobId },
       data: { progress: 15 },
     });
 
-    // Download the video stream
-    await addDebug("Starting video download...");
+    // Download the video from the direct URL
+    await addDebug("Starting video download from YouTube CDN...");
 
-    let lastProgressUpdate = 0;
-    const buffer = await downloadStream(video.url, async (downloaded, total) => {
-      const progressPercent = total
-        ? Math.round(15 + (downloaded / total) * 65) // 15-80%
-        : Math.min(15 + Math.floor(downloaded / 1000000) * 5, 80);
+    const response = await fetch(downloadInfo.url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.youtube.com/",
+        "Origin": "https://www.youtube.com",
+      },
+    });
 
-      // Update progress every 5%
+    if (!response.ok) {
+      throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
+    }
+
+    await addDebug("Downloading video stream...");
+
+    // Get content length for progress tracking
+    const contentLength = response.headers.get("content-length");
+    const totalSize = contentLength ? parseInt(contentLength, 10) : null;
+    await addDebug(`Content-Length: ${totalSize ? `${(totalSize / 1024 / 1024).toFixed(2)} MB` : "unknown"}`);
+
+    // Read the stream
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("No response body");
+    }
+
+    const chunks: Uint8Array[] = [];
+    let downloadedBytes = 0;
+    let lastProgressUpdate = 15;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      chunks.push(value);
+      downloadedBytes += value.length;
+
+      // Update progress
+      const progressPercent = totalSize
+        ? Math.round(15 + (downloadedBytes / totalSize) * 65) // 15-80%
+        : Math.min(15 + Math.floor(downloadedBytes / 1000000) * 5, 80);
+
+      // Update every 5%
       if (progressPercent >= lastProgressUpdate + 5) {
         lastProgressUpdate = progressPercent;
-        const downloadedMB = (downloaded / 1024 / 1024).toFixed(2);
-        const totalMB = total ? (total / 1024 / 1024).toFixed(2) : "?";
+        const downloadedMB = (downloadedBytes / 1024 / 1024).toFixed(2);
+        const totalMB = totalSize ? (totalSize / 1024 / 1024).toFixed(2) : "?";
         await addDebug(`Download progress: ${downloadedMB} / ${totalMB} MB`);
 
         await prisma.youTubeDownloadJob.update({
@@ -191,9 +230,17 @@ async function processDownload(
           data: { progress: progressPercent },
         });
       }
-    });
+    }
 
-    const fileSize = buffer.length;
+    // Combine chunks into buffer
+    const fileSize = downloadedBytes;
+    const buffer = new Uint8Array(fileSize);
+    let offset = 0;
+    for (const chunk of chunks) {
+      buffer.set(chunk, offset);
+      offset += chunk.length;
+    }
+
     await addDebug(`Download complete: ${(fileSize / 1024 / 1024).toFixed(2)} MB total`);
 
     // Update status to processing
