@@ -452,7 +452,7 @@ export function YouTubeScraperView({ onBack }: YouTubeScraperViewProps) {
                                 thumbnail: job.videoInfo?.thumbnail,
                               })
                             );
-                            router.push("/tools/video-clipper");
+                            router.push("/admin/tools/video-clipper");
                           }}
                           className="p-2 text-slate-400 hover:text-purple-400 hover:bg-slate-700/50 rounded-lg transition"
                           title="Send to Video Clipper"
