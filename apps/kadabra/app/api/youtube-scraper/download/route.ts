@@ -5,7 +5,7 @@ import { put } from "@vercel/blob";
 import { prisma } from "@magimanager/database";
 import {
   getVideoInfoFromPython,
-  getDownloadUrlFromPython,
+  downloadVideoFromPython,
 } from "../../../../lib/youtube-scraper/python-service";
 
 export const maxDuration = 300; // 5 minutes
@@ -177,95 +177,18 @@ async function processDownload(
       },
     });
 
-    // Get download URL from Python service
-    await addDebug(`Getting download URL (quality: ${quality})...`);
-    const downloadInfo = await getDownloadUrlFromPython(url, quality, "mp4");
-    await addDebug(`Got download URL for format: ${downloadInfo.format_id}`);
-
+    // Download video via Python service (Railway downloads from YouTube)
+    await addDebug(`Downloading video via Railway (quality: ${quality})...`);
     await prisma.youTubeDownloadJob.update({
       where: { id: jobId },
       data: { progress: 15 },
     });
 
-    // Download the video from the direct URL
-    await addDebug("Starting video download from YouTube CDN...");
+    // This calls Railway which downloads from YouTube and sends us the file
+    const { buffer: videoBuffer, filename } = await downloadVideoFromPython(url, quality, "mp4");
+    const fileSize = videoBuffer.length;
 
-    const response = await fetch(downloadInfo.url, {
-      redirect: "follow", // Follow 302 redirects
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.youtube.com/",
-        "Origin": "https://www.youtube.com",
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
-    }
-
-    await addDebug(`Response OK - Status: ${response.status}`);
-
-    await addDebug("Downloading video stream...");
-
-    // Get content length for progress tracking
-    const contentLength = response.headers.get("content-length");
-    const totalSize = contentLength ? parseInt(contentLength, 10) : null;
-    await addDebug(`Content-Length: ${totalSize ? `${(totalSize / 1024 / 1024).toFixed(2)} MB` : "unknown"}`);
-
-    // Read the stream
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error("No response body");
-    }
-
-    const chunks: Uint8Array[] = [];
-    let downloadedBytes = 0;
-    let lastProgressUpdate = 15;
-    let lastDebugUpdate = Date.now();
-    const startTime = Date.now();
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      chunks.push(value);
-      downloadedBytes += value.length;
-
-      // Update progress
-      const progressPercent = totalSize
-        ? Math.round(15 + (downloadedBytes / totalSize) * 65) // 15-80%
-        : Math.min(15 + Math.floor(downloadedBytes / 1000000) * 5, 80);
-
-      const now = Date.now();
-      // Update every 2% or every 3 seconds
-      if (progressPercent >= lastProgressUpdate + 2 || now - lastDebugUpdate > 3000) {
-        lastProgressUpdate = progressPercent;
-        lastDebugUpdate = now;
-        const downloadedMB = (downloadedBytes / 1024 / 1024).toFixed(2);
-        const totalMB = totalSize ? (totalSize / 1024 / 1024).toFixed(2) : "?";
-        const elapsedSec = ((now - startTime) / 1000).toFixed(1);
-        const speedMbps = (downloadedBytes / 1024 / 1024 / ((now - startTime) / 1000)).toFixed(2);
-        await addDebug(`Downloading: ${downloadedMB}/${totalMB} MB (${progressPercent}%) - ${speedMbps} MB/s - ${elapsedSec}s`);
-
-        await prisma.youTubeDownloadJob.update({
-          where: { id: jobId },
-          data: { progress: progressPercent },
-        });
-      }
-    }
-
-    // Combine chunks into buffer
-    const fileSize = downloadedBytes;
-    const buffer = new Uint8Array(fileSize);
-    let offset = 0;
-    for (const chunk of chunks) {
-      buffer.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    await addDebug(`Download complete: ${(fileSize / 1024 / 1024).toFixed(2)} MB total`);
+    await addDebug(`Download complete: ${(fileSize / 1024 / 1024).toFixed(2)} MB - ${filename}`);
 
     // Update status to processing
     await prisma.youTubeDownloadJob.update({
@@ -276,9 +199,7 @@ async function processDownload(
       },
     });
 
-    // Convert to Buffer for Vercel Blob
-    const videoBuffer = Buffer.from(buffer);
-    await addDebug(`Buffer created: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
+    await addDebug(`Buffer ready for upload: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
 
     await prisma.youTubeDownloadJob.update({
       where: { id: jobId },

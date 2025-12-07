@@ -122,3 +122,57 @@ export async function checkPythonServiceHealth(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Download video via Python service (Railway downloads from YouTube, returns file to us)
+ * This bypasses YouTube's IP blocking on Vercel
+ */
+export async function downloadVideoFromPython(
+  url: string,
+  quality: "best" | "720p" | "480p" | "360p" = "best",
+  format: "mp4" | "webm" | "mp3" = "mp4"
+): Promise<{ buffer: Buffer; contentType: string; filename: string }> {
+  console.log(`[PYTHON] Downloading video via Railway (quality: ${quality}, format: ${format})...`);
+
+  const response = await fetch(`${YOUTUBE_SERVICE_URL}/download`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      url,
+      api_key: YOUTUBE_SERVICE_API_KEY,
+      quality,
+      format,
+    }),
+  });
+
+  if (!response.ok) {
+    let errorDetail = response.statusText;
+    try {
+      const error = (await response.json()) as PythonServiceError;
+      errorDetail = error.detail || response.statusText;
+    } catch {
+      // Response might not be JSON
+    }
+    throw new Error(`Python service error: ${errorDetail}`);
+  }
+
+  // Get filename from Content-Disposition header
+  const contentDisposition = response.headers.get("content-disposition");
+  let filename = "video.mp4";
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename="?([^"]+)"?/);
+    if (match) {
+      filename = match[1];
+    }
+  }
+
+  const contentType = response.headers.get("content-type") || "video/mp4";
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  console.log(`[PYTHON] Downloaded ${(buffer.length / 1024 / 1024).toFixed(2)} MB - ${filename}`);
+
+  return { buffer, contentType, filename };
+}
