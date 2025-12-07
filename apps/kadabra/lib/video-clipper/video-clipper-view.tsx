@@ -423,34 +423,43 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
       });
 
       const data = await response.json();
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to download YouTube video');
+      console.log('[VideoClipper] Download API response:', data);
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || `HTTP ${response.status}: Failed to download`);
       }
 
-      // The download endpoint now waits for completion
-      if (data.job.status === 'completed' && data.job.blobUrl) {
-        console.log('[VideoClipper] YouTube video ready:', data.job.title);
+      // Check job status - the API waits for completion and returns final status
+      const job = data.job;
+      console.log('[VideoClipper] Job status:', job.status, 'blobUrl:', job.blobUrl);
+
+      if (job.blobUrl) {
+        console.log('[VideoClipper] YouTube video ready:', job.title);
 
         // Extract duration from video
-        let duration: number | null = data.job.duration || null;
-        if (!duration && data.job.blobUrl) {
+        let duration: number | null = job.duration || null;
+        if (!duration && job.blobUrl) {
           try {
-            duration = await extractDuration(data.job.blobUrl);
+            duration = await extractDuration(job.blobUrl);
           } catch (e) {
             console.log('[VideoClipper] Could not extract duration:', e);
           }
         }
 
         setVideo({
-          url: data.job.blobUrl,
-          filename: data.job.title || 'YouTube Video',
-          size: data.job.fileSize || 0,
+          url: job.blobUrl,
+          filename: job.title || 'YouTube Video',
+          size: job.fileSize || 0,
           duration,
         });
         setStatus('success');
         setYoutubeUrl('');
+      } else if (job.error) {
+        throw new Error(`Download failed: ${job.error}`);
+      } else if (job.status === 'failed') {
+        throw new Error('Download failed. Please try again.');
       } else {
-        throw new Error(`Download failed: ${data.job.error || 'Unknown error'}`);
+        throw new Error(`Unexpected status: ${job.status}. Please try again.`);
       }
     } catch (err) {
       console.error('[VideoClipper] YouTube download error:', err);
