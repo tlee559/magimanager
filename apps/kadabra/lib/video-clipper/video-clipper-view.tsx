@@ -457,9 +457,12 @@ export function VideoClipperView({ onBack }: VideoClipperViewProps) {
       } else if (job.error) {
         throw new Error(`Download failed: ${job.error}`);
       } else if (job.status === 'failed') {
-        throw new Error('Download failed. Please try again.');
+        // Check debug logs for more info
+        const lastDebug = job.debug?.[job.debug.length - 1] || '';
+        throw new Error(`Download failed: ${lastDebug || 'Unknown reason. Please try again.'}`);
       } else {
-        throw new Error(`Unexpected status: ${job.status}. Please try again.`);
+        // Job might still be processing - show what we know
+        throw new Error(`Download not complete (status: ${job.status}). The video may be too long. Try a shorter video or use YouTube Scraper first.`);
       }
     } catch (err) {
       console.error('[VideoClipper] YouTube download error:', err);
