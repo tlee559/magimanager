@@ -135,7 +135,7 @@ function formatProgressMessage(data: IdentityProgressData): {
       return {
         title: "Website Added",
         message: data.details
-          ? `Website set to: ${data.details}`
+          ? `Website set to: ${formatTelegramUrl(data.details)}`
           : "Website URL added",
         emoji: "🌐",
       };
@@ -143,7 +143,7 @@ function formatProgressMessage(data: IdentityProgressData): {
       return {
         title: "Website Completed",
         message: data.details
-          ? `Website ${data.details} marked as completed`
+          ? `${formatTelegramUrl(data.details)} marked as completed`
           : "Website marked as completed and ready",
         emoji: "✅",
       };
@@ -173,8 +173,31 @@ function formatProgressMessage(data: IdentityProgressData): {
 }
 
 /**
- * Escape special characters for Telegram Markdown
+ * Escape special characters for Telegram MarkdownV2
+ * Preserves URLs by not escaping them
  */
 function escapeMarkdown(text: string): string {
-  return text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, "\\$&");
+  // URL regex pattern
+  const urlPattern = /(https?:\/\/[^\s]+)/g;
+
+  // Split text by URLs, escape non-URL parts, keep URLs intact
+  const parts = text.split(urlPattern);
+
+  return parts.map(part => {
+    if (urlPattern.test(part)) {
+      // This is a URL - don't escape it
+      return part;
+    }
+    // Escape special characters for non-URL text
+    return part.replace(/[_*[\]()~`>#+\-=|{}.!]/g, "\\$&");
+  }).join("");
+}
+
+/**
+ * Format a URL as a clickable Telegram link
+ */
+function formatTelegramUrl(url: string): string {
+  // Remove trailing slashes for cleaner display
+  const displayUrl = url.replace(/\/+$/, "").replace(/^https?:\/\//, "");
+  return `[${displayUrl}](${url})`;
 }
