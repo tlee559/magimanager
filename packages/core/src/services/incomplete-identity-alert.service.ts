@@ -259,21 +259,25 @@ export async function fireDailyIncompleteIdentityAlerts(): Promise<{
 
 /**
  * Escape special characters for Telegram MarkdownV2
- * Preserves URLs by not escaping them
+ * Preserves markdown links [text](url) and raw URLs
  */
 function escapeMarkdown(text: string): string {
-  // URL regex pattern
-  const urlPattern = /(https?:\/\/[^\s]+)/g;
+  // Match markdown links [text](url) or raw URLs
+  const linkPattern = /(\[[^\]]+\]\([^)]+\))|(https?:\/\/[^\s]+)/g;
 
-  // Split text by URLs, escape non-URL parts, keep URLs intact
-  const parts = text.split(urlPattern);
+  // Split text by links, escape non-link parts, keep links intact
+  const parts = text.split(linkPattern);
 
-  return parts.map(part => {
-    if (urlPattern.test(part)) {
-      // This is a URL - don't escape it
-      return part;
-    }
-    // Escape special characters for non-URL text
-    return part.replace(/[_*[\]()~`>#+\-=|{}.!]/g, "\\$&");
-  }).join("");
+  return parts
+    .filter(part => part !== undefined)
+    .map(part => {
+      // Check if this part is a markdown link or raw URL
+      if (/^\[[^\]]+\]\([^)]+\)$/.test(part) || /^https?:\/\//.test(part)) {
+        // This is a link - don't escape it
+        return part;
+      }
+      // Escape special characters for non-link text
+      return part.replace(/[_*[\]()~`>#+\-=|{}.!]/g, "\\$&");
+    })
+    .join("");
 }

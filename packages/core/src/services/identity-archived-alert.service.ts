@@ -78,18 +78,27 @@ export async function fireIdentityArchivedAlert(data: IdentityArchivedData): Pro
 
 /**
  * Escape special characters for Telegram MarkdownV2
- * Preserves URLs by not escaping them
+ * Preserves markdown links [text](url) and raw URLs
  */
 function escapeMarkdown(text: string): string {
-  const urlPattern = /(https?:\/\/[^\s]+)/g;
-  const parts = text.split(urlPattern);
+  // Match markdown links [text](url) or raw URLs
+  const linkPattern = /(\[[^\]]+\]\([^)]+\))|(https?:\/\/[^\s]+)/g;
 
-  return parts.map(part => {
-    if (urlPattern.test(part)) {
-      return part;
-    }
-    return part.replace(/[_*[\]()~`>#+\-=|{}.!]/g, "\\$&");
-  }).join("");
+  // Split text by links, escape non-link parts, keep links intact
+  const parts = text.split(linkPattern);
+
+  return parts
+    .filter(part => part !== undefined)
+    .map(part => {
+      // Check if this part is a markdown link or raw URL
+      if (/^\[[^\]]+\]\([^)]+\)$/.test(part) || /^https?:\/\//.test(part)) {
+        // This is a link - don't escape it
+        return part;
+      }
+      // Escape special characters for non-link text
+      return part.replace(/[_*[\]()~`>#+\-=|{}.!]/g, "\\$&");
+    })
+    .join("");
 }
 
 /**
