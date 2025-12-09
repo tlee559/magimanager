@@ -9,6 +9,18 @@ import { fireIdentityArchivedAlert } from "./decommission-alert.service";
 import { checkIdentityCompleteness, fireIncompleteIdentityAlert } from "./incomplete-identity-alert.service";
 import { fireIdentityProgressAlert } from "./identity-progress-alert.service";
 
+/**
+ * Normalize a name to Title Case (first letter uppercase, rest lowercase for each word)
+ * e.g., "JOHN DOE" -> "John Doe", "john doe" -> "John Doe"
+ */
+function toTitleCase(name: string): string {
+  return name
+    .toLowerCase()
+    .split(" ")
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 class IdentityService {
   async getById(id: string): Promise<ServiceResult<IdentityWithRelations>> {
     try {
@@ -43,7 +55,13 @@ class IdentityService {
         return { success: false, error: "Missing required fields: fullName, dob, address, city, state, geo" };
       }
 
-      const identity = await identityRepository.create(data);
+      // Normalize name to Title Case
+      const normalizedData = {
+        ...data,
+        fullName: toTitleCase(data.fullName),
+      };
+
+      const identity = await identityRepository.create(normalizedData);
 
       // Log activity
       await this.logActivity(identity.id, "CREATED", `Identity "${identity.fullName}" created`, userId);
@@ -81,7 +99,12 @@ class IdentityService {
         return { success: false, error: "Identity not found" };
       }
 
-      const identity = await identityRepository.update(id, data);
+      // Normalize name to Title Case if provided
+      const normalizedData = data.fullName
+        ? { ...data, fullName: toTitleCase(data.fullName) }
+        : data;
+
+      const identity = await identityRepository.update(id, normalizedData);
 
       // Log activity
       await this.logActivity(id, "UPDATED", "Identity profile updated", userId);
