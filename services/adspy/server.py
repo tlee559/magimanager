@@ -1,99 +1,44 @@
 """
-AdSpy Python Service v2.1
-Searches Google for sponsored ads using Playwright browser automation.
-Includes stealth measures to bypass bot detection.
+AdSpy Python Service v4.4
+Uses Bright Data Browser API with Playwright to scrape Google sponsored ads.
+Takes SERP screenshots and extracts ad data from rendered HTML.
+Uses SerpApi Ads Transparency Center to get ad creative screenshots.
+Now scrapes up to 5 pages and uses multiple ad selectors for more results.
 """
 
 import asyncio
 import base64
 import os
-import random
-import re
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from urllib.parse import urlparse, parse_qs, quote_plus
+from urllib.parse import quote_plus, urlparse
 
+import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from playwright.async_api import async_playwright, Page, BrowserContext
+from playwright.async_api import async_playwright
 
 # Configuration
 ADSPY_API_KEY = os.environ.get("ADSPY_API_KEY", "adspy-dev-key")
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8080"))
 
+# Bright Data Browser API WebSocket endpoint
+BRIGHTDATA_BROWSER_WS = os.environ.get(
+    "BRIGHTDATA_BROWSER_WS",
+    "wss://brd-customer-hl_db89f492-zone-scraping_browser1:mk71movb50kw@brd.superproxy.io:9222"
+)
+
+# SerpApi key for Ads Transparency Center
+SERPAPI_KEY = os.environ.get(
+    "SERPAPI_KEY",
+    "e7a0e6e506efcfaa3fd1d48d8166ee46578ea1dbb32951ef49553a2fbe0f6928"
+)
+
 # FastAPI app
-app = FastAPI(title="AdSpy Service", version="2.1.0")
-
-# Realistic user agents pool
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
-]
-
-
-async def apply_stealth_scripts(page: Page):
-    """
-    Apply stealth JavaScript to evade bot detection.
-    These scripts make the browser appear more human-like.
-    """
-    # Override webdriver property
-    await page.add_init_script("""
-        // Override webdriver detection
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-
-        // Override automation-related properties
-        delete navigator.__proto__.webdriver;
-
-        // Add missing plugins that headless Chrome lacks
-        Object.defineProperty(navigator, 'plugins', {
-            get: () => [
-                { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
-                { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
-                { name: 'Native Client', filename: 'internal-nacl-plugin' },
-            ]
-        });
-
-        // Override languages
-        Object.defineProperty(navigator, 'languages', {
-            get: () => ['en-US', 'en']
-        });
-
-        // Override platform for consistency
-        Object.defineProperty(navigator, 'platform', {
-            get: () => 'Win32'
-        });
-
-        // Override permissions API
-        const originalQuery = window.navigator.permissions.query;
-        window.navigator.permissions.query = (parameters) => (
-            parameters.name === 'notifications' ?
-                Promise.resolve({ state: Notification.permission }) :
-                originalQuery(parameters)
-        );
-
-        // Override chrome runtime
-        window.chrome = {
-            runtime: {},
-            loadTimes: function() {},
-            csi: function() {},
-            app: {}
-        };
-
-        // Override console.debug to prevent detection via stack trace
-        const originalConsoleDebug = console.debug;
-        console.debug = function(...args) {
-            if (args[0] && typeof args[0] === 'string' && args[0].includes('Puppeteer')) {
-                return;
-            }
-            return originalConsoleDebug.apply(console, args);
-        };
-    """)
+app = FastAPI(title="AdSpy Service", version="4.4.2")
 
 # CORS
 app.add_middleware(
@@ -123,7 +68,8 @@ class SearchResponse(BaseModel):
     keyword: str
     ads: list
     timestamp: str
-    source: str = "playwright"
+    source: str = "brightdata_browser"
+    serp_screenshot: Optional[str] = None
     error: Optional[str] = None
     debug_info: Optional[dict] = None
 
@@ -134,55 +80,40 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "adspy",
-        "version": "2.1.0",
+        "version": "4.4.2",
         "timestamp": datetime.utcnow().isoformat(),
+        "method": "browser_api_with_transparency_center",
+        "max_pages": 5,
     }
 
 
 @app.post("/search", response_model=SearchResponse)
 async def search_ads(request: SearchRequest):
     """
-    Search Google for sponsored ads using Playwright browser automation.
+    Search Google for sponsored ads using Bright Data Browser API.
+    Returns extracted ad data and SERP screenshot.
     """
     # Validate API key
     if request.api_key != ADSPY_API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    debug_info = {"method": "playwright", "pages_scanned": 0, "raw_ads_found": 0}
+    debug_info = {"method": "brightdata_browser_api", "version": "4.4.2"}
 
     try:
-        # Use Playwright to scan Google for sponsored ads
-        ads = await scan_google_for_sponsored_ads(
+        result = await scrape_google_ads(
             keyword=request.keyword,
             location=request.location,
-            max_pages=3,
+            num_results=request.num_results,
             debug_info=debug_info
         )
-
-        debug_info["ads_after_processing"] = len(ads)
-
-        if not ads:
-            return SearchResponse(
-                success=True,
-                keyword=request.keyword,
-                ads=[],
-                timestamp=datetime.utcnow().isoformat(),
-                source="playwright",
-                debug_info=debug_info,
-            )
-
-        # Limit results
-        ads = ads[: request.num_results]
-
-        # Take screenshots of landing pages
-        ads_with_screenshots = await capture_landing_screenshots(ads)
 
         return SearchResponse(
             success=True,
             keyword=request.keyword,
-            ads=ads_with_screenshots,
+            ads=result["ads"],
             timestamp=datetime.utcnow().isoformat(),
-            source="playwright",
+            source="brightdata_browser",
+            serp_screenshot=result.get("serp_screenshot"),
             debug_info=debug_info,
         )
 
@@ -194,529 +125,376 @@ async def search_ads(request: SearchRequest):
             keyword=request.keyword,
             ads=[],
             timestamp=datetime.utcnow().isoformat(),
-            source="playwright",
+            source="brightdata_browser",
             error=str(e),
             debug_info=debug_info,
         )
 
 
-async def scan_google_for_sponsored_ads(
+async def scrape_google_ads(
     keyword: str,
     location: str = "us",
-    max_pages: int = 3,
-    debug_info: dict = None
-) -> List[Dict[str, Any]]:
+    num_results: int = 10,
+    debug_info: dict = None,
+    max_pages: int = 5  # Increased from 3 to 5 for more results
+) -> Dict[str, Any]:
     """
-    Scan Google search results using Playwright to find "Sponsored results" section.
-    This mimics what a real user sees in Google search.
+    Connect to Bright Data Browser API and scrape Google ads from multiple pages.
+    Uses multiple selectors and scrapes up to 5 pages for maximum ad coverage.
     """
-    all_ads = []
-
-    # Map location codes to Google domains
+    # Map location codes to Google parameters
     location_map = {
-        "us": {"domain": "google.com", "gl": "us", "hl": "en"},
-        "uk": {"domain": "google.co.uk", "gl": "uk", "hl": "en"},
-        "ca": {"domain": "google.ca", "gl": "ca", "hl": "en"},
-        "au": {"domain": "google.com.au", "gl": "au", "hl": "en"},
-        "de": {"domain": "google.de", "gl": "de", "hl": "de"},
-        "fr": {"domain": "google.fr", "gl": "fr", "hl": "fr"},
-        "es": {"domain": "google.es", "gl": "es", "hl": "es"},
-        "it": {"domain": "google.it", "gl": "it", "hl": "it"},
-        "br": {"domain": "google.com.br", "gl": "br", "hl": "pt"},
-        "mx": {"domain": "google.com.mx", "gl": "mx", "hl": "es"},
-        "in": {"domain": "google.co.in", "gl": "in", "hl": "en"},
-        "jp": {"domain": "google.co.jp", "gl": "jp", "hl": "ja"},
+        "us": {"gl": "us", "hl": "en"},
+        "uk": {"gl": "uk", "hl": "en"},
+        "ca": {"gl": "ca", "hl": "en"},
+        "au": {"gl": "au", "hl": "en"},
+        "de": {"gl": "de", "hl": "de"},
+        "fr": {"gl": "fr", "hl": "fr"},
+        "es": {"gl": "es", "hl": "es"},
+        "it": {"gl": "it", "hl": "it"},
+        "br": {"gl": "br", "hl": "pt"},
+        "mx": {"gl": "mx", "hl": "es"},
+        "in": {"gl": "in", "hl": "en"},
+        "jp": {"gl": "jp", "hl": "ja"},
     }
 
-    loc_settings = location_map.get(location, location_map["us"])
+    loc = location_map.get(location, location_map["us"])
+    encoded_keyword = quote_plus(keyword)
+
+    ads = []
+    serp_screenshots = []  # Store screenshots from each page
+    seen_titles = set()  # Track seen ad titles to avoid duplicates
+    seen_links = set()  # Also track by link to catch more duplicates
+    consecutive_empty_pages = 0  # Track consecutive pages with no ads
+
+    if debug_info:
+        debug_info["pages_scraped"] = 0
+        debug_info["ads_per_page"] = []
+        debug_info["max_pages_configured"] = max_pages
 
     async with async_playwright() as p:
-        # Launch browser with anti-detection settings
-        browser = await p.chromium.launch(
-            headless=True,
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--disable-dev-shm-usage",
-                "--disable-infobars",
-                "--disable-background-networking",
-                "--disable-default-apps",
-                "--disable-extensions",
-                "--disable-sync",
-                "--no-first-run",
-                "--disable-gpu",
-                "--disable-setuid-sandbox",
-                "--no-sandbox",
-                "--window-size=1920,1080",
-            ]
-        )
-
-        # Random user agent for each session
-        user_agent = random.choice(USER_AGENTS)
-
-        context = await browser.new_context(
-            viewport={"width": 1920, "height": 1080},
-            user_agent=user_agent,
-            locale="en-US",
-            timezone_id="America/New_York",
-            # Geolocation to match the search location
-            geolocation={"latitude": 40.7128, "longitude": -74.0060} if location == "us" else None,
-            permissions=["geolocation"] if location == "us" else [],
-            # Accept language header
-            extra_http_headers={
-                "Accept-Language": "en-US,en;q=0.9",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-                "Accept-Encoding": "gzip, deflate, br",
-                "Connection": "keep-alive",
-                "Upgrade-Insecure-Requests": "1",
-                "Sec-Fetch-Dest": "document",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "none",
-                "Sec-Fetch-User": "?1",
-                "Cache-Control": "max-age=0",
-            }
-        )
-
-        page = await context.new_page()
-
-        # Apply stealth scripts to evade bot detection
-        await apply_stealth_scripts(page)
+        # Connect to Bright Data Browser API with retry
+        browser = None
+        for connect_retry in range(3):
+            try:
+                browser = await p.chromium.connect_over_cdp(BRIGHTDATA_BROWSER_WS)
+                break
+            except Exception as conn_error:
+                if debug_info:
+                    debug_info[f"connection_retry_{connect_retry}"] = str(conn_error)[:100]
+                if connect_retry < 2:
+                    await asyncio.sleep(3)
+                else:
+                    raise
 
         try:
-            # First, visit Google homepage to get cookies (more natural behavior)
-            google_home = f"https://www.{loc_settings['domain']}"
-            if debug_info is not None:
-                debug_info["visiting_homepage"] = google_home
-
-            await page.goto(google_home, timeout=30000, wait_until="domcontentloaded")
-
-            # Random delay to simulate human reading the page
-            await asyncio.sleep(random.uniform(1.5, 3.0))
-
-            # Handle cookie consent before searching
-            await handle_cookie_consent(page)
-
-            # Simulate human-like behavior: move mouse, scroll slightly
-            await page.mouse.move(random.randint(100, 500), random.randint(100, 400))
-            await asyncio.sleep(random.uniform(0.3, 0.8))
+            page = await browser.new_page()
 
             for page_num in range(max_pages):
+                # Add delay between pages to avoid Bright Data rate limiting
+                if page_num > 0:
+                    await asyncio.sleep(3)  # Wait between page navigations
+
+                # Build URL with pagination (start parameter)
                 start = page_num * 10
-                encoded_keyword = quote_plus(keyword)
+                search_url = f"https://www.google.com/search?q={encoded_keyword}&gl={loc['gl']}&hl={loc['hl']}&start={start}"
 
-                # Build Google search URL
-                search_url = f"https://www.{loc_settings['domain']}/search?q={encoded_keyword}&gl={loc_settings['gl']}&hl={loc_settings['hl']}&start={start}"
+                if debug_info and page_num == 0:
+                    debug_info["search_url"] = search_url
 
-                if debug_info is not None:
-                    debug_info[f"url_page_{page_num}"] = search_url
-                    debug_info["user_agent"] = user_agent
-
-                await page.goto(search_url, timeout=30000, wait_until="domcontentloaded")
-
-                # Random human-like delay
-                await asyncio.sleep(random.uniform(2.0, 4.0))
-
-                # Simulate scrolling to load lazy content
-                await page.mouse.wheel(0, random.randint(100, 300))
-                await asyncio.sleep(random.uniform(0.5, 1.0))
-
-                if debug_info is not None:
-                    debug_info["pages_scanned"] = page_num + 1
-
-                # Debug: capture what the page looks like
-                if debug_info is not None and page_num == 0:
+                # Navigate to Google search with retry for transient errors
+                nav_success = False
+                for retry in range(3):
                     try:
-                        body_text = await page.inner_text("body")
-                        debug_info["page_text_sample"] = body_text[:1000] if body_text else "No body text"
-                        debug_info["has_sponsored_text"] = "Sponsored" in body_text if body_text else False
-                        debug_info["has_ad_text"] = "Ad" in body_text if body_text else False
+                        await page.goto(search_url, wait_until="domcontentloaded")
+                        nav_success = True
+                        break
+                    except Exception as nav_error:
+                        error_str = str(nav_error).lower()
+                        # If we hit rate limiting, stop pagination but keep what we have
+                        if "cooldown" in error_str or "no_peers" in error_str:
+                            if debug_info:
+                                debug_info["rate_limited_at_page"] = page_num + 1
+                            break
+                        # Retry on connection errors
+                        if "tunnel" in error_str or "connection" in error_str or "timeout" in error_str:
+                            if debug_info:
+                                debug_info[f"retry_{page_num}_{retry}"] = str(nav_error)[:100]
+                            await asyncio.sleep(2)  # Wait before retry
+                            continue
+                        raise
 
-                        # Take a screenshot of the search results for debugging
-                        screenshot = await page.screenshot(type="jpeg", quality=60)
-                        debug_info["serp_screenshot_base64"] = base64.b64encode(screenshot).decode()
-                    except Exception as e:
-                        debug_info["debug_error"] = str(e)
-
-                # Method 1: Find the "Sponsored" section header and get ads below it
-                sponsored_ads = await find_sponsored_section_ads(page, page_num)
-                if sponsored_ads:
-                    for ad in sponsored_ads:
-                        if not any(a.get("link") == ad.get("link") for a in all_ads):
-                            all_ads.append(ad)
-
-                # Method 2: Find ads by looking for sponsored/ad indicators in individual results
-                indicator_ads = await find_ads_by_indicators(page, page_num)
-                if indicator_ads:
-                    for ad in indicator_ads:
-                        if not any(a.get("link") == ad.get("link") for a in all_ads):
-                            all_ads.append(ad)
-
-                # Method 3: Find ads in the top ad block (data attributes)
-                top_ads = await find_top_ad_block(page, page_num)
-                if top_ads:
-                    for ad in top_ads:
-                        if not any(a.get("link") == ad.get("link") for a in all_ads):
-                            all_ads.append(ad)
-
-                if debug_info is not None:
-                    debug_info["raw_ads_found"] = len(all_ads)
-
-                # If we found enough ads, stop scanning more pages
-                if len(all_ads) >= 10:
+                if not nav_success:
+                    if debug_info:
+                        debug_info["navigation_failed_at_page"] = page_num + 1
                     break
 
-        except Exception as e:
-            print(f"Error scanning Google: {e}")
-            if debug_info is not None:
-                debug_info["scan_error"] = str(e)
+                await asyncio.sleep(4)  # Wait for ads to load
+
+                # Take SERP screenshot (only for first page)
+                if page_num == 0:
+                    screenshot_bytes = await page.screenshot(type="jpeg", quality=85, full_page=True)
+                    serp_screenshots.append(base64.b64encode(screenshot_bytes).decode())
+                    if debug_info:
+                        debug_info["screenshot_size"] = len(serp_screenshots[0])
+
+                page_ads_count = 0
+
+                # Multiple selectors for different ad formats
+                ad_selectors = [
+                    '[data-text-ad="1"]',  # Standard text ads
+                    '[data-hveid] div[data-dtld]',  # Some shopping/product ads
+                    '#tads [data-hveid]',  # Top ads container items
+                ]
+
+                # Try each selector
+                for selector in ad_selectors:
+                    try:
+                        ad_elements = await page.query_selector_all(selector)
+                        for ad_el in ad_elements:
+                            try:
+                                ad_data = await extract_ad_data(ad_el, len(ads) + 1, page, block="top")
+                                if ad_data and ad_data.get("title"):
+                                    # Skip duplicates by title or link
+                                    title = ad_data["title"]
+                                    link = ad_data.get("link", "")
+                                    if title not in seen_titles and link not in seen_links:
+                                        seen_titles.add(title)
+                                        if link:
+                                            seen_links.add(link)
+                                        ad_data["source_page"] = page_num + 1
+                                        ads.append(ad_data)
+                                        page_ads_count += 1
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
+                # Also check for bottom ads (#tadsb)
+                tadsb = await page.query_selector("#tadsb")
+                if tadsb:
+                    bottom_ads = await tadsb.query_selector_all('[data-text-ad="1"]')
+                    for ad_el in bottom_ads:
+                        try:
+                            ad_data = await extract_ad_data(ad_el, len(ads) + 1, page, block="bottom")
+                            if ad_data and ad_data.get("title"):
+                                title = ad_data["title"]
+                                link = ad_data.get("link", "")
+                                if title not in seen_titles and link not in seen_links:
+                                    seen_titles.add(title)
+                                    if link:
+                                        seen_links.add(link)
+                                    ad_data["source_page"] = page_num + 1
+                                    ads.append(ad_data)
+                                    page_ads_count += 1
+                        except Exception:
+                            pass
+
+                if debug_info:
+                    debug_info["pages_scraped"] = page_num + 1
+                    debug_info["ads_per_page"].append(page_ads_count)
+
+                # Track consecutive empty pages - stop after 2 empty pages in a row
+                if page_ads_count == 0:
+                    consecutive_empty_pages += 1
+                    if consecutive_empty_pages >= 2:
+                        break
+                else:
+                    consecutive_empty_pages = 0
+
+            if debug_info:
+                debug_info["total_ads_extracted"] = len(ads)
+
         finally:
             await browser.close()
 
-    # Assign positions
-    for i, ad in enumerate(all_ads):
-        ad["position"] = i + 1
+    # Use first page screenshot as main screenshot
+    serp_screenshot = serp_screenshots[0] if serp_screenshots else None
 
-    return all_ads
+    # Enrich ads with Transparency Center data (ad creative screenshots)
+    ads = await enrich_ads_with_transparency_data(ads, debug_info)
+
+    # Capture landing page screenshots using regular Playwright (not Bright Data)
+    ads = await capture_landing_screenshots(ads, debug_info)
+
+    return {"ads": ads, "serp_screenshot": serp_screenshot}
 
 
-async def handle_cookie_consent(page):
-    """Handle cookie consent dialogs that might appear."""
+async def extract_ad_data(ad_el, position: int, page, block: str = "top") -> Dict[str, Any]:
+    """Extract data from a single ad element."""
+    ad_data = {
+        "position": position,
+        "block_position": block,
+        "type": "sponsored_ad",
+    }
+
+    # Get title from role="heading" or first link
+    title_el = await ad_el.query_selector('div[role="heading"]')
+    if title_el:
+        ad_data["title"] = await title_el.inner_text()
+    else:
+        first_link = await ad_el.query_selector('a')
+        if first_link:
+            text = await first_link.inner_text()
+            if text and len(text) < 150:
+                ad_data["title"] = text.strip()
+
+    # Get displayed URL from cite
+    cite = await ad_el.query_selector('cite')
+    if cite:
+        ad_data["displayed_link"] = await cite.inner_text()
+
+    # Get destination link
+    main_link = await ad_el.query_selector('a[data-rw]')
+    if not main_link:
+        main_link = await ad_el.query_selector('a')
+    if main_link:
+        href = await main_link.get_attribute('href')
+        if href and not href.startswith('#'):
+            ad_data["link"] = href
+
+    # Get description - find longest text block
+    all_text = await ad_el.inner_text()
+    lines = [l.strip() for l in all_text.split('\n') if l.strip()]
+    for line in lines:
+        if len(line) > 50 and line != ad_data.get("title", ""):
+            ad_data["description"] = line
+            break
+
+    # Get advertiser name
+    spans = await ad_el.query_selector_all('span')
+    for span in spans:
+        text = await span.inner_text()
+        if text and len(text) < 40 and '·' not in text and 'http' not in text.lower() and text != "Sponsored":
+            if text != ad_data.get("title", "")[:40]:
+                ad_data["advertiser"] = text.strip()
+                break
+
+    # Get sitelinks if present
+    sitelinks = []
+    sitelink_els = await ad_el.query_selector_all('a[data-impdclcc]')
+    for sl in sitelink_els[:6]:
+        sl_text = await sl.inner_text()
+        sl_href = await sl.get_attribute('href')
+        if sl_text and sl_href:
+            sitelinks.append({"title": sl_text.strip(), "link": sl_href})
+    if sitelinks:
+        ad_data["sitelinks"] = sitelinks
+
+    return ad_data
+
+
+def extract_domain(url: str) -> Optional[str]:
+    """Extract domain from URL."""
     try:
-        # Common cookie consent button selectors
-        consent_selectors = [
-            "button:has-text('Accept all')",
-            "button:has-text('Accept')",
-            "button:has-text('I agree')",
-            "button:has-text('Agree')",
-            "[aria-label='Accept all']",
-            "#L2AGLb",  # Google's consent button ID
-        ]
-
-        for selector in consent_selectors:
-            try:
-                btn = page.locator(selector).first
-                if await btn.is_visible(timeout=1000):
-                    await btn.click()
-                    await asyncio.sleep(1)
-                    break
-            except:
-                continue
-    except:
-        pass
-
-
-async def find_sponsored_section_ads(page, page_num: int) -> List[Dict[str, Any]]:
-    """
-    Find ads in the "Sponsored results" or "Sponsored" labeled section.
-    This is the modern Google ad format shown in the user's screenshot.
-    """
-    ads = []
-
-    try:
-        # Look for "Sponsored" text anywhere on the page
-        # Google shows "Sponsored results" or just "Sponsored" above ads
-        page_content = await page.content()
-
-        # Find all elements that might be sponsored ad containers
-        # These typically have a structure with site name, URL, title, description, and sitelinks
-
-        # Strategy: Find divs that contain "Sponsored" text and extract ad info from siblings/children
-        sponsored_elements = await page.query_selector_all("div")
-
-        for element in sponsored_elements:
-            try:
-                # Check if this element or its children contain "Sponsored" indicator
-                element_text = await element.inner_text()
-
-                # Skip if too long (probably a container with many results)
-                if len(element_text) > 2000:
-                    continue
-
-                # Check for sponsored indicators
-                is_sponsored = False
-                if "Sponsored" in element_text and len(element_text) < 1500:
-                    # Make sure it's actually an ad container, not just mentioning the word
-                    has_link = await element.query_selector("a[href]")
-                    if has_link:
-                        is_sponsored = True
-
-                if not is_sponsored:
-                    continue
-
-                # Try to extract ad data from this container
-                ad_data = await extract_modern_ad_data(element, page_num)
-                if ad_data and ad_data.get("link") and ad_data.get("title"):
-                    # Filter out Google's own links
-                    if "google.com" not in ad_data.get("link", ""):
-                        ads.append(ad_data)
-
-            except Exception as e:
-                continue
-
-    except Exception as e:
-        print(f"Error in find_sponsored_section_ads: {e}")
-
-    return ads
-
-
-async def find_ads_by_indicators(page, page_num: int) -> List[Dict[str, Any]]:
-    """
-    Find ads by looking for specific ad indicators in search results.
-    """
-    ads = []
-
-    try:
-        # Look for results with "Ad" badge or sponsored indicator
-        # Modern Google uses various class names and data attributes
-
-        # Try multiple selector strategies
-        selectors = [
-            # Results with data-text-ad attribute
-            "[data-text-ad='1']",
-            # Results with ad-related classes
-            ".uEierd",  # Ad container class
-            ".commercial-unit-desktop-top",
-            # Results containing "Ad" span
-            "div:has(> span:text-is('Ad'))",
-        ]
-
-        for selector in selectors:
-            try:
-                elements = await page.query_selector_all(selector)
-                for element in elements:
-                    ad_data = await extract_modern_ad_data(element, page_num)
-                    if ad_data and ad_data.get("link") and ad_data.get("title"):
-                        if "google.com" not in ad_data.get("link", ""):
-                            ads.append(ad_data)
-            except:
-                continue
-
-    except Exception as e:
-        print(f"Error in find_ads_by_indicators: {e}")
-
-    return ads
-
-
-async def find_top_ad_block(page, page_num: int) -> List[Dict[str, Any]]:
-    """
-    Find ads in the top ad block using data attributes.
-    """
-    ads = []
-
-    try:
-        # Google's top ads block often has specific structure
-        # Look for the main search results container and find sponsored items
-
-        # Try to find ad blocks by their container ID or class
-        ad_containers = await page.query_selector_all("#tads, #tadsb, [data-hveid]")
-
-        for container in ad_containers:
-            try:
-                # Check if this container has sponsored content
-                text = await container.inner_text()
-                if "Sponsored" in text or len(text) < 50:
-                    # Find individual ads within this container
-                    ad_items = await container.query_selector_all("a[data-rw]")
-                    if not ad_items:
-                        ad_items = await container.query_selector_all("[data-dtld]")
-
-                    for item in ad_items:
-                        ad_data = await extract_modern_ad_data(item, page_num)
-                        if ad_data and ad_data.get("link") and ad_data.get("title"):
-                            if "google.com" not in ad_data.get("link", ""):
-                                ads.append(ad_data)
-            except:
-                continue
-
-    except Exception as e:
-        print(f"Error in find_top_ad_block: {e}")
-
-    return ads
-
-
-async def extract_modern_ad_data(element, page_num: int) -> Optional[Dict[str, Any]]:
-    """
-    Extract ad data from a modern Google ad element.
-    Captures: site name, URL, headline, description, sitelinks.
-    """
-    try:
-        ad_data = {
-            "position": 0,
-            "block_position": "top" if page_num == 0 else f"page_{page_num + 1}",
-            "source": "playwright",
-        }
-
-        # Get the main link (headline link)
-        link = ""
-        title = ""
-
-        # Try different strategies to find the headline link
-        link_selectors = [
-            "a[data-rw]",  # Main ad link
-            "a h3",  # Link containing h3
-            "a[href^='http']:has(h3)",
-            "a[href^='http']",
-        ]
-
-        for selector in link_selectors:
-            try:
-                link_el = await element.query_selector(selector)
-                if link_el:
-                    href = await link_el.get_attribute("href")
-                    if href and "google.com/aclk" in href:
-                        # Extract real URL from Google's redirect
-                        link = extract_real_url(href)
-                    elif href and href.startswith("http"):
-                        link = href
-
-                    # Get title from h3 or the link text
-                    h3 = await link_el.query_selector("h3")
-                    if h3:
-                        title = await h3.inner_text()
-                    else:
-                        title = await link_el.inner_text()
-
-                    if link and title:
-                        break
-            except:
-                continue
-
-        if not link:
-            return None
-
-        ad_data["link"] = link
-        ad_data["title"] = title.strip() if title else ""
-
-        # Get displayed URL (the green URL shown to users)
-        try:
-            # Look for cite element or span with URL
-            cite_selectors = ["cite", "span.VuuXrf", "[data-dtld]", ".Zu0yb"]
-            for sel in cite_selectors:
-                cite_el = await element.query_selector(sel)
-                if cite_el:
-                    displayed = await cite_el.inner_text()
-                    if displayed:
-                        ad_data["displayed_link"] = displayed.strip()
-                        break
-
-            if "displayed_link" not in ad_data:
-                ad_data["displayed_link"] = urlparse(link).netloc
-        except:
-            ad_data["displayed_link"] = urlparse(link).netloc
-
-        # Get site name/source (the bold name above the URL)
-        try:
-            # Site name is usually in a span before the URL
-            site_selectors = ["span.VuuXrf", "[role='text']"]
-            for sel in site_selectors:
-                site_el = await element.query_selector(sel)
-                if site_el:
-                    site_name = await site_el.inner_text()
-                    if site_name and len(site_name) < 100:
-                        ad_data["site_name"] = site_name.strip()
-                        break
-        except:
-            pass
-
-        # Get description
-        try:
-            # Description is usually in a div after the title
-            desc_selectors = [".VwiC3b", "[data-sncf]", "div.Va3FIb", "div > span"]
-            for sel in desc_selectors:
-                desc_el = await element.query_selector(sel)
-                if desc_el:
-                    desc = await desc_el.inner_text()
-                    # Filter out short strings that aren't descriptions
-                    if desc and len(desc) > 30 and "Sponsored" not in desc:
-                        ad_data["description"] = desc.strip()[:500]  # Limit length
-                        break
-        except:
-            pass
-
-        # Get sitelinks (the links at the bottom like "Best Online Casinos", "Sweepstakes No Deposit")
-        try:
-            sitelinks = []
-            # Sitelinks are usually in a row of links after the main ad
-            sitelink_els = await element.query_selector_all("a")
-
-            for sl_el in sitelink_els:
-                try:
-                    sl_href = await sl_el.get_attribute("href")
-                    sl_text = await sl_el.inner_text()
-
-                    # Skip if it's the main ad link or not a valid sitelink
-                    if not sl_href or not sl_text:
-                        continue
-                    if sl_text == title:
-                        continue
-                    if len(sl_text) > 50:
-                        continue
-                    if "google.com" in sl_href and "aclk" not in sl_href:
-                        continue
-
-                    # Extract real URL if it's a Google redirect
-                    real_url = extract_real_url(sl_href) if sl_href else ""
-
-                    if real_url and sl_text and sl_text.strip():
-                        sitelinks.append({
-                            "title": sl_text.strip(),
-                            "link": real_url,
-                        })
-                except:
-                    continue
-
-            # Remove duplicates and limit to 6 sitelinks
-            seen_titles = set()
-            unique_sitelinks = []
-            for sl in sitelinks:
-                if sl["title"] not in seen_titles:
-                    seen_titles.add(sl["title"])
-                    unique_sitelinks.append(sl)
-                    if len(unique_sitelinks) >= 6:
-                        break
-
-            if unique_sitelinks:
-                ad_data["sitelinks"] = unique_sitelinks
-
-        except:
-            pass
-
-        return ad_data
-
-    except Exception as e:
-        print(f"Error extracting ad data: {e}")
+        parsed = urlparse(url)
+        domain = parsed.netloc
+        # Remove www. prefix
+        if domain.startswith("www."):
+            domain = domain[4:]
+        return domain
+    except Exception:
         return None
 
 
-def extract_real_url(google_url: str) -> str:
-    """Extract the real destination URL from a Google redirect URL."""
-    if not google_url:
-        return ""
+async def fetch_transparency_center_ads(domains: List[str], debug_info: dict = None) -> Dict[str, List[Dict]]:
+    """
+    Fetch ad creatives from Google Ads Transparency Center via SerpApi.
+    Returns a dict mapping domain -> list of ad creatives.
+    """
+    results = {}
+    unique_domains = list(set(d for d in domains if d))
 
-    # If it's a Google ad click redirect, extract the actual URL
-    if "google.com/aclk" in google_url:
-        parsed = urlparse(google_url)
-        params = parse_qs(parsed.query)
-        # Try different parameter names that Google uses
-        for param in ["adurl", "dest", "url"]:
-            if param in params:
-                return params[param][0]
+    if debug_info:
+        debug_info["transparency_domains_to_fetch"] = unique_domains
 
-    if "google.com/url" in google_url:
-        parsed = urlparse(google_url)
-        params = parse_qs(parsed.query)
-        for param in ["url", "q"]:
-            if param in params:
-                return params[param][0]
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for domain in unique_domains[:10]:  # Increased from 5 to 10 domains
+            try:
+                response = await client.get(
+                    "https://serpapi.com/search.json",
+                    params={
+                        "engine": "google_ads_transparency_center",
+                        "text": domain,
+                        "api_key": SERPAPI_KEY,
+                    }
+                )
+                data = response.json()
 
-    return google_url
+                if "ad_creatives" in data:
+                    creatives = data["ad_creatives"][:10]  # Limit to 10 creatives per domain
+                    results[domain] = creatives
+                    if debug_info:
+                        debug_info[f"transparency_{domain}_count"] = len(creatives)
+                else:
+                    if debug_info:
+                        debug_info[f"transparency_{domain}_error"] = data.get("error", "No ad_creatives")
+
+            except Exception as e:
+                if debug_info:
+                    debug_info[f"transparency_{domain}_error"] = str(e)
+
+    return results
 
 
-async def capture_landing_screenshots(ads: list) -> list:
+async def enrich_ads_with_transparency_data(ads: list, debug_info: dict = None) -> list:
+    """
+    Enrich ads with data from Google Ads Transparency Center.
+    Adds ad creative screenshots and additional metadata.
+    """
+    # Extract unique domains from ads
+    domains = []
+    for ad in ads:
+        link = ad.get("link", "")
+        displayed_link = ad.get("displayed_link", "")
+
+        # Try to get domain from link first, then displayed_link
+        domain = extract_domain(link)
+        if not domain and displayed_link:
+            domain = displayed_link.split("/")[0]
+        if domain:
+            domains.append(domain)
+            ad["_domain"] = domain
+
+    # Fetch transparency center data
+    transparency_data = await fetch_transparency_center_ads(domains, debug_info)
+
+    # Match ads with their transparency center creatives
+    for ad in ads:
+        domain = ad.pop("_domain", None)
+        if domain and domain in transparency_data:
+            creatives = transparency_data[domain]
+            if creatives:
+                # Add the first matching creative's image as the ad screenshot
+                ad["ad_creative_image"] = creatives[0].get("image")
+                ad["advertiser_id"] = creatives[0].get("advertiser_id")
+                ad["advertiser_name"] = creatives[0].get("advertiser")
+
+                # Add all creatives for this advertiser
+                ad["all_creatives"] = [
+                    {
+                        "image": c.get("image"),
+                        "format": c.get("format"),
+                        "width": c.get("width"),
+                        "height": c.get("height"),
+                        "days_shown": c.get("total_days_shown"),
+                    }
+                    for c in creatives[:5]  # Limit to 5 creatives per ad
+                ]
+
+    return ads
+
+
+async def capture_landing_screenshots(ads: list, debug_info: dict = None) -> list:
     """
     Capture full-page screenshots of landing pages for each ad.
+    Uses regular Playwright (not Bright Data) to avoid robots.txt restrictions.
     """
     if not ads:
         return ads
+
+    screenshots_captured = 0
+    screenshots_failed = 0
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -727,7 +505,7 @@ async def capture_landing_screenshots(ads: list) -> list:
 
         for ad in ads:
             landing_url = ad.get("link")
-            if not landing_url:
+            if not landing_url or landing_url.startswith('/'):
                 continue
 
             try:
@@ -737,7 +515,7 @@ async def capture_landing_screenshots(ads: list) -> list:
                 await page.goto(landing_url, timeout=20000, wait_until="domcontentloaded")
 
                 # Wait for page to settle
-                await asyncio.sleep(3)
+                await asyncio.sleep(2)
 
                 # Take full page screenshot
                 screenshot = await page.screenshot(
@@ -746,19 +524,26 @@ async def capture_landing_screenshots(ads: list) -> list:
                     full_page=True,
                 )
                 ad["landing_page_screenshot_base64"] = base64.b64encode(screenshot).decode()
+                screenshots_captured += 1
 
                 await page.close()
 
             except Exception as e:
                 ad["landing_page_screenshot_base64"] = None
                 ad["screenshot_error"] = str(e)
+                screenshots_failed += 1
 
         await browser.close()
+
+    if debug_info:
+        debug_info["landing_screenshots_captured"] = screenshots_captured
+        debug_info["landing_screenshots_failed"] = screenshots_failed
 
     return ads
 
 
 if __name__ == "__main__":
-    print(f"Starting AdSpy service v2.1.0 on {HOST}:{PORT}")
-    print("Using Playwright with stealth mode for ad detection")
+    print(f"Starting AdSpy service v4.4.2 on {HOST}:{PORT}")
+    print("Using Bright Data Browser API + Regular Playwright for landing pages")
+    print("Scrapes up to 5 pages with multiple selectors for maximum ad coverage")
     uvicorn.run(app, host=HOST, port=PORT)

@@ -5,7 +5,8 @@
 import { identityRepository, type IdentityFindOptions, type IdentityWithRelations } from "../repositories";
 import { getPrisma, type ServiceResult } from "../repositories/base.repository";
 import type { IdentityCreateInput, IdentityUpdateInput, IdentityDocument } from "@magimanager/shared";
-import { fireIdentityArchivedAlert } from "./decommission-alert.service";
+import { fireIdentityArchivedAlert as fireDecommissionArchivedAlert } from "./decommission-alert.service";
+import { fireIdentityArchivedAlert } from "./identity-archived-alert.service";
 import { checkIdentityCompleteness, fireIncompleteIdentityAlert } from "./incomplete-identity-alert.service";
 import { fireIdentityProgressAlert } from "./identity-progress-alert.service";
 
@@ -168,8 +169,15 @@ class IdentityService {
       const identity = await identityRepository.archive(id);
       await this.logActivity(id, "ARCHIVED", "Identity archived", userId);
 
-      // Fire decommission alert for identity archive
-      await fireIdentityArchivedAlert(id);
+      // Fire identity archived alert
+      await fireIdentityArchivedAlert({
+        identityId: identity.id,
+        identityName: identity.fullName,
+        website: identity.website,
+      });
+
+      // Fire decommission alert for identity archive (legacy)
+      await fireDecommissionArchivedAlert(id);
 
       return { success: true, data: identity };
     } catch (error) {

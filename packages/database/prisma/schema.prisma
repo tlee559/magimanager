@@ -244,6 +244,11 @@ model AppSettings {
   identityProgressAlertOnGologinCreated Boolean @default(true) // Alert when GoLogin profile is created
   identityProgressAlertOnAccountLinked Boolean @default(true) // Alert when ad account is linked
 
+  // Identity Archived Alert Settings
+  identityArchivedAlertEnabled       Boolean @default(true)  // Enable alerts when identity is archived
+  identityArchivedAlertViaApp        Boolean @default(true)  // Send in-app notification
+  identityArchivedAlertViaTelegram   Boolean @default(true)  // Send Telegram notification
+
   // MCC (Manager Account) Connection
   mccCustomerId        String?   // MCC ID e.g., "7325688009" (no dashes, stored normalized)
   mccConnectionId      String?   // FK to GoogleAdsConnection for MCC OAuth tokens

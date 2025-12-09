@@ -1367,7 +1367,7 @@ function IdentitiesListView({
                 Website
               </th>
               <th className="px-4 py-3 text-center text-xs font-semibold text-slate-400" title="Ad Account linked">
-                Account
+                Ad Account
               </th>
               <th className="px-4 py-3 text-center text-xs font-semibold text-slate-400" title="Documents uploaded">
                 Docs
@@ -6510,6 +6510,10 @@ function SettingsView() {
   const [identityProgressAlertOnWebsiteCompleted, setIdentityProgressAlertOnWebsiteCompleted] = useState(true);
   const [identityProgressAlertOnGologinCreated, setIdentityProgressAlertOnGologinCreated] = useState(true);
   const [identityProgressAlertOnAccountLinked, setIdentityProgressAlertOnAccountLinked] = useState(true);
+  // Identity archived alert settings
+  const [identityArchivedAlertEnabled, setIdentityArchivedAlertEnabled] = useState(true);
+  const [identityArchivedAlertViaApp, setIdentityArchivedAlertViaApp] = useState(true);
+  const [identityArchivedAlertViaTelegram, setIdentityArchivedAlertViaTelegram] = useState(true);
   // Visibility toggles for API keys
   const [showGologinKey, setShowGologinKey] = useState(false);
   const [showGoogleAdsKey, setShowGoogleAdsKey] = useState(false);
@@ -6580,6 +6584,10 @@ function SettingsView() {
         setIdentityProgressAlertOnWebsiteCompleted(data.identityProgressAlertOnWebsiteCompleted ?? true);
         setIdentityProgressAlertOnGologinCreated(data.identityProgressAlertOnGologinCreated ?? true);
         setIdentityProgressAlertOnAccountLinked(data.identityProgressAlertOnAccountLinked ?? true);
+        // Identity archived alert settings
+        setIdentityArchivedAlertEnabled(data.identityArchivedAlertEnabled ?? true);
+        setIdentityArchivedAlertViaApp(data.identityArchivedAlertViaApp ?? true);
+        setIdentityArchivedAlertViaTelegram(data.identityArchivedAlertViaTelegram ?? true);
       }
     } catch (error) {
       console.error("Failed to fetch settings:", error);
@@ -6703,6 +6711,10 @@ function SettingsView() {
           identityProgressAlertOnWebsiteCompleted,
           identityProgressAlertOnGologinCreated,
           identityProgressAlertOnAccountLinked,
+          // Identity archived alert settings
+          identityArchivedAlertEnabled,
+          identityArchivedAlertViaApp,
+          identityArchivedAlertViaTelegram,
         }),
       });
 
@@ -7320,6 +7332,51 @@ function SettingsView() {
                   <span className="text-sm text-slate-200">Telegram bot</span>
                 </label>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Identity Archived Alerts */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-100">Identity Archived Alerts</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Get notified when identity profiles are archived</p>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={identityArchivedAlertEnabled}
+                onChange={(e) => setIdentityArchivedAlertEnabled(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+              />
+              <span className="text-xs text-slate-300">Enabled</span>
+            </label>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide">
+              Notify via
+            </label>
+            <div className="space-y-2">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={identityArchivedAlertViaApp}
+                  onChange={(e) => setIdentityArchivedAlertViaApp(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                />
+                <span className="text-sm text-slate-200">In-app notification</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={identityArchivedAlertViaTelegram}
+                  onChange={(e) => setIdentityArchivedAlertViaTelegram(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                />
+                <span className="text-sm text-slate-200">Telegram bot</span>
+              </label>
             </div>
           </div>
         </div>

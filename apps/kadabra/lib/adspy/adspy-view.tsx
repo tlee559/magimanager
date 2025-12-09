@@ -446,6 +446,42 @@ export function AdSpyView({ onBack }: AdSpyViewProps) {
                 </div>
               )}
 
+              {/* No Ads Found Notice */}
+              {selectedJob.status === "completed" && (!selectedJob.ads || selectedJob.ads.length === 0) && (
+                <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                  <div className="flex items-center gap-2 text-yellow-400">
+                    <AlertCircle className="w-5 h-5" />
+                    <span className="font-medium">No Ads Found</span>
+                  </div>
+                  <p className="mt-2 text-sm text-gray-400">
+                    No sponsored ads were found for this keyword. This could be because:
+                  </p>
+                  <ul className="mt-2 text-sm text-gray-400 list-disc list-inside space-y-1">
+                    <li>Google restricts ads for this category (gambling, medical, etc.)</li>
+                    <li>No advertisers are currently bidding on this keyword</li>
+                    <li>Ads may not be shown in the selected location</li>
+                  </ul>
+                </div>
+              )}
+
+              {/* Debug Info Section */}
+              {selectedJob.debug && selectedJob.debug.length > 0 && (
+                <details className="bg-white/5 border border-white/10 rounded-lg">
+                  <summary className="p-4 cursor-pointer text-sm font-medium text-gray-400 hover:text-gray-300">
+                    Debug Log ({selectedJob.debug.length} entries)
+                  </summary>
+                  <div className="px-4 pb-4">
+                    <div className="bg-black/30 rounded-lg p-3 max-h-60 overflow-y-auto font-mono text-xs">
+                      {selectedJob.debug.map((entry, i) => (
+                        <div key={i} className="text-gray-400 py-0.5">
+                          {entry}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </details>
+              )}
+
               {/* Loading State */}
               {(selectedJob.status === "searching" ||
                 selectedJob.status === "screenshotting") && (

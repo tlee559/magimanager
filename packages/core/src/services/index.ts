@@ -22,3 +22,6 @@ export * from "./incomplete-identity-alert.service";
 
 // Identity Progress Alert Service - Alerts when items are added to identity profiles
 export * from "./identity-progress-alert.service";
+
+// Identity Archived Alert Service - Alerts when identity profiles are archived
+export * from "./identity-archived-alert.service";
