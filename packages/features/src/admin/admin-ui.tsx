@@ -9562,87 +9562,119 @@ function FAQView() {
     overview: [
       {
         question: "What is ABRA?",
-        answer: "ABRA is the Account Management Console - a central hub for managing Google Ads accounts at scale. It replaces spreadsheets and manual tracking by giving you one place to manage identities, track account status, and coordinate your team."
+        answer: "ABRA is like a filing cabinet for all your Google Ads accounts. Instead of using messy spreadsheets, you keep everything organized in one place - who owns each account, what documents they have, and whether the account is ready to use."
       },
       {
         question: "Why should I use ABRA?",
-        answer: "ABRA helps you: (1) Centralize all identity information instead of scattered spreadsheets, (2) Track your account pipeline from creation to handoff, (3) Manage team permissions and access, (4) Maintain compliance documentation in one secure location."
+        answer: "Think of ABRA as your control center. It helps you: (1) Keep all your identity info in one place instead of scattered files, (2) See which accounts are new, warming up, or ready to go, (3) Control who on your team can see what, (4) Store important documents safely."
       },
       {
         question: "What is KADABRA?",
-        answer: "KADABRA is the companion Ads Console where media buyers manage day-to-day campaign operations. After accounts are handed off in ABRA, media buyers use KADABRA to monitor performance, run campaigns, and use AI tools."
+        answer: "KADABRA is the other half of the system. While ABRA is where you SET UP accounts, KADABRA is where you USE them. After you hand off an account in ABRA, the media buyer goes to KADABRA to run ads, check how they're doing, and use AI tools to help."
       }
     ],
     workflow: [
       {
         question: "What is the account factory workflow?",
-        answer: "The workflow has 5 steps: (1) Create Identity Profile with personal info, billing, and documents, (2) Create GoLogin Profile for browser fingerprint isolation, (3) Create Ad Account Profile and link to identity, (4) Warmup period where the account builds trust, (5) Handoff to a media buyer who manages it in KADABRA."
+        answer: "Think of it like building a house: (1) First, you create the 'person' who will own the account (ID Profile), (2) Then you set up their special browser (GoLogin), (3) Next, you create a record for their ad account (Ad Account Profile), (4) You let the account 'warm up' so Google trusts it, (5) Finally, you hand it off to someone who will run ads on it."
+      },
+      {
+        question: "Why do we follow this order?",
+        answer: "Each step depends on the one before it. You need a person (identity) before you can create an account for them. You need a special browser so accounts don't get linked together. And you need the account to warm up before running real ads, or Google might flag it."
       }
     ],
     identities: [
       {
         question: "What is an ID Profile?",
-        answer: "An ID Profile is a complete identity record used to set up Google Ads accounts. It includes personal information (name, DOB, address), credentials (email, phone, 2FA), billing information (credit card), and uploaded documents (ID, SSN, etc.)."
+        answer: "An ID Profile is like a complete folder about one person. It has their name, birthday, address, email, phone number, credit card for billing, and copies of their ID documents. This is the 'person' who will own a Google Ads account."
+      },
+      {
+        question: "Why do we need ID Profiles?",
+        answer: "Google Ads accounts need to belong to a real person with real information. The ID Profile stores all that info in one place so you don't have to hunt through emails or files when you need it."
       },
       {
         question: "How do I create an ID Profile?",
-        answer: "Navigate to ID Profiles in the sidebar, click 'New Identity', fill in all required fields (personal info, credentials, billing), then save. You can add documents and a website after creation."
+        answer: "Click 'ID Profiles' in the sidebar, then click 'New Identity'. Fill in the person's info - their name, birthday, address, email, phone, and credit card. Click save. After that, you can add their ID documents and website."
       },
       {
         question: "What documents should I upload?",
-        answer: "Upload any verification documents required for account setup - typically a driver's license, SSN card, or other government-issued ID. These are stored securely and linked to the identity profile."
+        answer: "Upload any ID that proves who the person is - usually a driver's license or passport. Some setups also need an SSN card. These get stored safely and attached to the profile."
       },
       {
         question: "What does Archive do?",
-        answer: "Archiving hides an identity from the main list but keeps all data intact. Use this when an identity is no longer active but you want to retain the records. You can view archived identities by toggling the archive filter."
+        answer: "Archive is like putting a folder in storage. The identity disappears from your main list, but all the info is still saved. Use this when you're done with an identity but might need the records later."
       }
     ],
     accounts: [
       {
-        question: "What are the account statuses?",
-        answer: "Accounts progress through 4 statuses: Provisioned (newly created), Warming Up (building trust), Ready (warmup complete, ready for handoff), and Handed Off (assigned to a media buyer)."
+        question: "What is an Ad Account Profile?",
+        answer: "An Ad Account Profile is a RECORD in ABRA that tracks information about a Google Ads account. Think of it like an index card that says 'this account exists, it belongs to this person, and here's its status.' It's NOT the actual Google Ads account - it's our way of keeping track of it."
       },
       {
-        question: "How do I hand off an account to a media buyer?",
-        answer: "Go to Account Profiles, find the account that's Ready, click the Assign button, select a media buyer from the dropdown, optionally add notes, then confirm. The media buyer will be notified and can access the account in KADABRA."
+        question: "What is a Live Ad Account?",
+        answer: "A Live Ad Account is the REAL Google Ads account that exists on Google's website. This is where ads actually run and money gets spent. It's the actual thing, not just a record of it."
+      },
+      {
+        question: "What's the difference between them?",
+        answer: "Think of it like a car title vs. a car. The Ad Account Profile (title) is paperwork that says you own something and tracks its info. The Live Ad Account (car) is the real thing that actually does the work. ABRA manages the paperwork. Google Ads is where the real account lives."
+      },
+      {
+        question: "How do I connect a Live Ad Account to an Ad Account Profile?",
+        answer: "First, create an Ad Account Profile in ABRA and link it to an ID Profile. Then use OAuth (a secure login) to connect to the real Google Ads account. This links the paperwork (profile) to the real thing (live account) so ABRA can track what's happening."
+      },
+      {
+        question: "Why do we do it this way?",
+        answer: "We keep records in ABRA because: (1) You can see all your accounts in one dashboard, (2) You can track status without logging into Google, (3) You know which person owns which account, (4) You can hand off accounts to team members easily."
+      },
+      {
+        question: "What are the account statuses?",
+        answer: "Accounts go through 4 stages: (1) Provisioned = just created, brand new, (2) Warming Up = letting Google learn to trust it, (3) Ready = warmed up and ready to use, (4) Handed Off = given to a media buyer to run ads."
       },
       {
         question: "What is warmup?",
-        answer: "Warmup is a trust-building period for new accounts before running real campaigns. During warmup, you track the account's spend and health on the dashboard. Once the account reaches the warmup target, it moves to Ready status."
+        answer: "Warmup is like breaking in new shoes. A brand new Google Ads account needs time to build trust with Google. During warmup, you spend small amounts slowly. This shows Google the account is real and legit. If you skip warmup and spend too fast, Google might flag the account."
+      },
+      {
+        question: "How do I hand off an account?",
+        answer: "Go to Account Profiles, find the account that says 'Ready', click the Assign button, pick the team member from the list, and confirm. They'll get a notification and can start using the account in KADABRA."
       }
     ],
     team: [
       {
-        question: "What are the user roles?",
-        answer: "There are 5 roles: SUPER_ADMIN (full system access), ADMIN (team and account management), MANAGER (same as Admin), MEDIA_BUYER (can only access assigned accounts in KADABRA), and ASSISTANT (view-only access)."
+        question: "What are the different roles?",
+        answer: "Think of roles like keys that unlock different doors: SUPER_ADMIN = master key, can do everything. ADMIN = can manage team and accounts. MANAGER = same as Admin. MEDIA_BUYER = can only see accounts given to them. ASSISTANT = can only look, can't change anything."
       },
       {
-        question: "How do I add a team member?",
-        answer: "Go to Team in the sidebar, click 'Add Member', enter their email address, select their role, and submit. They'll receive an invitation email to set up their account."
+        question: "How do I add someone to the team?",
+        answer: "Click 'Team' in the sidebar, then 'Add Member'. Type their email, pick their role, and click submit. They'll get an email to set up their password."
       },
       {
         question: "How do I change someone's role?",
-        answer: "Go to Team, find the user in the list, click their role dropdown, and select the new role. Changes take effect immediately."
+        answer: "Go to Team, find the person, click on their current role, and pick a new one from the list. The change happens right away."
       }
     ],
     integrations: [
       {
-        question: "What is GoLogin used for?",
-        answer: "GoLogin provides browser fingerprint separation - each identity gets a unique browser profile with its own fingerprint, cookies, and settings. This prevents accounts from being linked together."
+        question: "What is GoLogin?",
+        answer: "GoLogin is special browser software. Each identity gets their own browser that looks completely different from the others. This is important because if you log into multiple Google accounts from the same browser, Google might think they're connected and flag them."
+      },
+      {
+        question: "Why do we need GoLogin?",
+        answer: "Every browser has a 'fingerprint' - little details that make it unique. If you use the same browser for multiple accounts, Google can tell they're related. GoLogin gives each identity their own fingerprint, so accounts stay separate."
       },
       {
         question: "How do I set up Telegram alerts?",
-        answer: "Go to Settings, enter your Telegram Bot Token and Chat ID in the Telegram section, then configure which alert types you want to receive (identity progress, account status changes, etc.)."
+        answer: "Go to Settings, find the Telegram section, and paste in your Bot Token and Chat ID. Then pick which alerts you want - like when an identity is created or an account status changes. You'll get messages on Telegram when those things happen."
       }
     ],
     dashboard: [
       {
-        question: "What do the dashboard numbers mean?",
-        answer: "The dashboard shows 4 key metrics: ID Profiles (total identities in the system), In Warmup (accounts currently warming up), Ready to Deploy (accounts that completed warmup), and Handed Off (accounts assigned to media buyers)."
+        question: "What do the numbers on the dashboard mean?",
+        answer: "The dashboard shows 4 big numbers: (1) ID Profiles = how many identities you have total, (2) In Warmup = how many accounts are currently warming up, (3) Ready to Deploy = accounts that finished warmup and are ready to use, (4) Handed Off = accounts that have been given to media buyers."
       },
       {
-        question: "How do I read the pipeline visualization?",
-        answer: "The pipeline shows the flow from Identity creation through GoLogin setup, Ad Account creation, Warmup, and finally Handoff. Each stage shows how many items are in that state."
+        question: "What is the pipeline diagram?",
+        answer: "The pipeline is a picture showing how accounts flow through the system - from creating an identity, to setting up GoLogin, to creating the account, to warmup, to handoff. It helps you see where everything is at a glance."
       }
     ]
   };
@@ -9650,14 +9682,14 @@ function FAQView() {
   // Workflow diagram component
   const WorkflowDiagram = () => (
     <div className="my-6 p-6 bg-slate-800/50 rounded-xl border border-slate-700">
-      <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">Pipeline Workflow</h4>
+      <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">How Accounts Get Made (Step by Step)</h4>
       <div className="flex flex-wrap items-center justify-center gap-2 md:gap-4">
         {[
-          { label: "Identity Profile", sub: "Name, DOB, Address, Billing, Docs", color: "bg-indigo-500/20 border-indigo-500/40 text-indigo-300" },
-          { label: "GoLogin Profile", sub: "Browser Fingerprint", color: "bg-purple-500/20 border-purple-500/40 text-purple-300" },
-          { label: "Ad Account", sub: "Link + OAuth", color: "bg-blue-500/20 border-blue-500/40 text-blue-300" },
-          { label: "Warmup", sub: "Build Trust", color: "bg-amber-500/20 border-amber-500/40 text-amber-300" },
-          { label: "Handoff", sub: "To KADABRA", color: "bg-emerald-500/20 border-emerald-500/40 text-emerald-300" },
+          { label: "1. ID Profile", sub: "Create the person", color: "bg-indigo-500/20 border-indigo-500/40 text-indigo-300" },
+          { label: "2. GoLogin", sub: "Set up their browser", color: "bg-purple-500/20 border-purple-500/40 text-purple-300" },
+          { label: "3. Account Profile", sub: "Create the record", color: "bg-blue-500/20 border-blue-500/40 text-blue-300" },
+          { label: "4. Warmup", sub: "Build trust with Google", color: "bg-amber-500/20 border-amber-500/40 text-amber-300" },
+          { label: "5. Handoff", sub: "Give to media buyer", color: "bg-emerald-500/20 border-emerald-500/40 text-emerald-300" },
         ].map((step, i, arr) => (
           <div key={step.label} className="flex items-center gap-2 md:gap-4">
             <div className={`px-4 py-3 rounded-lg border ${step.color} text-center min-w-[120px]`}>
@@ -9678,13 +9710,13 @@ function FAQView() {
   // Account status flow diagram
   const StatusFlowDiagram = () => (
     <div className="my-6 p-6 bg-slate-800/50 rounded-xl border border-slate-700">
-      <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">Account Status Flow</h4>
+      <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">Account Stages (From New to Ready)</h4>
       <div className="flex flex-wrap items-center justify-center gap-2 md:gap-4">
         {[
-          { label: "Provisioned", sub: "New account", color: "bg-slate-500/20 border-slate-500/40 text-slate-300" },
+          { label: "Provisioned", sub: "Just created", color: "bg-slate-500/20 border-slate-500/40 text-slate-300" },
           { label: "Warming Up", sub: "Building trust", color: "bg-amber-500/20 border-amber-500/40 text-amber-300" },
-          { label: "Ready", sub: "Ready for handoff", color: "bg-emerald-500/20 border-emerald-500/40 text-emerald-300" },
-          { label: "Handed Off", sub: "Assigned to buyer", color: "bg-blue-500/20 border-blue-500/40 text-blue-300" },
+          { label: "Ready", sub: "Good to go!", color: "bg-emerald-500/20 border-emerald-500/40 text-emerald-300" },
+          { label: "Handed Off", sub: "Given to buyer", color: "bg-blue-500/20 border-blue-500/40 text-blue-300" },
         ].map((step, i, arr) => (
           <div key={step.label} className="flex items-center gap-2 md:gap-4">
             <div className={`px-4 py-3 rounded-lg border ${step.color} text-center min-w-[110px]`}>
@@ -9702,30 +9734,77 @@ function FAQView() {
     </div>
   );
 
+  // Profile vs Live Account diagram
+  const ProfileVsLiveDiagram = () => (
+    <div className="my-6 p-6 bg-slate-800/50 rounded-xl border border-slate-700">
+      <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">Ad Account Profile vs Live Ad Account</h4>
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
+              <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <div>
+              <h5 className="font-semibold text-blue-300">Ad Account Profile</h5>
+              <p className="text-xs text-blue-300/70">The paperwork (in ABRA)</p>
+            </div>
+          </div>
+          <ul className="text-sm text-blue-200/80 space-y-2">
+            <li>• A record that tracks info about an account</li>
+            <li>• Like an index card or a car title</li>
+            <li>• Lives here in ABRA</li>
+            <li>• Shows status, owner, notes</li>
+          </ul>
+        </div>
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center">
+              <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+              </svg>
+            </div>
+            <div>
+              <h5 className="font-semibold text-emerald-300">Live Ad Account</h5>
+              <p className="text-xs text-emerald-300/70">The real thing (on Google)</p>
+            </div>
+          </div>
+          <ul className="text-sm text-emerald-200/80 space-y-2">
+            <li>• The actual Google Ads account</li>
+            <li>• Like the actual car you drive</li>
+            <li>• Lives on Google's website</li>
+            <li>• Where ads run and money gets spent</li>
+          </ul>
+        </div>
+      </div>
+      <div className="mt-4 p-4 bg-slate-700/30 rounded-lg">
+        <p className="text-sm text-slate-300 text-center">
+          <span className="text-blue-300 font-semibold">Profile</span> + <span className="text-emerald-300 font-semibold">OAuth Connection</span> = <span className="text-amber-300 font-semibold">Linked!</span>
+          <br />
+          <span className="text-xs text-slate-400 mt-1 block">OAuth connects the paperwork to the real account so ABRA can track it</span>
+        </p>
+      </div>
+    </div>
+  );
+
   // User roles hierarchy diagram
   const RolesDiagram = () => (
     <div className="my-6 p-6 bg-slate-800/50 rounded-xl border border-slate-700">
-      <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">User Roles Hierarchy</h4>
-      <div className="space-y-3 max-w-md mx-auto">
+      <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">Team Roles (Who Can Do What)</h4>
+      <div className="space-y-3 max-w-lg mx-auto">
         {[
-          { role: "SUPER_ADMIN", desc: "Full system access", color: "bg-rose-500/20 border-rose-500/40 text-rose-300" },
-          { role: "ADMIN", desc: "Team & account management", color: "bg-orange-500/20 border-orange-500/40 text-orange-300" },
+          { role: "SUPER_ADMIN", desc: "Can do everything", color: "bg-rose-500/20 border-rose-500/40 text-rose-300" },
+          { role: "ADMIN", desc: "Manage team and accounts", color: "bg-orange-500/20 border-orange-500/40 text-orange-300" },
           { role: "MANAGER", desc: "Same as Admin", color: "bg-amber-500/20 border-amber-500/40 text-amber-300" },
-          { role: "MEDIA_BUYER", desc: "Assigned accounts only (KADABRA)", color: "bg-emerald-500/20 border-emerald-500/40 text-emerald-300" },
-          { role: "ASSISTANT", desc: "View only", color: "bg-slate-500/20 border-slate-500/40 text-slate-300" },
-        ].map((item, i, arr) => (
+          { role: "MEDIA_BUYER", desc: "Only sees their assigned accounts", color: "bg-emerald-500/20 border-emerald-500/40 text-emerald-300" },
+          { role: "ASSISTANT", desc: "Can look but can't change anything", color: "bg-slate-500/20 border-slate-500/40 text-slate-300" },
+        ].map((item) => (
           <div key={item.role} className="flex items-center gap-3">
-            <div className={`flex-1 px-4 py-2 rounded-lg border ${item.color} flex justify-between items-center`}>
-              <span className="font-mono font-semibold text-sm">{item.role}</span>
-              <span className="text-xs opacity-70">{item.desc}</span>
+            <div className={`flex-1 px-4 py-3 rounded-lg border ${item.color} flex justify-between items-center`}>
+              <span className="font-semibold text-sm">{item.role}</span>
+              <span className="text-xs opacity-80">{item.desc}</span>
             </div>
-            {i < arr.length - 1 && (
-              <div className="absolute left-1/2 -translate-x-1/2 hidden">
-                <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                </svg>
-              </div>
-            )}
           </div>
         ))}
       </div>
@@ -9781,8 +9860,13 @@ function FAQView() {
           {/* Show workflow diagram on overview and workflow sections */}
           {(activeSection === "overview" || activeSection === "workflow") && <WorkflowDiagram />}
 
-          {/* Show status diagram on accounts section */}
-          {activeSection === "accounts" && <StatusFlowDiagram />}
+          {/* Show diagrams on accounts section */}
+          {activeSection === "accounts" && (
+            <>
+              <ProfileVsLiveDiagram />
+              <StatusFlowDiagram />
+            </>
+          )}
 
           {/* Show roles diagram on team section */}
           {activeSection === "team" && <RolesDiagram />}
