@@ -201,7 +201,7 @@ type Notification = {
   createdAt: Date;
 };
 
-export type View = "dashboard" | "identities" | "create-identity" | "identity-detail" | "edit-identity" | "ad-accounts" | "team" | "settings" | "my-accounts" | "requests" | "admin-requests" | "system" | "sms-dashboard" | "authenticator" | "tutorial";
+export type View = "dashboard" | "identities" | "create-identity" | "identity-detail" | "edit-identity" | "ad-accounts" | "team" | "settings" | "my-accounts" | "requests" | "admin-requests" | "system" | "sms-dashboard" | "authenticator" | "tutorial" | "faq";
 
 // ============================================================================
 // LOGO COMPONENT
@@ -245,6 +245,7 @@ const VIEW_TO_PATH: Record<View, string> = {
   "sms-dashboard": "/admin/sms",
   "authenticator": "/admin/authenticator",
   "tutorial": "/admin/tutorial",
+  "faq": "/admin/faq",
 };
 
 const PATH_TO_VIEW: Record<string, View> = {
@@ -264,6 +265,7 @@ const PATH_TO_VIEW: Record<string, View> = {
   "/admin/sms": "sms-dashboard",
   "/admin/authenticator": "authenticator",
   "/admin/tutorial": "tutorial",
+  "/admin/faq": "faq",
 };
 
 function getViewFromPath(pathname: string): View {
@@ -835,6 +837,18 @@ export function AdminApp({
                         </svg>
                         Tutorial &amp; Guides
                       </button>
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          setView("faq");
+                        }}
+                        className="w-full px-4 py-2.5 text-left text-sm text-slate-200 hover:bg-slate-800 transition flex items-center gap-3"
+                      >
+                        <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        FAQ
+                      </button>
                     </div>
                     <div className="border-t border-slate-800 py-1">
                       <button
@@ -959,6 +973,7 @@ export function AdminApp({
               }} />
             )}
             {view === "tutorial" && <TutorialView />}
+            {view === "faq" && <FAQView />}
           </div>
         </div>
       </main>
@@ -9502,6 +9517,312 @@ function PlaceholderView({ title }: { title: string}) {
       <p className="text-slate-400">
         {title} view coming soon...
       </p>
+    </div>
+  );
+}
+
+// ============================================================================
+// FAQ VIEW
+// ============================================================================
+
+type FAQSection = "overview" | "workflow" | "identities" | "accounts" | "team" | "integrations" | "dashboard";
+
+type FAQItem = {
+  question: string;
+  answer: string;
+};
+
+function FAQView() {
+  const [activeSection, setActiveSection] = useState<FAQSection>("overview");
+  const [expandedQuestions, setExpandedQuestions] = useState<Set<string>>(new Set());
+
+  const toggleQuestion = (id: string) => {
+    setExpandedQuestions(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const sections: { id: FAQSection; title: string; icon: string }[] = [
+    { id: "overview", title: "What is ABRA?", icon: "?" },
+    { id: "workflow", title: "The Workflow", icon: "1" },
+    { id: "identities", title: "ID Profiles", icon: "2" },
+    { id: "accounts", title: "Ad Accounts", icon: "3" },
+    { id: "team", title: "Team Management", icon: "4" },
+    { id: "integrations", title: "Integrations", icon: "5" },
+    { id: "dashboard", title: "Dashboard", icon: "6" },
+  ];
+
+  const faqContent: Record<FAQSection, FAQItem[]> = {
+    overview: [
+      {
+        question: "What is ABRA?",
+        answer: "ABRA is the Account Management Console - a central hub for managing Google Ads accounts at scale. It replaces spreadsheets and manual tracking by giving you one place to manage identities, track account status, and coordinate your team."
+      },
+      {
+        question: "Why should I use ABRA?",
+        answer: "ABRA helps you: (1) Centralize all identity information instead of scattered spreadsheets, (2) Track your account pipeline from creation to handoff, (3) Manage team permissions and access, (4) Maintain compliance documentation in one secure location."
+      },
+      {
+        question: "What is KADABRA?",
+        answer: "KADABRA is the companion Ads Console where media buyers manage day-to-day campaign operations. After accounts are handed off in ABRA, media buyers use KADABRA to monitor performance, run campaigns, and use AI tools."
+      }
+    ],
+    workflow: [
+      {
+        question: "What is the account factory workflow?",
+        answer: "The workflow has 5 steps: (1) Create Identity Profile with personal info, billing, and documents, (2) Create GoLogin Profile for browser fingerprint isolation, (3) Create Ad Account Profile and link to identity, (4) Warmup period where the account builds trust, (5) Handoff to a media buyer who manages it in KADABRA."
+      }
+    ],
+    identities: [
+      {
+        question: "What is an ID Profile?",
+        answer: "An ID Profile is a complete identity record used to set up Google Ads accounts. It includes personal information (name, DOB, address), credentials (email, phone, 2FA), billing information (credit card), and uploaded documents (ID, SSN, etc.)."
+      },
+      {
+        question: "How do I create an ID Profile?",
+        answer: "Navigate to ID Profiles in the sidebar, click 'New Identity', fill in all required fields (personal info, credentials, billing), then save. You can add documents and a website after creation."
+      },
+      {
+        question: "What documents should I upload?",
+        answer: "Upload any verification documents required for account setup - typically a driver's license, SSN card, or other government-issued ID. These are stored securely and linked to the identity profile."
+      },
+      {
+        question: "What does Archive do?",
+        answer: "Archiving hides an identity from the main list but keeps all data intact. Use this when an identity is no longer active but you want to retain the records. You can view archived identities by toggling the archive filter."
+      }
+    ],
+    accounts: [
+      {
+        question: "What are the account statuses?",
+        answer: "Accounts progress through 4 statuses: Provisioned (newly created), Warming Up (building trust), Ready (warmup complete, ready for handoff), and Handed Off (assigned to a media buyer)."
+      },
+      {
+        question: "How do I hand off an account to a media buyer?",
+        answer: "Go to Account Profiles, find the account that's Ready, click the Assign button, select a media buyer from the dropdown, optionally add notes, then confirm. The media buyer will be notified and can access the account in KADABRA."
+      },
+      {
+        question: "What is warmup?",
+        answer: "Warmup is a trust-building period for new accounts before running real campaigns. During warmup, you track the account's spend and health on the dashboard. Once the account reaches the warmup target, it moves to Ready status."
+      }
+    ],
+    team: [
+      {
+        question: "What are the user roles?",
+        answer: "There are 5 roles: SUPER_ADMIN (full system access), ADMIN (team and account management), MANAGER (same as Admin), MEDIA_BUYER (can only access assigned accounts in KADABRA), and ASSISTANT (view-only access)."
+      },
+      {
+        question: "How do I add a team member?",
+        answer: "Go to Team in the sidebar, click 'Add Member', enter their email address, select their role, and submit. They'll receive an invitation email to set up their account."
+      },
+      {
+        question: "How do I change someone's role?",
+        answer: "Go to Team, find the user in the list, click their role dropdown, and select the new role. Changes take effect immediately."
+      }
+    ],
+    integrations: [
+      {
+        question: "What is GoLogin used for?",
+        answer: "GoLogin provides browser fingerprint separation - each identity gets a unique browser profile with its own fingerprint, cookies, and settings. This prevents accounts from being linked together."
+      },
+      {
+        question: "How do I set up Telegram alerts?",
+        answer: "Go to Settings, enter your Telegram Bot Token and Chat ID in the Telegram section, then configure which alert types you want to receive (identity progress, account status changes, etc.)."
+      }
+    ],
+    dashboard: [
+      {
+        question: "What do the dashboard numbers mean?",
+        answer: "The dashboard shows 4 key metrics: ID Profiles (total identities in the system), In Warmup (accounts currently warming up), Ready to Deploy (accounts that completed warmup), and Handed Off (accounts assigned to media buyers)."
+      },
+      {
+        question: "How do I read the pipeline visualization?",
+        answer: "The pipeline shows the flow from Identity creation through GoLogin setup, Ad Account creation, Warmup, and finally Handoff. Each stage shows how many items are in that state."
+      }
+    ]
+  };
+
+  // Workflow diagram component
+  const WorkflowDiagram = () => (
+    <div className="my-6 p-6 bg-slate-800/50 rounded-xl border border-slate-700">
+      <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">Pipeline Workflow</h4>
+      <div className="flex flex-wrap items-center justify-center gap-2 md:gap-4">
+        {[
+          { label: "Identity Profile", sub: "Name, DOB, Address, Billing, Docs", color: "bg-indigo-500/20 border-indigo-500/40 text-indigo-300" },
+          { label: "GoLogin Profile", sub: "Browser Fingerprint", color: "bg-purple-500/20 border-purple-500/40 text-purple-300" },
+          { label: "Ad Account", sub: "Link + OAuth", color: "bg-blue-500/20 border-blue-500/40 text-blue-300" },
+          { label: "Warmup", sub: "Build Trust", color: "bg-amber-500/20 border-amber-500/40 text-amber-300" },
+          { label: "Handoff", sub: "To KADABRA", color: "bg-emerald-500/20 border-emerald-500/40 text-emerald-300" },
+        ].map((step, i, arr) => (
+          <div key={step.label} className="flex items-center gap-2 md:gap-4">
+            <div className={`px-4 py-3 rounded-lg border ${step.color} text-center min-w-[120px]`}>
+              <div className="font-semibold text-sm">{step.label}</div>
+              <div className="text-xs opacity-70 mt-1">{step.sub}</div>
+            </div>
+            {i < arr.length - 1 && (
+              <svg className="w-6 h-6 text-slate-600 flex-shrink-0 hidden md:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // Account status flow diagram
+  const StatusFlowDiagram = () => (
+    <div className="my-6 p-6 bg-slate-800/50 rounded-xl border border-slate-700">
+      <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">Account Status Flow</h4>
+      <div className="flex flex-wrap items-center justify-center gap-2 md:gap-4">
+        {[
+          { label: "Provisioned", sub: "New account", color: "bg-slate-500/20 border-slate-500/40 text-slate-300" },
+          { label: "Warming Up", sub: "Building trust", color: "bg-amber-500/20 border-amber-500/40 text-amber-300" },
+          { label: "Ready", sub: "Ready for handoff", color: "bg-emerald-500/20 border-emerald-500/40 text-emerald-300" },
+          { label: "Handed Off", sub: "Assigned to buyer", color: "bg-blue-500/20 border-blue-500/40 text-blue-300" },
+        ].map((step, i, arr) => (
+          <div key={step.label} className="flex items-center gap-2 md:gap-4">
+            <div className={`px-4 py-3 rounded-lg border ${step.color} text-center min-w-[110px]`}>
+              <div className="font-semibold text-sm">{step.label}</div>
+              <div className="text-xs opacity-70 mt-1">{step.sub}</div>
+            </div>
+            {i < arr.length - 1 && (
+              <svg className="w-6 h-6 text-slate-600 flex-shrink-0 hidden md:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // User roles hierarchy diagram
+  const RolesDiagram = () => (
+    <div className="my-6 p-6 bg-slate-800/50 rounded-xl border border-slate-700">
+      <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">User Roles Hierarchy</h4>
+      <div className="space-y-3 max-w-md mx-auto">
+        {[
+          { role: "SUPER_ADMIN", desc: "Full system access", color: "bg-rose-500/20 border-rose-500/40 text-rose-300" },
+          { role: "ADMIN", desc: "Team & account management", color: "bg-orange-500/20 border-orange-500/40 text-orange-300" },
+          { role: "MANAGER", desc: "Same as Admin", color: "bg-amber-500/20 border-amber-500/40 text-amber-300" },
+          { role: "MEDIA_BUYER", desc: "Assigned accounts only (KADABRA)", color: "bg-emerald-500/20 border-emerald-500/40 text-emerald-300" },
+          { role: "ASSISTANT", desc: "View only", color: "bg-slate-500/20 border-slate-500/40 text-slate-300" },
+        ].map((item, i, arr) => (
+          <div key={item.role} className="flex items-center gap-3">
+            <div className={`flex-1 px-4 py-2 rounded-lg border ${item.color} flex justify-between items-center`}>
+              <span className="font-mono font-semibold text-sm">{item.role}</span>
+              <span className="text-xs opacity-70">{item.desc}</span>
+            </div>
+            {i < arr.length - 1 && (
+              <div className="absolute left-1/2 -translate-x-1/2 hidden">
+                <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex gap-6 h-full">
+      {/* Sidebar Navigation */}
+      <div className="w-64 flex-shrink-0">
+        <div className="bg-slate-900 rounded-xl border border-slate-800 p-4 sticky top-0">
+          <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
+            FAQ Sections
+          </h3>
+          <nav className="space-y-1">
+            {sections.map((section) => (
+              <button
+                key={section.id}
+                onClick={() => setActiveSection(section.id)}
+                className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition ${
+                  activeSection === section.id
+                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                }`}
+              >
+                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                  activeSection === section.id
+                    ? "bg-emerald-500 text-slate-950"
+                    : "bg-slate-700 text-slate-300"
+                }`}>
+                  {section.icon}
+                </span>
+                <span className="truncate">{section.title}</span>
+              </button>
+            ))}
+          </nav>
+        </div>
+      </div>
+
+      {/* Content Area */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="bg-slate-900 rounded-xl border border-slate-800 p-8">
+          <h2 className="text-2xl font-bold text-slate-100 mb-2 flex items-center gap-3">
+            <span className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center">
+              <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </span>
+            Frequently Asked Questions
+          </h2>
+          <p className="text-slate-400 mb-6">Quick answers for new admins</p>
+
+          {/* Show workflow diagram on overview and workflow sections */}
+          {(activeSection === "overview" || activeSection === "workflow") && <WorkflowDiagram />}
+
+          {/* Show status diagram on accounts section */}
+          {activeSection === "accounts" && <StatusFlowDiagram />}
+
+          {/* Show roles diagram on team section */}
+          {activeSection === "team" && <RolesDiagram />}
+
+          {/* FAQ Accordion */}
+          <div className="space-y-3">
+            {faqContent[activeSection].map((item, index) => {
+              const questionId = `${activeSection}-${index}`;
+              const isExpanded = expandedQuestions.has(questionId);
+
+              return (
+                <div
+                  key={questionId}
+                  className="bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden"
+                >
+                  <button
+                    onClick={() => toggleQuestion(questionId)}
+                    className="w-full px-5 py-4 text-left flex items-center justify-between hover:bg-slate-800/70 transition"
+                  >
+                    <span className="font-medium text-slate-200">{item.question}</span>
+                    <svg
+                      className={`w-5 h-5 text-slate-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {isExpanded && (
+                    <div className="px-5 pb-4 text-slate-300 leading-relaxed border-t border-slate-700 pt-4">
+                      {item.answer}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
