@@ -21,6 +21,22 @@ function toTitleCase(name: string): string {
     .join(" ");
 }
 
+/**
+ * Normalize identity fields to proper casing
+ */
+function normalizeIdentityFields<T extends { fullName?: string; address?: string; city?: string; state?: string }>(data: T): T {
+  const normalized = { ...data };
+  if (normalized.fullName) normalized.fullName = toTitleCase(normalized.fullName);
+  if (normalized.address) normalized.address = toTitleCase(normalized.address);
+  if (normalized.city) normalized.city = toTitleCase(normalized.city);
+  // State abbreviations should stay uppercase (e.g., "CA", "NY")
+  // Only title-case if it's a full state name (more than 2 chars)
+  if (normalized.state && normalized.state.length > 2) {
+    normalized.state = toTitleCase(normalized.state);
+  }
+  return normalized;
+}
+
 class IdentityService {
   async getById(id: string): Promise<ServiceResult<IdentityWithRelations>> {
     try {
@@ -55,11 +71,8 @@ class IdentityService {
         return { success: false, error: "Missing required fields: fullName, dob, address, city, state, geo" };
       }
 
-      // Normalize name to Title Case
-      const normalizedData = {
-        ...data,
-        fullName: toTitleCase(data.fullName),
-      };
+      // Normalize name, address, city to Title Case
+      const normalizedData = normalizeIdentityFields(data);
 
       const identity = await identityRepository.create(normalizedData);
 
@@ -99,10 +112,8 @@ class IdentityService {
         return { success: false, error: "Identity not found" };
       }
 
-      // Normalize name to Title Case if provided
-      const normalizedData = data.fullName
-        ? { ...data, fullName: toTitleCase(data.fullName) }
-        : data;
+      // Normalize name, address, city to Title Case
+      const normalizedData = normalizeIdentityFields(data);
 
       const identity = await identityRepository.update(id, normalizedData);
 
