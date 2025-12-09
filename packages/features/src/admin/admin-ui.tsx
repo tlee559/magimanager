@@ -57,6 +57,7 @@ type Identity = {
   zipcode: string;
   geo: string;
   website: string | null;
+  websiteCompleted: boolean;
   notes: string | null;
   // Credential fields
   email: string | null;
@@ -1428,11 +1429,19 @@ function IdentitiesListView({
                     <td className="px-4 py-3 text-sm text-slate-400">
                       {identity.email || "-"}
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-400 max-w-[150px] truncate">
+                    <td className="px-4 py-3 text-sm text-slate-400 max-w-[150px]">
                       {identity.website ? (
-                        <span className="text-emerald-400" title={identity.website}>
-                          {identity.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                              identity.websiteCompleted ? "bg-emerald-500" : "bg-red-500"
+                            }`}
+                            title={identity.websiteCompleted ? "Website completed" : "Website in progress"}
+                          />
+                          <span className="text-emerald-400 truncate" title={identity.website}>
+                            {identity.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                          </span>
+                        </div>
                       ) : (
                         <span className="text-slate-500">-</span>
                       )}
@@ -3837,9 +3846,36 @@ function IdentityDetailView({
             <div>
               <div className="text-xs text-slate-500">Website</div>
               {identity.website ? (
-                <a href={identity.website} target="_blank" rel="noreferrer" className="text-emerald-400 hover:text-emerald-300 truncate block">
-                  {identity.website}
-                </a>
+                <div className="flex flex-col gap-1">
+                  <a href={identity.website} target="_blank" rel="noreferrer" className="text-emerald-400 hover:text-emerald-300 truncate block">
+                    {identity.website}
+                  </a>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={identity.websiteCompleted}
+                      onChange={async (e) => {
+                        const newValue = e.target.checked;
+                        try {
+                          const res = await fetch(`/api/identities/${identity.id}/website-status`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ websiteCompleted: newValue }),
+                          });
+                          if (res.ok) {
+                            onRefresh?.();
+                          }
+                        } catch (error) {
+                          console.error("Failed to update website status:", error);
+                        }
+                      }}
+                      className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-slate-900"
+                    />
+                    <span className={`text-xs ${identity.websiteCompleted ? "text-emerald-400" : "text-slate-400"}`}>
+                      {identity.websiteCompleted ? "Website completed" : "Mark as completed"}
+                    </span>
+                  </label>
+                </div>
               ) : (
                 <div className="text-slate-500">—</div>
               )}

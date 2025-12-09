@@ -126,6 +126,7 @@ export interface Identity {
   zipcode: string;
   geo: string;
   website: string | null;
+  websiteCompleted: boolean;
   notes: string | null;
   // Credentials
   email: string | null;
@@ -186,6 +187,7 @@ export interface IdentityCreateInput {
 
 export interface IdentityUpdateInput extends Partial<IdentityCreateInput> {
   archived?: boolean;
+  websiteCompleted?: boolean;
 }
 
 // ============================================================================

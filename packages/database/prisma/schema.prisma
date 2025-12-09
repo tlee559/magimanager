@@ -18,6 +18,7 @@ model IdentityProfile {
   zipcode   String  @default("")
   geo       String  // Changed from 'country' to 'geo'
   website   String?
+  websiteCompleted Boolean @default(false) // Whether the website is fully ready
   notes     String? // Internal notes about this identity
 
   // Credentials (sensitive - encrypt in application layer)
