@@ -3345,6 +3345,10 @@ function IdentityDetailView({
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Optimistic state for website completed checkbox
+  const [optimisticWebsiteCompleted, setOptimisticWebsiteCompleted] = useState<boolean | null>(null);
+  const websiteCompleted = optimisticWebsiteCompleted ?? identity.websiteCompleted;
+
   // Check if identity already has an ad account
   const hasExistingAccount = identity.adAccounts && identity.adAccounts.length > 0;
 
@@ -3853,26 +3857,31 @@ function IdentityDetailView({
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={identity.websiteCompleted}
+                      checked={websiteCompleted}
                       onChange={async (e) => {
                         const newValue = e.target.checked;
+                        // Optimistic update - instant UI feedback
+                        setOptimisticWebsiteCompleted(newValue);
                         try {
                           const res = await fetch(`/api/identities/${identity.id}/website-status`, {
                             method: "PATCH",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ websiteCompleted: newValue }),
                           });
-                          if (res.ok) {
-                            onRefresh?.();
+                          if (!res.ok) {
+                            // Revert on error
+                            setOptimisticWebsiteCompleted(null);
                           }
                         } catch (error) {
                           console.error("Failed to update website status:", error);
+                          // Revert on error
+                          setOptimisticWebsiteCompleted(null);
                         }
                       }}
                       className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-slate-900"
                     />
-                    <span className={`text-xs ${identity.websiteCompleted ? "text-emerald-400" : "text-slate-400"}`}>
-                      {identity.websiteCompleted ? "Website completed" : "Mark as completed"}
+                    <span className={`text-xs ${websiteCompleted ? "text-emerald-400" : "text-slate-400"}`}>
+                      {websiteCompleted ? "Website completed" : "Mark as completed"}
                     </span>
                   </label>
                 </div>
@@ -6498,6 +6507,7 @@ function SettingsView() {
   const [identityProgressAlertViaTelegram, setIdentityProgressAlertViaTelegram] = useState(true);
   const [identityProgressAlertOnDocAdded, setIdentityProgressAlertOnDocAdded] = useState(true);
   const [identityProgressAlertOnWebsiteAdded, setIdentityProgressAlertOnWebsiteAdded] = useState(true);
+  const [identityProgressAlertOnWebsiteCompleted, setIdentityProgressAlertOnWebsiteCompleted] = useState(true);
   const [identityProgressAlertOnGologinCreated, setIdentityProgressAlertOnGologinCreated] = useState(true);
   const [identityProgressAlertOnAccountLinked, setIdentityProgressAlertOnAccountLinked] = useState(true);
   // Visibility toggles for API keys
@@ -6567,6 +6577,7 @@ function SettingsView() {
         setIdentityProgressAlertViaTelegram(data.identityProgressAlertViaTelegram ?? true);
         setIdentityProgressAlertOnDocAdded(data.identityProgressAlertOnDocAdded ?? true);
         setIdentityProgressAlertOnWebsiteAdded(data.identityProgressAlertOnWebsiteAdded ?? true);
+        setIdentityProgressAlertOnWebsiteCompleted(data.identityProgressAlertOnWebsiteCompleted ?? true);
         setIdentityProgressAlertOnGologinCreated(data.identityProgressAlertOnGologinCreated ?? true);
         setIdentityProgressAlertOnAccountLinked(data.identityProgressAlertOnAccountLinked ?? true);
       }
@@ -6689,6 +6700,7 @@ function SettingsView() {
           identityProgressAlertViaTelegram,
           identityProgressAlertOnDocAdded,
           identityProgressAlertOnWebsiteAdded,
+          identityProgressAlertOnWebsiteCompleted,
           identityProgressAlertOnGologinCreated,
           identityProgressAlertOnAccountLinked,
         }),
@@ -7253,6 +7265,15 @@ function SettingsView() {
                     className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
                   />
                   <span className="text-sm text-slate-200">Website added</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={identityProgressAlertOnWebsiteCompleted}
+                    onChange={(e) => setIdentityProgressAlertOnWebsiteCompleted(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-200">Website marked completed</span>
                 </label>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input

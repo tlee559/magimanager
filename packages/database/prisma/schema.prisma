@@ -240,6 +240,7 @@ model AppSettings {
   identityProgressAlertViaTelegram   Boolean @default(true)  // Send Telegram notification
   identityProgressAlertOnDocAdded    Boolean @default(true)  // Alert when document is added
   identityProgressAlertOnWebsiteAdded Boolean @default(true) // Alert when website is added
+  identityProgressAlertOnWebsiteCompleted Boolean @default(true) // Alert when website is marked completed
   identityProgressAlertOnGologinCreated Boolean @default(true) // Alert when GoLogin profile is created
   identityProgressAlertOnAccountLinked Boolean @default(true) // Alert when ad account is linked
 

@@ -9,6 +9,7 @@ import { sendMessage as sendTelegramMessage } from "../integrations/telegram-bot
 export type IdentityProgressType =
   | "document_added"
   | "website_added"
+  | "website_completed"
   | "gologin_created"
   | "account_linked";
 
@@ -93,6 +94,7 @@ export async function fireIdentityProgressAlert(data: IdentityProgressData): Pro
 function checkTriggerEnabled(settings: {
   identityProgressAlertOnDocAdded?: boolean;
   identityProgressAlertOnWebsiteAdded?: boolean;
+  identityProgressAlertOnWebsiteCompleted?: boolean;
   identityProgressAlertOnGologinCreated?: boolean;
   identityProgressAlertOnAccountLinked?: boolean;
 }, progressType: IdentityProgressType): boolean {
@@ -101,6 +103,8 @@ function checkTriggerEnabled(settings: {
       return settings.identityProgressAlertOnDocAdded ?? true;
     case "website_added":
       return settings.identityProgressAlertOnWebsiteAdded ?? true;
+    case "website_completed":
+      return settings.identityProgressAlertOnWebsiteCompleted ?? true;
     case "gologin_created":
       return settings.identityProgressAlertOnGologinCreated ?? true;
     case "account_linked":
@@ -134,6 +138,14 @@ function formatProgressMessage(data: IdentityProgressData): {
           ? `Website set to: ${data.details}`
           : "Website URL added",
         emoji: "🌐",
+      };
+    case "website_completed":
+      return {
+        title: "Website Completed",
+        message: data.details
+          ? `Website ${data.details} marked as completed`
+          : "Website marked as completed and ready",
+        emoji: "✅",
       };
     case "gologin_created":
       return {
