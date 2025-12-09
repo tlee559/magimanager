@@ -126,7 +126,8 @@ function escapeMarkdown(text: string): string {
         return part;
       }
       // Escape special characters for non-link text
-      return part.replace(/[_*[\]()~`>#+\-=|{}.!]/g, "\\$&");
+      // Note: hyphen (-) only needs escaping in certain contexts, not in regular text
+      return part.replace(/[_*[\]()~`>#+=|{}.!]/g, "\\$&");
     })
     .join("");
 }
