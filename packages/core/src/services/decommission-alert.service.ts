@@ -170,8 +170,9 @@ export async function checkAndFireDecommissionAlert(
 /**
  * Called when an identity is archived directly
  * Always fires the alert (settings permitting)
+ * @deprecated Use fireIdentityArchivedAlert from identity-archived-alert.service.ts for new notifications
  */
-export async function fireIdentityArchivedAlert(identityId: string): Promise<void> {
+export async function fireDecommissionAlertForArchivedIdentity(identityId: string): Promise<void> {
   const prisma = getPrisma();
 
   const identity = await prisma.identityProfile.findUnique({
