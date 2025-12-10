@@ -424,12 +424,16 @@ export async function syncSingleAccount(
     const newHealth = mapGoogleStatus(metrics.status);
 
     // Determine new status based on spend vs warmup target
+    // Lifecycle: provisioned → warming-up → ready
+    // Must go through warming-up before becoming ready
     let newStatus = account.status;
     if (account.handoffStatus !== 'handed-off' && account.status !== 'ready') {
-      if (spendCents >= account.warmupTargetSpend) {
-        newStatus = 'ready';
-      } else if (spendCents > 0 && account.status === 'provisioned') {
+      if (spendCents > 0 && account.status === 'provisioned') {
+        // First spend detected - move to warming-up
         newStatus = 'warming-up';
+      } else if (account.status === 'warming-up' && spendCents >= account.warmupTargetSpend) {
+        // Only transition to ready from warming-up, not from provisioned
+        newStatus = 'ready';
       }
     }
 

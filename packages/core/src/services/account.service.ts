@@ -486,11 +486,11 @@ class AccountService {
       // Update account spend
       const updateData: AdAccountUpdateInput = {};
 
-      // Auto-transition status
-      if (warmupProgress >= 100 && existing.status !== "ready") {
-        updateData.status = "ready";
-      } else if (newTotalSpend > 0 && existing.status === "provisioned") {
+      // Auto-transition status (must go through warming-up before ready)
+      if (newTotalSpend > 0 && existing.status === "provisioned") {
         updateData.status = "warming-up";
+      } else if (warmupProgress >= 100 && existing.status === "warming-up") {
+        updateData.status = "ready";
       }
 
       // Update via repository (which handles spend updates in checkIn)
