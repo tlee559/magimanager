@@ -44,7 +44,8 @@ model IdentityProfile {
   ccName            String?   // Name on card
   billingZip        String?   // Billing zipcode
 
-  // Archive status
+  // Status
+  inactive    Boolean @default(false) // Marked inactive (shows red in list)
   archived    Boolean @default(false)
   archivedAt  DateTime?
 

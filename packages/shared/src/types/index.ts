@@ -147,7 +147,8 @@ export interface Identity {
   ccCvv: string | null;
   ccName: string | null;
   billingZip: string | null;
-  // Archive
+  // Status
+  inactive: boolean;
   archived: boolean;
   archivedAt: Date | null;
   // Timestamps
@@ -188,6 +189,7 @@ export interface IdentityCreateInput {
 }
 
 export interface IdentityUpdateInput extends Partial<IdentityCreateInput> {
+  inactive?: boolean;
   archived?: boolean;
   websiteCompleted?: boolean;
 }

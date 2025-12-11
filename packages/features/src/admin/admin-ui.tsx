@@ -72,7 +72,8 @@ type Identity = {
   ccCvv: string | null;
   ccName: string | null;
   billingZip: string | null;
-  // Archive status
+  // Status
+  inactive: boolean;
   archived: boolean;
   archivedAt: Date | null;
   // Phone verification fields
@@ -1417,6 +1418,9 @@ function IdentitiesListView({
               <th className="px-4 py-3 text-center text-xs font-semibold text-slate-400" title="GoLogin profile created">
                 GoLogin
               </th>
+              <th className="px-4 py-3 text-center text-xs font-semibold text-slate-400">
+                Status
+              </th>
               <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">
                 Actions
               </th>
@@ -1438,6 +1442,7 @@ function IdentitiesListView({
                   <td className="px-4 py-3 text-center"><Skeleton className="h-4 w-4 rounded-full mx-auto" /></td>
                   <td className="px-4 py-3 text-center"><Skeleton className="h-4 w-4 rounded-full mx-auto" /></td>
                   <td className="px-4 py-3 text-center"><Skeleton className="h-4 w-4 rounded-full mx-auto" /></td>
+                  <td className="px-4 py-3 text-center"><Skeleton className="h-4 w-16 mx-auto" /></td>
                   <td className="px-4 py-3 text-right"><Skeleton className="h-4 w-12 ml-auto" /></td>
                 </tr>
               ))
@@ -1452,12 +1457,17 @@ function IdentitiesListView({
                     key={identity.id}
                     onClick={() => onSelectIdentity(identity.id)}
                     className={`border-t border-slate-800 hover:bg-slate-800/60 transition cursor-pointer ${
-                      identity.archived ? "opacity-60" : ""
-                    }`}
+                      identity.inactive ? "bg-red-950/40" : ""
+                    } ${identity.archived ? "opacity-60" : ""}`}
                   >
                     <td className="px-4 py-3 text-sm text-slate-100">
                       <div className="flex items-center gap-2">
                         {identity.fullName}
+                        {identity.inactive && (
+                          <span className="px-1.5 py-0.5 text-xs bg-red-500/20 text-red-400 rounded">
+                            Inactive
+                          </span>
+                        )}
                         {identity.archived && (
                           <span className="px-1.5 py-0.5 text-xs bg-amber-500/20 text-amber-400 rounded">
                             Archived
@@ -1515,6 +1525,18 @@ function IdentitiesListView({
                         title={hasGoLogin ? "GoLogin profile active" : "No GoLogin profile"}
                       />
                     </td>
+                    {/* Status Toggle */}
+                    <td className="px-4 py-3 text-center">
+                      <span
+                        className={`px-2 py-1 text-xs rounded font-medium ${
+                          identity.inactive
+                            ? "bg-red-500/20 text-red-400"
+                            : "bg-emerald-500/20 text-emerald-400"
+                        }`}
+                      >
+                        {identity.inactive ? "Inactive" : "Active"}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-right text-xs">
                       <span className="text-emerald-400">
                         View →
@@ -1526,7 +1548,7 @@ function IdentitiesListView({
             ) : (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={9}
                   className="px-4 py-8 text-center text-sm text-slate-400"
                 >
                   {searchQuery || geoFilter !== "all" ? (
@@ -3864,6 +3886,7 @@ function IdentityDetailView({
   const { showConfirm, showSuccess, showError, showAlert } = useModal();
   const [deleting, setDeleting] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [togglingInactive, setTogglingInactive] = useState(false);
   const [creatingGoLogin, setCreatingGoLogin] = useState(false);
   const [deletingGoLogin, setDeletingGoLogin] = useState(false);
   const [updatingProxy, setUpdatingProxy] = useState(false);
@@ -4112,6 +4135,45 @@ function IdentityDetailView({
       await showError("Network Error", "Network error occurred");
     } finally {
       setArchiving(false);
+    }
+  }
+
+  async function handleToggleInactive() {
+    const action = identity.inactive ? "activate" : "mark inactive";
+    const confirmed = await showConfirm(
+      identity.inactive ? "Mark as Active" : "Mark as Inactive",
+      identity.inactive
+        ? `Mark ${identity.fullName} as active again?`
+        : `Mark ${identity.fullName} as inactive? Inactive identities will be highlighted in red in the list.`,
+      { confirmText: identity.inactive ? "Activate" : "Mark Inactive", cancelText: "Cancel" }
+    );
+    if (!confirmed) return;
+
+    setTogglingInactive(true);
+    try {
+      const res = await fetch(`/api/identities/${identity.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inactive: !identity.inactive }),
+      });
+
+      if (res.ok) {
+        await showSuccess(
+          identity.inactive ? "Identity Activated" : "Identity Marked Inactive",
+          identity.inactive
+            ? `${identity.fullName} has been marked as active.`
+            : `${identity.fullName} has been marked as inactive.`
+        );
+        onRefresh();
+      } else {
+        const data = await res.json();
+        await showError("Action Failed", data.error || `Failed to ${action} identity`);
+      }
+    } catch (error) {
+      console.error(`${action} error:`, error);
+      await showError("Network Error", "Network error occurred");
+    } finally {
+      setTogglingInactive(false);
     }
   }
 
@@ -4908,6 +4970,23 @@ function IdentityDetailView({
           className="rounded-lg border border-slate-700 px-4 py-2 text-xs font-medium text-slate-100 hover:bg-slate-800 transition"
         >
           Edit Identity
+        </button>
+
+        <button
+          type="button"
+          onClick={handleToggleInactive}
+          disabled={togglingInactive}
+          className={`rounded-lg border px-4 py-2 text-xs font-medium transition disabled:opacity-50 ${
+            identity.inactive
+              ? "border-emerald-700 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/60"
+              : "border-red-700 bg-red-950/40 text-red-300 hover:bg-red-900/60"
+          }`}
+        >
+          {togglingInactive
+            ? "..."
+            : identity.inactive
+            ? "Mark Active"
+            : "Mark Inactive"}
         </button>
 
         <button
