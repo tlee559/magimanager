@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
         zipcode: formData.get("zipcode") as string | undefined,
         geo: formData.get("geo") as string,
         website: formData.get("website") as string | null,
+        websiteNotes: formData.get("websiteNotes") as string | null,
         notes: formData.get("notes") as string | null,
         email: formData.get("email") as string | null,
         emailPassword: formData.get("emailPassword") as string | null,

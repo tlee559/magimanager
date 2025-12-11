@@ -126,6 +126,7 @@ export interface Identity {
   zipcode: string;
   geo: string;
   website: string | null;
+  websiteNotes: string | null;
   websiteCompleted: boolean;
   notes: string | null;
   // Credentials
@@ -173,6 +174,7 @@ export interface IdentityCreateInput {
   zipcode?: string;
   geo: string;
   website?: string | null;
+  websiteNotes?: string | null;
   notes?: string | null;
   email?: string | null;
   emailPassword?: string | null;

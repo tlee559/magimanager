@@ -57,6 +57,7 @@ type Identity = {
   zipcode: string;
   geo: string;
   website: string | null;
+  websiteNotes: string | null;
   websiteCompleted: boolean;
   notes: string | null;
   // Credential fields
@@ -2315,6 +2316,20 @@ function CreateIdentityView({
           {errors.website && <p className="text-xs text-rose-400 mt-1">{errors.website}</p>}
         </div>
 
+        {/* Website Notes */}
+        <div className="space-y-1">
+          <label className="block text-sm font-medium text-slate-200">
+            Website Notes (optional)
+          </label>
+          <textarea
+            name="websiteNotes"
+            rows={3}
+            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-mono"
+            placeholder="FTP credentials, hosting info, etc."
+          />
+          <p className="text-xs text-slate-500 mt-1">Store FTP credentials, hosting info, or other website-related notes</p>
+        </div>
+
         {/* Divider - Ad Account Credentials */}
         <div className="border-t border-slate-700 pt-6 mt-6">
           <h3 className="text-sm font-medium text-slate-200 mb-1">Ad Account Credentials</h3>
@@ -3344,6 +3359,21 @@ function EditIdentityView({
           {errors.website && <p className="text-xs text-rose-400 mt-1">{errors.website}</p>}
         </div>
 
+        {/* Website Notes */}
+        <div className="space-y-1">
+          <label className="block text-sm font-medium text-slate-200">
+            Website Notes (optional)
+          </label>
+          <textarea
+            name="websiteNotes"
+            rows={3}
+            defaultValue={identity.websiteNotes || ""}
+            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-mono"
+            placeholder="FTP credentials, hosting info, etc."
+          />
+          <p className="text-xs text-slate-500 mt-1">Store FTP credentials, hosting info, or other website-related notes</p>
+        </div>
+
         {/* Divider - Ad Account Credentials */}
         <div className="border-t border-slate-700 pt-6 mt-6">
           <h3 className="text-sm font-medium text-slate-200 mb-1">Ad Account Credentials</h3>
@@ -4364,9 +4394,28 @@ function IdentityDetailView({
               <div className="text-xs text-slate-500">Website</div>
               {identity.website ? (
                 <div className="flex flex-col gap-1">
-                  <a href={identity.website} target="_blank" rel="noreferrer" className="text-emerald-400 hover:text-emerald-300 truncate block">
-                    {identity.website}
-                  </a>
+                  <div className="flex items-center gap-2">
+                    <a href={identity.website} target="_blank" rel="noreferrer" className="text-emerald-400 hover:text-emerald-300 truncate">
+                      {identity.website}
+                    </a>
+                    {identity.websiteNotes && (
+                      <div className="relative group">
+                        <button
+                          type="button"
+                          className="text-slate-400 hover:text-blue-400 transition"
+                          title="View website notes"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <div className="absolute left-0 top-6 z-50 hidden group-hover:block w-64 p-3 bg-slate-800 border border-slate-600 rounded-lg shadow-xl">
+                          <div className="text-xs font-medium text-slate-300 mb-1">Website Notes</div>
+                          <pre className="text-xs text-slate-400 whitespace-pre-wrap font-mono">{identity.websiteNotes}</pre>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
