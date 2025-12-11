@@ -201,7 +201,7 @@ type Notification = {
   createdAt: Date;
 };
 
-export type View = "dashboard" | "identities" | "create-identity" | "identity-detail" | "edit-identity" | "ad-accounts" | "team" | "settings" | "my-accounts" | "requests" | "admin-requests" | "system" | "sms-dashboard" | "authenticator" | "tutorial" | "faq";
+export type View = "dashboard" | "identities" | "create-identity" | "identity-detail" | "edit-identity" | "import-identities" | "ad-accounts" | "team" | "settings" | "my-accounts" | "requests" | "admin-requests" | "system" | "sms-dashboard" | "authenticator" | "tutorial" | "faq";
 
 // ============================================================================
 // LOGO COMPONENT
@@ -235,6 +235,7 @@ const VIEW_TO_PATH: Record<View, string> = {
   "create-identity": "/admin/identities/new",
   "identity-detail": "/admin/identities/detail",
   "edit-identity": "/admin/identities/edit",
+  "import-identities": "/admin/identities/import",
   "ad-accounts": "/admin/accounts",
   "team": "/admin/team",
   "settings": "/admin/settings",
@@ -255,6 +256,7 @@ const PATH_TO_VIEW: Record<string, View> = {
   "/admin/identities/new": "create-identity",
   "/admin/identities/detail": "identity-detail",
   "/admin/identities/edit": "edit-identity",
+  "/admin/identities/import": "import-identities",
   "/admin/accounts": "ad-accounts",
   "/admin/team": "team",
   "/admin/settings": "settings",
@@ -638,6 +640,7 @@ export function AdminApp({
             {view === "edit-identity" && selectedIdentity && (
               <h1 className="text-lg font-semibold text-slate-50">Edit {selectedIdentity.fullName}</h1>
             )}
+            {view === "import-identities" && <h1 className="text-lg font-semibold text-slate-50">Import Identity Profiles</h1>}
             {view === "ad-accounts" && <h1 className="text-lg font-semibold text-slate-50">Account Profiles</h1>}
             {view === "team" && <h1 className="text-lg font-semibold text-slate-50">Team Management</h1>}
             {view === "my-accounts" && <h1 className="text-lg font-semibold text-slate-50">My Accounts</h1>}
@@ -885,6 +888,7 @@ export function AdminApp({
                 identities={identities}
                 loading={loading}
                 onCreateNew={() => setView("create-identity")}
+                onImportCSV={() => setView("import-identities")}
                 onSelectIdentity={fetchIdentity}
               />
             )}
@@ -913,6 +917,15 @@ export function AdminApp({
                   setView("identity-detail");
                 }}
                 onCancel={() => setView("identity-detail")}
+              />
+            )}
+            {view === "import-identities" && (
+              <ImportIdentitiesView
+                onSuccess={() => {
+                  fetchIdentities();
+                  setView("identities");
+                }}
+                onCancel={() => setView("identities")}
               />
             )}
             {view === "team" && <TeamView />}
@@ -1210,11 +1223,13 @@ function IdentitiesListView({
   identities,
   loading,
   onCreateNew,
+  onImportCSV,
   onSelectIdentity,
 }: {
   identities: Identity[];
   loading: boolean;
   onCreateNew: () => void;
+  onImportCSV: () => void;
   onSelectIdentity: (id: string) => void;
 }) {
   // Search and filter state
@@ -1295,12 +1310,23 @@ function IdentitiesListView({
           </p>
         </div>
 
-        <button
-          onClick={onCreateNew}
-          className="inline-flex items-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 transition"
-        >
-          + New Identity Profile
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onImportCSV}
+            className="inline-flex items-center rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-slate-600 transition"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            Import CSV
+          </button>
+          <button
+            onClick={onCreateNew}
+            className="inline-flex items-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 transition"
+          >
+            + New Identity Profile
+          </button>
+        </div>
       </div>
 
       {/* Search and Filters */}
@@ -2526,6 +2552,476 @@ const DOCUMENT_TYPES = [
   { value: 'selfie', label: 'Selfie with ID' },
   { value: 'other', label: 'Other' },
 ];
+
+// ============================================================================
+// IMPORT IDENTITIES VIEW
+// ============================================================================
+
+interface CSVIdentityRow {
+  fullName: string;
+  dob: string;
+  address: string;
+  city: string;
+  state: string;
+  zipcode: string;
+  geo: string;
+  website?: string;
+  documentUrl?: string;
+}
+
+interface ParsedCSVResult {
+  rows: CSVIdentityRow[];
+  errors: { row: number; message: string }[];
+}
+
+interface ImportResultData {
+  success: boolean;
+  created: number;
+  failed: number;
+  documentWarnings: string[];
+  errors: { row: number; message: string }[];
+}
+
+function parseCSVContent(csvContent: string): ParsedCSVResult {
+  const lines = csvContent.trim().split(/\r?\n/);
+
+  if (lines.length < 2) {
+    return { rows: [], errors: [{ row: 0, message: 'CSV must have a header row and at least one data row' }] };
+  }
+
+  // Parse header row
+  const parseCSVLine = (line: string): string[] => {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const nextChar = line[i + 1];
+
+      if (inQuotes) {
+        if (char === '"' && nextChar === '"') {
+          current += '"';
+          i++;
+        } else if (char === '"') {
+          inQuotes = false;
+        } else {
+          current += char;
+        }
+      } else {
+        if (char === '"') {
+          inQuotes = true;
+        } else if (char === ',') {
+          result.push(current);
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+    }
+    result.push(current);
+    return result;
+  };
+
+  const headers = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase().replace(/[_\s-]/g, ''));
+
+  // Map headers to column indices
+  const columnMap: Record<string, number> = {};
+  headers.forEach((header, index) => {
+    if (header === 'fullname' || header === 'name') columnMap.fullName = index;
+    else if (header === 'dob' || header === 'dateofbirth' || header === 'birthdate') columnMap.dob = index;
+    else if (header === 'address' || header === 'streetaddress' || header === 'street') columnMap.address = index;
+    else if (header === 'city') columnMap.city = index;
+    else if (header === 'state') columnMap.state = index;
+    else if (header === 'zipcode' || header === 'zip' || header === 'postalcode') columnMap.zipcode = index;
+    else if (header === 'geo' || header === 'country' || header === 'region') columnMap.geo = index;
+    else if (header === 'website' || header === 'url' || header === 'site') columnMap.website = index;
+    else if (header === 'documenturl' || header === 'docurl' || header === 'document' || header === 'drivelink') columnMap.documentUrl = index;
+  });
+
+  // Check for missing required columns
+  const requiredColumns = ['fullName', 'dob', 'address', 'city', 'state', 'zipcode', 'geo'];
+  const missingColumns = requiredColumns.filter(col => columnMap[col] === undefined);
+  if (missingColumns.length > 0) {
+    return {
+      rows: [],
+      errors: [{ row: 0, message: `Missing required columns: ${missingColumns.join(', ')}` }]
+    };
+  }
+
+  const rows: CSVIdentityRow[] = [];
+  const errors: { row: number; message: string }[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    const values = parseCSVLine(line);
+
+    const row: CSVIdentityRow = {
+      fullName: values[columnMap.fullName]?.trim() || '',
+      dob: values[columnMap.dob]?.trim() || '',
+      address: values[columnMap.address]?.trim() || '',
+      city: values[columnMap.city]?.trim() || '',
+      state: values[columnMap.state]?.trim() || '',
+      zipcode: values[columnMap.zipcode]?.trim() || '',
+      geo: values[columnMap.geo]?.trim() || '',
+      website: columnMap.website !== undefined ? values[columnMap.website]?.trim() || undefined : undefined,
+      documentUrl: columnMap.documentUrl !== undefined ? values[columnMap.documentUrl]?.trim() || undefined : undefined,
+    };
+
+    // Validate row
+    const missingFields: string[] = [];
+    if (!row.fullName) missingFields.push('fullName');
+    if (!row.dob) missingFields.push('dob');
+    if (!row.address) missingFields.push('address');
+    if (!row.city) missingFields.push('city');
+    if (!row.state) missingFields.push('state');
+    if (!row.zipcode) missingFields.push('zipcode');
+    if (!row.geo) missingFields.push('geo');
+
+    if (missingFields.length > 0) {
+      errors.push({ row: i + 1, message: `Missing: ${missingFields.join(', ')}` });
+    } else {
+      rows.push(row);
+    }
+  }
+
+  return { rows, errors };
+}
+
+function ImportIdentitiesView({
+  onSuccess,
+  onCancel,
+}: {
+  onSuccess: () => void;
+  onCancel: () => void;
+}) {
+  const [csvContent, setCSVContent] = useState<string>('');
+  const [parsedData, setParsedData] = useState<ParsedCSVResult | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResultData | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      setCSVContent(content);
+      setParsedData(parseCSVContent(content));
+      setImportResult(null);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragActive(false);
+    const file = e.dataTransfer.files[0];
+    if (file && (file.name.endsWith('.csv') || file.type === 'text/csv')) {
+      handleFileSelect(file);
+    }
+  };
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!parsedData || parsedData.rows.length === 0) return;
+
+    setImporting(true);
+    setImportResult(null);
+
+    try {
+      const response = await fetch('/api/identities/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: parsedData.rows }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setImportResult({
+          success: false,
+          created: 0,
+          failed: parsedData.rows.length,
+          documentWarnings: [],
+          errors: [{ row: 0, message: result.error || 'Import failed' }],
+        });
+      } else {
+        setImportResult(result);
+        if (result.created > 0 && result.failed === 0) {
+          // All succeeded - could auto-navigate
+        }
+      }
+    } catch (error) {
+      setImportResult({
+        success: false,
+        created: 0,
+        failed: parsedData.rows.length,
+        documentWarnings: [],
+        errors: [{ row: 0, message: 'Network error during import' }],
+      });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleReset = () => {
+    setCSVContent('');
+    setParsedData(null);
+    setImportResult(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Instructions */}
+      <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+        <h3 className="text-sm font-medium text-slate-100 mb-2">CSV Format</h3>
+        <p className="text-xs text-slate-400 mb-2">
+          Upload a CSV file with the following columns:
+        </p>
+        <div className="bg-slate-900 rounded p-2 font-mono text-xs text-slate-300 overflow-x-auto">
+          fullName, dob, address, city, state, zipcode, geo, website (optional), documentUrl (optional)
+        </div>
+        <p className="text-xs text-slate-500 mt-2">
+          Date format: YYYY-MM-DD or MM/DD/YYYY. website and documentUrl are optional - leave blank to skip. documentUrl should be a Google Drive share link (file must be publicly shared).
+        </p>
+      </div>
+
+      {/* File Upload Area */}
+      {!parsedData && (
+        <div
+          className={`border-2 border-dashed rounded-lg p-8 text-center transition ${
+            dragActive
+              ? 'border-emerald-500 bg-emerald-500/10'
+              : 'border-slate-600 hover:border-slate-500'
+          }`}
+          onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+          onDragLeave={() => setDragActive(false)}
+          onDrop={handleDrop}
+        >
+          <svg className="w-12 h-12 mx-auto text-slate-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          </svg>
+          <p className="text-slate-300 mb-2">Drag and drop your CSV file here</p>
+          <p className="text-slate-500 text-sm mb-4">or</p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="inline-flex items-center px-4 py-2 bg-slate-700 text-slate-100 rounded-lg hover:bg-slate-600 transition text-sm font-medium"
+          >
+            Browse Files
+          </button>
+        </div>
+      )}
+
+      {/* Preview Table */}
+      {parsedData && !importResult && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-slate-100">
+                Preview ({parsedData.rows.length} valid rows)
+              </h3>
+              {parsedData.errors.length > 0 && (
+                <p className="text-xs text-amber-400 mt-1">
+                  {parsedData.errors.length} row(s) have errors and will be skipped
+                </p>
+              )}
+            </div>
+            <button
+              onClick={handleReset}
+              className="text-sm text-slate-400 hover:text-slate-300"
+            >
+              Choose different file
+            </button>
+          </div>
+
+          {/* Errors */}
+          {parsedData.errors.length > 0 && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+              <p className="text-xs font-medium text-amber-400 mb-2">Parse Errors:</p>
+              <ul className="text-xs text-amber-300 space-y-1">
+                {parsedData.errors.slice(0, 5).map((err, i) => (
+                  <li key={i}>Row {err.row}: {err.message}</li>
+                ))}
+                {parsedData.errors.length > 5 && (
+                  <li>... and {parsedData.errors.length - 5} more errors</li>
+                )}
+              </ul>
+            </div>
+          )}
+
+          {/* Data Preview Table */}
+          {parsedData.rows.length > 0 && (
+            <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+              <div className="overflow-x-auto max-h-80">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-900 sticky top-0">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">#</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">Name</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">DOB</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">City, State</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">Geo</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">Website</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">Doc</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700">
+                    {parsedData.rows.slice(0, 20).map((row, i) => (
+                      <tr key={i} className="hover:bg-slate-700/50">
+                        <td className="px-3 py-2 text-slate-500">{i + 1}</td>
+                        <td className="px-3 py-2 text-slate-100">{row.fullName}</td>
+                        <td className="px-3 py-2 text-slate-300">{row.dob}</td>
+                        <td className="px-3 py-2 text-slate-300">{row.city}, {row.state}</td>
+                        <td className="px-3 py-2 text-slate-300">{row.geo}</td>
+                        <td className="px-3 py-2">
+                          {row.website ? (
+                            <span className="text-blue-400 truncate max-w-[120px] block" title={row.website}>{row.website}</span>
+                          ) : (
+                            <span className="text-slate-500">-</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          {row.documentUrl ? (
+                            <span className="text-emerald-400" title={row.documentUrl}>Yes</span>
+                          ) : (
+                            <span className="text-slate-500">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {parsedData.rows.length > 20 && (
+                  <div className="px-3 py-2 text-xs text-slate-500 bg-slate-900">
+                    Showing first 20 of {parsedData.rows.length} rows
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex items-center justify-end gap-3 pt-4">
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-slate-100 transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleImport}
+              disabled={importing || parsedData.rows.length === 0}
+              className="inline-flex items-center px-6 py-2 bg-emerald-500 text-slate-950 rounded-lg font-medium hover:bg-emerald-400 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {importing ? (
+                <>
+                  <LoadingSpinner />
+                  <span className="ml-2">Importing...</span>
+                </>
+              ) : (
+                `Import ${parsedData.rows.length} Profile${parsedData.rows.length !== 1 ? 's' : ''}`
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Import Results */}
+      {importResult && (
+        <div className="space-y-4">
+          <div className={`rounded-lg p-4 border ${
+            importResult.success
+              ? 'bg-emerald-500/10 border-emerald-500/30'
+              : importResult.created > 0
+                ? 'bg-amber-500/10 border-amber-500/30'
+                : 'bg-red-500/10 border-red-500/30'
+          }`}>
+            <h3 className={`text-sm font-medium mb-2 ${
+              importResult.success ? 'text-emerald-400' : importResult.created > 0 ? 'text-amber-400' : 'text-red-400'
+            }`}>
+              Import {importResult.success ? 'Complete' : 'Finished with Issues'}
+            </h3>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-slate-400">Created:</span>
+                <span className="ml-2 text-emerald-400 font-medium">{importResult.created}</span>
+              </div>
+              <div>
+                <span className="text-slate-400">Failed:</span>
+                <span className="ml-2 text-red-400 font-medium">{importResult.failed}</span>
+              </div>
+            </div>
+
+            {/* Errors */}
+            {importResult.errors.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-slate-700">
+                <p className="text-xs font-medium text-red-400 mb-1">Errors:</p>
+                <ul className="text-xs text-red-300 space-y-1">
+                  {importResult.errors.slice(0, 5).map((err, i) => (
+                    <li key={i}>Row {err.row}: {err.message}</li>
+                  ))}
+                  {importResult.errors.length > 5 && (
+                    <li>... and {importResult.errors.length - 5} more</li>
+                  )}
+                </ul>
+              </div>
+            )}
+
+            {/* Document Warnings */}
+            {importResult.documentWarnings.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-slate-700">
+                <p className="text-xs font-medium text-amber-400 mb-1">Document Warnings:</p>
+                <ul className="text-xs text-amber-300 space-y-1">
+                  {importResult.documentWarnings.slice(0, 5).map((warn, i) => (
+                    <li key={i}>{warn}</li>
+                  ))}
+                  {importResult.documentWarnings.length > 5 && (
+                    <li>... and {importResult.documentWarnings.length - 5} more</li>
+                  )}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center justify-end gap-3">
+            <button
+              onClick={handleReset}
+              className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-slate-100 transition"
+            >
+              Import More
+            </button>
+            <button
+              onClick={onSuccess}
+              className="px-6 py-2 bg-emerald-500 text-slate-950 rounded-lg font-medium hover:bg-emerald-400 transition"
+            >
+              View Identities
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function EditIdentityView({
   identity,

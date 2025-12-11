@@ -9,7 +9,9 @@
     "./repositories": "./src/repositories/index.ts",
     "./services": "./src/services/index.ts",
     "./integrations": "./src/integrations/index.ts",
-    "./api-handlers": "./src/api-handlers/index.ts"
+    "./api-handlers": "./src/api-handlers/index.ts",
+    "./utils/csv-parser": "./src/utils/csv-parser.ts",
+    "./utils/google-drive": "./src/utils/google-drive.ts"
   },
   "scripts": {
     "lint": "eslint src/",
