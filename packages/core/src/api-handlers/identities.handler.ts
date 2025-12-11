@@ -9,6 +9,19 @@ import { requireAuth, requireManager, requireAdmin } from "@magimanager/auth";
 import type { IdentityCreateInput, IdentityUpdateInput } from "@magimanager/shared";
 
 /**
+ * Normalize website URL - auto-add https:// if missing
+ */
+function normalizeWebsite(website: string | null | undefined): string | null {
+  if (!website || typeof website !== 'string') return null;
+  const trimmed = website.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
+}
+
+/**
  * Handler for GET /api/identities
  */
 export async function identitiesGetHandler(request: NextRequest) {
@@ -81,6 +94,11 @@ export async function identitiesPostHandler(request: NextRequest) {
       data = await request.json();
     }
 
+    // Normalize website URL
+    if (data.website !== undefined) {
+      data.website = normalizeWebsite(data.website);
+    }
+
     const result = await identityService.create(data, userId);
 
     if (!result.success) {
@@ -141,6 +159,11 @@ export async function identityPutHandler(
     const { id } = await params;
     const data: IdentityUpdateInput = await request.json();
 
+    // Normalize website URL
+    if (data.website !== undefined) {
+      data.website = normalizeWebsite(data.website);
+    }
+
     const result = await identityService.update(id, data, userId);
 
     if (!result.success) {
@@ -175,6 +198,11 @@ export async function identityPatchHandler(
   try {
     const { id } = await params;
     const data: IdentityUpdateInput = await request.json();
+
+    // Normalize website URL
+    if (data.website !== undefined) {
+      data.website = normalizeWebsite(data.website);
+    }
 
     const result = await identityService.update(id, data, userId);
 

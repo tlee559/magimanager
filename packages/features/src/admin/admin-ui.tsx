@@ -2307,10 +2307,11 @@ function CreateIdentityView({
           </label>
           <input
             name="website"
-            type="url"
+            type="text"
             className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-            placeholder="https://example.com"
+            placeholder="example.com"
           />
+          <p className="text-xs text-slate-500 mt-1">https:// will be added automatically</p>
           {errors.website && <p className="text-xs text-rose-400 mt-1">{errors.website}</p>}
         </div>
 
@@ -3334,11 +3335,12 @@ function EditIdentityView({
           </label>
           <input
             name="website"
-            type="url"
+            type="text"
             defaultValue={identity.website || ""}
             className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-            placeholder="https://example.com"
+            placeholder="example.com"
           />
+          <p className="text-xs text-slate-500 mt-1">https:// will be added automatically</p>
           {errors.website && <p className="text-xs text-rose-400 mt-1">{errors.website}</p>}
         </div>
 

@@ -57,6 +57,14 @@ export async function POST(request: NextRequest) {
       data = await request.json();
     }
 
+    // Normalize website URL - auto-add https:// if missing
+    if (data.website && typeof data.website === 'string') {
+      const trimmed = data.website.trim();
+      if (trimmed && !trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+        data.website = `https://${trimmed}`;
+      }
+    }
+
     // Create the identity using the service
     const result = await identityService.create(data, userId);
 

@@ -35,6 +35,97 @@ interface ImportResult {
   createdIds: string[];
 }
 
+// Map of country codes/abbreviations to full names
+const GEO_ALIASES: Record<string, string> = {
+  us: "United States",
+  usa: "United States",
+  "united states": "United States",
+  "united states of america": "United States",
+  uk: "United Kingdom",
+  gb: "United Kingdom",
+  "great britain": "United Kingdom",
+  ca: "Canada",
+  canada: "Canada",
+  au: "Australia",
+  australia: "Australia",
+  de: "Germany",
+  germany: "Germany",
+  fr: "France",
+  france: "France",
+  es: "Spain",
+  spain: "Spain",
+  it: "Italy",
+  italy: "Italy",
+  nl: "Netherlands",
+  netherlands: "Netherlands",
+  be: "Belgium",
+  belgium: "Belgium",
+  se: "Sweden",
+  sweden: "Sweden",
+  no: "Norway",
+  norway: "Norway",
+  dk: "Denmark",
+  denmark: "Denmark",
+  fi: "Finland",
+  finland: "Finland",
+  pl: "Poland",
+  poland: "Poland",
+  cz: "Czech Republic",
+  "czech republic": "Czech Republic",
+  at: "Austria",
+  austria: "Austria",
+  ch: "Switzerland",
+  switzerland: "Switzerland",
+  ie: "Ireland",
+  ireland: "Ireland",
+  pt: "Portugal",
+  portugal: "Portugal",
+  gr: "Greece",
+  greece: "Greece",
+  jp: "Japan",
+  japan: "Japan",
+  kr: "South Korea",
+  "south korea": "South Korea",
+  sg: "Singapore",
+  singapore: "Singapore",
+  nz: "New Zealand",
+  "new zealand": "New Zealand",
+  br: "Brazil",
+  brazil: "Brazil",
+  mx: "Mexico",
+  mexico: "Mexico",
+  ar: "Argentina",
+  argentina: "Argentina",
+  cl: "Chile",
+  chile: "Chile",
+};
+
+/**
+ * Normalize geo input to full country name
+ */
+function normalizeGeo(geo: string): string {
+  const lower = geo.toLowerCase().trim();
+  return GEO_ALIASES[lower] || geo; // Return original if no match
+}
+
+/**
+ * Normalize website URL - auto-add https:// if missing
+ */
+function normalizeWebsite(website: string | undefined): string | null {
+  if (!website) return null;
+
+  const trimmed = website.trim();
+  if (!trimmed) return null;
+
+  // Already has a protocol
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+
+  // Add https:// by default
+  return `https://${trimmed}`;
+}
+
 export async function POST(request: NextRequest) {
   const auth = await requireManager();
   if (!auth.authorized) return auth.error;
@@ -89,6 +180,12 @@ export async function POST(request: NextRequest) {
         // Normalize the date string and create input data
         const normalizedDob = normalizeDateString(row.dob.trim());
 
+        // Normalize geo (convert country codes to full names)
+        const normalizedGeo = normalizeGeo(row.geo.trim());
+
+        // Normalize website (auto-add https:// if missing)
+        const normalizedWebsite = normalizeWebsite(row.website?.trim());
+
         const identityData: IdentityCreateInput = {
           fullName: row.fullName.trim(),
           dob: normalizedDob,
@@ -96,8 +193,8 @@ export async function POST(request: NextRequest) {
           city: row.city.trim(),
           state: row.state.trim().toUpperCase(),
           zipcode: row.zipcode.trim(),
-          geo: row.geo.trim(),
-          website: row.website?.trim() || null,
+          geo: normalizedGeo,
+          website: normalizedWebsite,
         };
 
         // Create the identity
