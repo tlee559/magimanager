@@ -228,22 +228,24 @@ export async function retry<T>(
 
 /**
  * Format Date to YYYY-MM-DD string (for input type="date")
+ * Uses UTC to avoid timezone shifting issues with date-only values
  */
 export function formatDateToInputString(date: Date): string {
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
+  const yyyy = date.getUTCFullYear();
+  const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(date.getUTCDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
 }
 
 /**
  * Format Date for display (MM/DD/YYYY)
+ * Uses UTC to avoid timezone shifting issues with date-only values
  */
 export function formatDateForDisplay(date: Date | string): string {
   const dateObj = typeof date === "string" ? new Date(date) : date;
-  const mm = String(dateObj.getMonth() + 1).padStart(2, "0");
-  const dd = String(dateObj.getDate()).padStart(2, "0");
-  const yyyy = dateObj.getFullYear();
+  const mm = String(dateObj.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(dateObj.getUTCDate()).padStart(2, "0");
+  const yyyy = dateObj.getUTCFullYear();
   return `${mm}/${dd}/${yyyy}`;
 }
 
