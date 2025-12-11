@@ -4008,32 +4008,63 @@ function IdentityDetailView({
     }
   }, [identity.verificationPhone, identity.verificationStatus, identity.verificationCode, identity.verificationExpiresAt]);
 
-  // Document upload handler
+  // Document upload handler (supports multiple files)
   async function handleDocumentUpload(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     setUploadingDoc(true);
+    const fileArray = Array.from(files);
+    let successCount = 0;
+    let failedCount = 0;
+    const failedNames: string[] = [];
+
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("type", "DOCUMENT");
+      for (const file of fileArray) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("type", "DOCUMENT");
 
-      const res = await fetch(`/api/identities/${identity.id}/documents`, {
-        method: "POST",
-        body: formData,
-      });
+        try {
+          const res = await fetch(`/api/identities/${identity.id}/documents`, {
+            method: "POST",
+            body: formData,
+          });
 
-      if (res.ok) {
-        await showSuccess("Document Uploaded", `${file.name} has been uploaded successfully.`);
-        onRefresh();
+          if (res.ok) {
+            successCount++;
+          } else {
+            failedCount++;
+            failedNames.push(file.name);
+          }
+        } catch {
+          failedCount++;
+          failedNames.push(file.name);
+        }
+      }
+
+      if (successCount > 0 && failedCount === 0) {
+        await showSuccess(
+          "Documents Uploaded",
+          successCount === 1
+            ? `${fileArray[0].name} has been uploaded successfully.`
+            : `${successCount} documents have been uploaded successfully.`
+        );
+      } else if (successCount > 0 && failedCount > 0) {
+        await showAlert(
+          "Partial Upload",
+          `${successCount} uploaded successfully, ${failedCount} failed: ${failedNames.join(", ")}`
+        );
       } else {
-        const data = await res.json();
-        await showError("Upload Failed", data.error || "Failed to upload document");
+        await showError("Upload Failed", "Failed to upload documents");
+      }
+
+      if (successCount > 0) {
+        onRefresh();
       }
     } catch (error) {
       console.error("Upload error:", error);
-      await showError("Upload Error", "Failed to upload document");
+      await showError("Upload Error", "Failed to upload documents");
     } finally {
       setUploadingDoc(false);
       if (fileInputRef.current) {
@@ -4724,18 +4755,19 @@ function IdentityDetailView({
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                   </svg>
-                  Upload Document
+                  Upload Documents
                 </>
               )}
             </button>
             <p className="text-[10px] text-slate-500 mt-1 text-center">
-              JPEG, PNG, WebP, PDF (max 10MB)
+              JPEG, PNG, WebP, PDF (max 10MB each) - Select multiple files
             </p>
             <input
               ref={fileInputRef}
               type="file"
               accept="image/jpeg,image/png,image/webp,application/pdf"
               onChange={handleDocumentUpload}
+              multiple
               className="hidden"
             />
           </div>
