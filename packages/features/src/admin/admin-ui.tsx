@@ -1500,11 +1500,6 @@ function IdentitiesListView({
                     <td className="px-4 py-3 text-sm text-slate-100">
                       <div className="flex items-center gap-2">
                         {identity.fullName}
-                        {identity.inactive && (
-                          <span className="px-1.5 py-0.5 text-xs bg-red-500/20 text-red-400 rounded">
-                            Inactive
-                          </span>
-                        )}
                         {identity.archived && (
                           <span className="px-1.5 py-0.5 text-xs bg-amber-500/20 text-amber-400 rounded">
                             Archived
