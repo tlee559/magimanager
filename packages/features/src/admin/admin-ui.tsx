@@ -11193,15 +11193,16 @@ function WebsitesView() {
                 {dnsStatus[site.id]?.data && (
                   <div className="border-t border-slate-700 bg-slate-900/50 p-4">
                     <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-sm font-medium text-slate-300">DNS Status</h4>
+                      <h4 className="text-sm font-medium text-slate-300">Connection Status</h4>
                       <div className="flex items-center gap-2">
-                        {!dnsStatus[site.id].data?.healthy && (
+                        {/* Only show Fix DNS button if DNS records are wrong */}
+                        {(!dnsStatus[site.id].data?.dns.aRecordCorrect || !dnsStatus[site.id].data?.dns.wwwCorrect) && (
                           <button
                             onClick={() => syncDns(site.id)}
                             disabled={dnsStatus[site.id]?.loading}
                             className="px-3 py-1 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white text-xs rounded transition"
                           >
-                            {dnsStatus[site.id]?.loading ? "Syncing..." : "Sync DNS"}
+                            {dnsStatus[site.id]?.loading ? "Fixing..." : "Fix DNS Records"}
                           </button>
                         )}
                         <button
@@ -11255,6 +11256,14 @@ function WebsitesView() {
                         </div>
                       </div>
                     </div>
+                    {/* Show helpful message when DNS is correct but site isn't reachable */}
+                    {dnsStatus[site.id].data?.dns.aRecordCorrect && !dnsStatus[site.id].data?.site.reachable && (
+                      <div className="mt-3 pt-3 border-t border-slate-700/50">
+                        <p className="text-amber-400 text-xs">
+                          DNS is correctly configured but the server isn't responding. The server may still be initializing, or check the server logs via SSH.
+                        </p>
+                      </div>
+                    )}
                     {(dnsStatus[site.id]?.data?.dns?.nameservers?.length ?? 0) > 0 && (
                       <div className="mt-3 pt-3 border-t border-slate-700/50">
                         <p className="text-slate-500 text-xs mb-1">Nameservers</p>
