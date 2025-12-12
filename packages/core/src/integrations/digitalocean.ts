@@ -457,6 +457,93 @@ export function generateBasicServerUserData(domain: string): string {
   return generateWebsiteUserData({ domain });
 }
 
+/**
+ * Generate a lightweight user-data script for snapshot-based deployment
+ * The snapshot already has nginx, PHP, certbot installed - just configure domain
+ */
+export function generateSnapshotUserData(options: {
+  domain: string;
+  zipUrl?: string;
+  sshPassword?: string;
+}): string {
+  const { domain, zipUrl, sshPassword } = options;
+
+  return `#!/bin/bash
+set -e
+
+# Log all output
+exec > >(tee /var/log/user-data.log) 2>&1
+echo "Configuring server for ${domain} (from snapshot)..."
+
+${sshPassword ? `
+# Set root password and enable password authentication
+echo "root:${sshPassword}" | chpasswd
+sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+systemctl restart sshd
+echo "SSH password authentication enabled."
+` : '# No SSH password provided'}
+
+# Create web directory for this domain
+mkdir -p /var/www/${domain}
+
+${zipUrl ? `
+# Download and extract website files
+echo "Downloading website files from ${zipUrl}..."
+cd /var/www/${domain}
+curl -L -o website.zip "${zipUrl}"
+unzip -o website.zip
+
+# Handle nested directories (if zip contains a folder)
+for dir in */; do
+  if [ -d "\\$dir" ]; then
+    mv "\\$dir"* . 2>/dev/null || true
+    rmdir "\\$dir" 2>/dev/null || true
+  fi
+done
+
+rm -f website.zip
+` : `# No website zip URL provided - creating default index
+echo "<html><head><title>${domain}</title></head><body><h1>Welcome to ${domain}</h1><p>Server is ready.</p></body></html>" > /var/www/${domain}/index.html`}
+
+# Set permissions
+chown -R www-data:www-data /var/www/${domain}
+
+# Create Nginx config for this domain
+cat > /etc/nginx/sites-available/${domain} << 'NGINX_CONF'
+server {
+    listen 80;
+    server_name ${domain} www.${domain};
+    root /var/www/${domain};
+    index index.php index.html index.htm;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \\.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/var/run/php/php8.1-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
+
+    location ~ /\\.ht {
+        deny all;
+    }
+}
+NGINX_CONF
+
+# Enable site and reload nginx
+ln -sf /etc/nginx/sites-available/${domain} /etc/nginx/sites-enabled/
+rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+nginx -t && systemctl reload nginx
+
+# Mark server as ready
+touch /tmp/server-ready
+echo "Server setup complete for ${domain} (snapshot-based)"
+`;
+}
+
 // ============================================================================
 // COMMON DROPLET CONFIGURATIONS
 // ============================================================================

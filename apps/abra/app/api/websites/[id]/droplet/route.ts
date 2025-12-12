@@ -5,6 +5,7 @@ import crypto from "crypto";
 import {
   getDigitalOceanClientFromSettings,
   generateWebsiteUserData,
+  generateSnapshotUserData,
   DROPLET_SIZES,
   DEFAULT_DROPLET_IMAGE,
 } from "@magimanager/core";
@@ -139,9 +140,11 @@ export async function POST(
       );
     }
 
-    // Get DigitalOcean client
+    // Get DigitalOcean client and settings
     let client;
+    let settings;
     try {
+      settings = await prisma.appSettings.findFirst();
       client = await getDigitalOceanClientFromSettings();
     } catch (error) {
       return NextResponse.json(
@@ -163,20 +166,36 @@ export async function POST(
       },
     });
 
+    // Determine if we should use snapshot or cloud-init
+    const useSnapshot = !!settings?.digitaloceanSnapshotId;
+    const imageId = useSnapshot ? settings.digitaloceanSnapshotId : DEFAULT_DROPLET_IMAGE;
+
     // Generate user-data script
-    const userData = generateWebsiteUserData({
-      domain: website.domain,
-      zipUrl: website.zipFileUrl || undefined,
-      sshPassword, // Pass password to cloud-init
-      // TODO: Upload cloaker zip to blob and provide URL
-    });
+    // If using snapshot, we just need a simple script to configure domain and download files
+    // If not using snapshot, we need the full cloud-init script
+    let userData: string;
+    if (useSnapshot) {
+      // Snapshot already has nginx/php installed, just configure domain
+      userData = generateSnapshotUserData({
+        domain: website.domain,
+        zipUrl: website.zipFileUrl || undefined,
+        sshPassword,
+      });
+    } else {
+      // Full cloud-init for fresh Ubuntu image
+      userData = generateWebsiteUserData({
+        domain: website.domain,
+        zipUrl: website.zipFileUrl || undefined,
+        sshPassword,
+      });
+    }
 
     // Create droplet
     const droplet = await client.createDroplet({
       name: generateDropletName(website.domain),
       region,
       size,
-      image: DEFAULT_DROPLET_IMAGE,
+      image: imageId!,
       userData,
       tags: ["1-click-website", `website-${id}`],
     });

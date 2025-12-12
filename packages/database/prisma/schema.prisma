@@ -228,6 +228,7 @@ model AppSettings {
   namecheapWhitelistIp  String?
   namecheapProxyUrl     String?  // Proxy server URL for Namecheap API calls (static IP)
   digitaloceanApiKey    String?
+  digitaloceanSnapshotId String?  // Snapshot ID for pre-configured website droplets
 
   // Decommission Alert Settings
   decommissionAlertOnAccountDeath    Boolean @default(true)  // Alert when last account is archived/deleted/banned

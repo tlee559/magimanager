@@ -82,6 +82,7 @@ export {
   getDigitalOceanClientFromSettings,
   generateWebsiteUserData,
   generateBasicServerUserData,
+  generateSnapshotUserData,
   DROPLET_SIZES,
   DROPLET_REGIONS,
   DEFAULT_DROPLET_IMAGE,
