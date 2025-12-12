@@ -67,20 +67,35 @@ export async function POST(
 
     // Wait for SSH to be available (server might still be booting)
     console.log(`Waiting for SSH on ${website.dropletIp}...`);
-    const sshReady = await waitForSsh(website.dropletIp, website.sshPassword, 60000);
+    const sshReady = await waitForSsh(website.dropletIp, website.sshPassword, 120000); // 2 min timeout
 
     if (!sshReady) {
       await prisma.website.update({
         where: { id },
         data: {
-          status: "FAILED",
-          errorMessage: "Could not connect to server via SSH. Server may still be starting.",
+          status: "DROPLET_READY", // Keep recoverable state, not FAILED
+          statusMessage: "Server SSH not ready yet. Please try deploying files again in a minute.",
         },
       });
       return NextResponse.json(
-        { error: "Could not connect to server via SSH. Please try again in a few minutes." },
-        { status: 500 }
+        { error: "Could not connect to server via SSH. Server may still be starting. Please try again in a minute." },
+        { status: 503 } // Service Unavailable - temporary
       );
+    }
+
+    // Wait for cloud-init to complete (nginx and PHP must be ready)
+    console.log("Checking if cloud-init completed...");
+    const cloudInitCheck = await executeRemoteScript(
+      website.dropletIp,
+      website.sshPassword,
+      'test -f /tmp/server-ready && systemctl is-active nginx && systemctl is-active php*-fpm && echo "READY" || echo "NOT_READY"',
+      { timeout: 15000 }
+    );
+
+    if (!cloudInitCheck.stdout.includes("READY")) {
+      // Cloud-init still running, wait a bit more
+      console.log("Cloud-init not complete, waiting 30 more seconds...");
+      await new Promise((r) => setTimeout(r, 30000));
     }
 
     // Script to download and extract files
@@ -156,6 +171,23 @@ echo "=== File upload complete ==="
     console.log("Script output:", result.stdout);
     if (result.stderr) {
       console.error("Script stderr:", result.stderr);
+    }
+
+    // Check if script failed
+    if (result.code !== 0) {
+      const errorMsg = result.stderr || result.stdout || "Unknown script error";
+      console.error(`Script failed with code ${result.code}:`, errorMsg);
+      await prisma.website.update({
+        where: { id },
+        data: {
+          status: "DROPLET_READY", // Recoverable state
+          statusMessage: `File deployment failed: ${errorMsg.slice(0, 200)}`,
+        },
+      });
+      return NextResponse.json(
+        { error: `File deployment script failed: ${errorMsg}`, scriptOutput: result.stdout },
+        { status: 500 }
+      );
     }
 
     // Verify site is accessible at IP level

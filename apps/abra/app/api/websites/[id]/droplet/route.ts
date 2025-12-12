@@ -182,7 +182,7 @@ export async function POST(
     });
 
     // Update website with droplet info
-    const updated = await prisma.website.update({
+    await prisma.website.update({
       where: { id },
       data: {
         dropletId: droplet.id.toString(),
@@ -202,10 +202,41 @@ export async function POST(
       },
     });
 
+    // Poll for droplet IP (up to 2 minutes)
+    let dropletIp: string | null = null;
+    const maxWaitTime = 120000; // 2 minutes
+    const pollInterval = 5000; // 5 seconds
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < maxWaitTime) {
+      try {
+        const dropletStatus = await client.getDroplet(droplet.id);
+        if (dropletStatus.publicIpv4) {
+          dropletIp = dropletStatus.publicIpv4;
+          break;
+        }
+      } catch {
+        // Droplet not ready yet
+      }
+      await new Promise((r) => setTimeout(r, pollInterval));
+    }
+
+    // Update with IP if found
+    const updated = await prisma.website.update({
+      where: { id },
+      data: {
+        dropletIp: dropletIp,
+        status: dropletIp ? "DROPLET_READY" : "DROPLET_CREATING",
+        statusMessage: dropletIp
+          ? `Server is ready at ${dropletIp}. Waiting for services to start...`
+          : "Server created but IP not yet assigned. Please check status.",
+      },
+    });
+
     return NextResponse.json({
       success: true,
       website: updated,
-      droplet,
+      droplet: { ...droplet, ip_address: dropletIp },
     });
   } catch (error) {
     console.error("Failed to create droplet:", error);

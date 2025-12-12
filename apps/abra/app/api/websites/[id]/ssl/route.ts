@@ -105,6 +105,7 @@ echo "=== Installing SSL certificate for ${website.domain} ==="
 # Check if certbot is installed
 if ! command -v certbot &> /dev/null; then
   echo "Installing certbot..."
+  export DEBIAN_FRONTEND=noninteractive
   apt-get update
   apt-get install -y certbot python3-certbot-nginx
 fi
@@ -113,11 +114,9 @@ fi
 EMAIL="ssl@${website.domain}"
 
 # Run certbot with nginx plugin
-# --non-interactive: Don't ask questions
-# --agree-tos: Agree to terms of service
-# --redirect: Automatically redirect HTTP to HTTPS
-# --no-eff-email: Don't share email with EFF
-echo "Running certbot..."
+# Try with both main domain and www first
+echo "Running certbot for ${website.domain} and www.${website.domain}..."
+CERTBOT_EXIT=0
 certbot --nginx \\
   -d ${website.domain} \\
   -d www.${website.domain} \\
@@ -126,24 +125,41 @@ certbot --nginx \\
   --email "$EMAIL" \\
   --redirect \\
   --no-eff-email \\
-  2>&1 || {
-    # If www fails (not pointed to server), try just the main domain
-    echo "Retrying with just main domain..."
-    certbot --nginx \\
-      -d ${website.domain} \\
-      --non-interactive \\
-      --agree-tos \\
-      --email "$EMAIL" \\
-      --redirect \\
-      --no-eff-email
-  }
+  2>&1 || CERTBOT_EXIT=\$?
+
+# If www failed (common when www DNS not configured), try just main domain
+if [ \$CERTBOT_EXIT -ne 0 ]; then
+  echo ""
+  echo "WWW domain failed (exit code \$CERTBOT_EXIT), retrying with just main domain..."
+  CERTBOT_EXIT=0
+  certbot --nginx \\
+    -d ${website.domain} \\
+    --non-interactive \\
+    --agree-tos \\
+    --email "$EMAIL" \\
+    --redirect \\
+    --no-eff-email \\
+    2>&1 || CERTBOT_EXIT=\$?
+fi
+
+if [ \$CERTBOT_EXIT -ne 0 ]; then
+  echo "ERROR: Certbot failed with exit code \$CERTBOT_EXIT"
+  exit \$CERTBOT_EXIT
+fi
 
 echo "=== SSL installation complete ==="
 
-# Verify HTTPS is working
-nginx -t && systemctl reload nginx
+# Verify nginx config and reload
+echo "Testing nginx configuration..."
+if ! nginx -t 2>&1; then
+  echo "ERROR: Nginx configuration test failed"
+  exit 1
+fi
 
-echo "=== Nginx reloaded ==="
+echo "Reloading nginx..."
+systemctl reload nginx
+
+echo "=== Nginx reloaded successfully ==="
 `;
 
     console.log(`Installing SSL for ${website.domain}...`);
@@ -157,6 +173,27 @@ echo "=== Nginx reloaded ==="
     console.log("SSL install output:", result.stdout);
     if (result.stderr) {
       console.error("SSL install stderr:", result.stderr);
+    }
+
+    // Check if certbot script failed
+    if (result.code !== 0) {
+      const errorMsg = result.stderr || result.stdout || "Unknown SSL installation error";
+      console.error(`SSL script failed with code ${result.code}:`, errorMsg);
+      await prisma.website.update({
+        where: { id },
+        data: {
+          status: "DNS_CONFIGURING", // Recoverable state - domain is configured but SSL failed
+          statusMessage: `SSL installation failed: ${errorMsg.slice(0, 200)}. You can retry.`,
+        },
+      });
+      return NextResponse.json(
+        {
+          error: `SSL installation failed: ${errorMsg}`,
+          scriptOutput: result.stdout,
+          suggestion: "Make sure DNS is fully propagated and try again. It can take up to 30 minutes for DNS to propagate."
+        },
+        { status: 500 }
+      );
     }
 
     // Verify HTTPS works
