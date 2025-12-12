@@ -4,8 +4,7 @@ import { requireAdmin } from "@/lib/api-auth";
 import crypto from "crypto";
 import {
   getDigitalOceanClientFromSettings,
-  generateWebsiteUserData,
-  generateSnapshotUserData,
+  generateGenericServerUserData,
   DROPLET_SIZES,
   DEFAULT_DROPLET_IMAGE,
 } from "@magimanager/core";
@@ -24,18 +23,21 @@ function generateSecurePassword(length: number = 16): string {
 }
 
 /**
- * Generate a valid hostname from a domain
+ * Generate a valid hostname from website name or domain
  * DigitalOcean only allows: a-z, A-Z, 0-9, . and -
  */
-function generateDropletName(domain: string): string {
-  // Clean the domain first (remove protocol, www, trailing slash)
-  let name = domain.toLowerCase().trim();
+function generateDropletName(websiteName: string, domain?: string | null): string {
+  // Prefer domain if available, otherwise use website name
+  let source = domain || websiteName;
+  let name = source.toLowerCase().trim();
+
+  // Clean domain-style input (remove protocol, www, trailing slash)
   name = name.replace(/^https?:\/\//, "");
   name = name.replace(/^www\./, "");
   name = name.split("/")[0];
 
-  // Replace dots with dashes
-  name = name.replace(/\./g, "-");
+  // Replace dots and spaces with dashes
+  name = name.replace(/[\.\s]+/g, "-");
 
   // Remove any invalid characters (keep only a-z, 0-9, -)
   name = name.replace(/[^a-z0-9-]/g, "");
@@ -102,6 +104,8 @@ export async function GET(
 }
 
 // POST /api/websites/[id]/droplet - Create droplet
+// New IP-first flow: Creates a generic server that works at IP level first
+// Files are uploaded separately, then domain is configured, then SSL is installed
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -114,7 +118,7 @@ export async function POST(
     const body = await request.json();
     const { region = "nyc1", size = "s-1vcpu-1gb" } = body;
 
-    // Check website exists and has domain
+    // Check website exists (domain is optional now - can create server first)
     const website = await prisma.website.findUnique({
       where: { id },
     });
@@ -123,13 +127,6 @@ export async function POST(
       return NextResponse.json(
         { error: "Website not found" },
         { status: 404 }
-      );
-    }
-
-    if (!website.domain) {
-      return NextResponse.json(
-        { error: "Domain must be purchased before creating droplet" },
-        { status: 400 }
       );
     }
 
@@ -170,29 +167,13 @@ export async function POST(
     const useSnapshot = !!settings?.digitaloceanSnapshotId;
     const imageId = useSnapshot ? settings!.digitaloceanSnapshotId! : DEFAULT_DROPLET_IMAGE;
 
-    // Generate user-data script
-    // If using snapshot, we just need a simple script to configure domain and download files
-    // If not using snapshot, we need the full cloud-init script
-    let userData: string;
-    if (useSnapshot) {
-      // Snapshot already has nginx/php installed, just configure domain
-      userData = generateSnapshotUserData({
-        domain: website.domain,
-        zipUrl: website.zipFileUrl || undefined,
-        sshPassword,
-      });
-    } else {
-      // Full cloud-init for fresh Ubuntu image
-      userData = generateWebsiteUserData({
-        domain: website.domain,
-        zipUrl: website.zipFileUrl || undefined,
-        sshPassword,
-      });
-    }
+    // Generate generic user-data script (works at IP level, no domain required)
+    // This creates a server with server_name _ that responds to any request
+    const userData = generateGenericServerUserData({ sshPassword });
 
-    // Create droplet
+    // Create droplet with website name (or domain if available)
     const droplet = await client.createDroplet({
-      name: generateDropletName(website.domain),
+      name: generateDropletName(website.name, website.domain),
       region,
       size,
       image: imageId!,

@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@magimanager/database';
+import { NodeSSH } from 'node-ssh';
 
 const DO_API_URL = 'https://api.digitalocean.com/v2';
 
@@ -384,8 +385,8 @@ systemctl restart php$PHP_VERSION-fpm
 mkdir -p /var/www/${domain}
 chown -R www-data:www-data /var/www/${domain}
 
-# Create Nginx config
-cat > /etc/nginx/sites-available/${domain} << 'NGINX_CONF'
+# Create Nginx config (using shell variable substitution)
+cat > /etc/nginx/sites-available/${domain} << EOF
 server {
     listen 80;
     server_name ${domain} www.${domain};
@@ -402,7 +403,7 @@ server {
 
     location ~ \\.php\\$ {
         include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:/var/run/php/php-fpm.sock;
+        fastcgi_pass unix:/var/run/php/php\$PHP_VERSION-fpm.sock;
         fastcgi_param SCRIPT_FILENAME \\$document_root\\$fastcgi_script_name;
     }
 
@@ -415,7 +416,7 @@ server {
         deny all;
     }
 }
-NGINX_CONF
+EOF
 
 # Enable site
 ln -sf /etc/nginx/sites-available/${domain} /etc/nginx/sites-enabled/
@@ -525,8 +526,12 @@ echo "<html><head><title>${domain}</title></head><body><h1>Welcome to ${domain}<
 # Set permissions
 chown -R www-data:www-data /var/www/${domain}
 
-# Create Nginx config for this domain
-cat > /etc/nginx/sites-available/${domain} << 'NGINX_CONF'
+# Detect PHP version
+PHP_VERSION=$(ls /var/run/php/ 2>/dev/null | grep -oP 'php\\K[0-9]+\\.[0-9]+' | head -1)
+[ -z "\\$PHP_VERSION" ] && PHP_VERSION="8.1"
+
+# Create Nginx config for this domain (using shell variable substitution)
+cat > /etc/nginx/sites-available/${domain} << EOF
 server {
     listen 80;
     server_name ${domain} www.${domain};
@@ -539,7 +544,7 @@ server {
 
     location ~ \\.php\\$ {
         include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:/var/run/php/php8.1-fpm.sock;
+        fastcgi_pass unix:/var/run/php/php\\$PHP_VERSION-fpm.sock;
         fastcgi_param SCRIPT_FILENAME \\$document_root\\$fastcgi_script_name;
     }
 
@@ -547,7 +552,7 @@ server {
         deny all;
     }
 }
-NGINX_CONF
+EOF
 
 # Enable site and reload nginx
 ln -sf /etc/nginx/sites-available/${domain} /etc/nginx/sites-enabled/
@@ -602,3 +607,190 @@ export const DROPLET_REGIONS = {
 } as const;
 
 export const DEFAULT_DROPLET_IMAGE = 'ubuntu-22-04-x64';
+
+// ============================================================================
+// GENERIC SERVER USER DATA (IP-FIRST APPROACH)
+// ============================================================================
+
+/**
+ * Generate cloud-init script for a generic server that works at IP level
+ * This is used for the new IP-first deployment flow where:
+ * 1. Server boots with generic nginx config (server_name _)
+ * 2. Files are uploaded via SSH after server is ready
+ * 3. Domain nginx config is added later
+ * 4. SSL is installed last
+ */
+export function generateGenericServerUserData(options: {
+  sshPassword?: string;
+}): string {
+  const { sshPassword } = options;
+
+  return `#!/bin/bash
+set -e
+
+# Log all output
+exec > >(tee /var/log/user-data.log) 2>&1
+echo "Starting generic server setup..."
+
+${sshPassword ? `
+# Set root password and enable password authentication
+echo "root:${sshPassword}" | chpasswd
+
+# Update main sshd_config
+sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+
+# Also update cloud-init SSH config (Ubuntu 22.04+)
+if [ -f /etc/ssh/sshd_config.d/50-cloud-init.conf ]; then
+  sed -i 's/^PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config.d/50-cloud-init.conf
+fi
+
+systemctl restart sshd
+echo "SSH password authentication enabled."
+` : '# No SSH password provided - SSH key only'}
+
+# Detect PHP version from installed PHP-FPM
+PHP_VERSION=$(ls /var/run/php/ 2>/dev/null | grep -oP 'php\\K[0-9]+\\.[0-9]+' | head -1)
+if [ -z "$PHP_VERSION" ]; then
+  # Fallback: check php command
+  PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;" 2>/dev/null || echo "8.1")
+fi
+echo "Detected PHP version: $PHP_VERSION"
+
+# Create web directory
+mkdir -p /var/www/html
+chown -R www-data:www-data /var/www/html
+
+# Create generic nginx config (works with any IP or domain)
+cat > /etc/nginx/sites-available/default << EOF
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+
+    root /var/www/html;
+    index index.php index.html index.htm;
+
+    # Accept any domain or IP
+    server_name _;
+
+    location / {
+        try_files \\$uri \\$uri/ /index.php?\\$query_string;
+    }
+
+    location ~ \\.php\\$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/var/run/php/php$PHP_VERSION-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME \\$document_root\\$fastcgi_script_name;
+    }
+
+    location ~ /\\.ht {
+        deny all;
+    }
+}
+EOF
+
+# Create placeholder index
+cat > /var/www/html/index.html << 'PLACEHOLDER'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Server Ready</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; text-align: center; padding: 50px; background: #1a1a2e; color: #eee; }
+        h1 { color: #4ade80; }
+        p { color: #94a3b8; }
+    </style>
+</head>
+<body>
+    <h1>Server Ready</h1>
+    <p>Your server is configured and waiting for website files.</p>
+    <p>Upload your files to continue the deployment.</p>
+</body>
+</html>
+PLACEHOLDER
+chown www-data:www-data /var/www/html/index.html
+
+# Ensure nginx sites-enabled link exists
+ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+
+# Test and reload nginx
+nginx -t && systemctl reload nginx
+
+# Mark server as ready
+touch /tmp/server-ready
+echo "Generic server setup complete!"
+`;
+}
+
+// ============================================================================
+// SSH EXECUTION HELPER
+// ============================================================================
+
+/**
+ * Execute a script on a remote server via SSH
+ */
+export async function executeRemoteScript(
+  host: string,
+  password: string,
+  script: string,
+  options: {
+    username?: string;
+    timeout?: number;
+  } = {}
+): Promise<{ stdout: string; stderr: string; code: number }> {
+  const ssh = new NodeSSH();
+  const { username = 'root', timeout = 60000 } = options;
+
+  try {
+    await ssh.connect({
+      host,
+      username,
+      password,
+      readyTimeout: timeout,
+      // Disable strict host key checking for new servers
+      algorithms: {
+        serverHostKey: ['ssh-rsa', 'ssh-ed25519', 'ecdsa-sha2-nistp256'],
+      },
+    });
+
+    const result = await ssh.execCommand(script, {
+      execOptions: { pty: true },
+    });
+
+    return {
+      stdout: result.stdout,
+      stderr: result.stderr,
+      code: result.code ?? 0,
+    };
+  } finally {
+    ssh.dispose();
+  }
+}
+
+/**
+ * Wait for SSH to become available on a server
+ */
+export async function waitForSsh(
+  host: string,
+  password: string,
+  maxWaitMs: number = 120000
+): Promise<boolean> {
+  const startTime = Date.now();
+  const pollInterval = 5000;
+
+  while (Date.now() - startTime < maxWaitMs) {
+    try {
+      const result = await executeRemoteScript(host, password, 'echo "SSH ready"', {
+        timeout: 10000,
+      });
+      if (result.code === 0) {
+        return true;
+      }
+    } catch {
+      // SSH not ready yet, keep trying
+    }
+    await new Promise(resolve => setTimeout(resolve, pollInterval));
+  }
+
+  return false;
+}

@@ -22,7 +22,8 @@
     "@magimanager/database": "*",
     "@magimanager/realtime": "*",
     "@magimanager/shared": "*",
-    "bcryptjs": "^3.0.3"
+    "bcryptjs": "^3.0.3",
+    "node-ssh": "^13.2.1"
   },
   "peerDependencies": {
     "next": "^15.5.7"

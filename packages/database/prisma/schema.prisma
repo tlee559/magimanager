@@ -1528,12 +1528,14 @@ enum WebsiteStatus {
   PENDING           // Initial state
   UPLOADING         // Zip file being uploaded
   DOMAIN_PENDING    // Searching/purchasing domain
-  DOMAIN_PURCHASED  // Domain purchased, DNS pending
+  DOMAIN_PURCHASED  // Domain purchased/set
   DROPLET_CREATING  // Creating DigitalOcean droplet
-  DROPLET_READY     // Droplet created, waiting for boot
-  DEPLOYING         // Uploading files, configuring nginx
+  DROPLET_READY     // Droplet created with IP, ready for files
+  FILES_UPLOADED    // Files deployed, site accessible at IP
+  DNS_CONFIGURING   // Domain configured, waiting for DNS propagation
+  DEPLOYING         // Legacy: uploading files, configuring nginx
   SSL_PENDING       // Running certbot
-  LIVE              // Website is live
+  LIVE              // Website is live with SSL
   FAILED            // Deployment failed
 }
 

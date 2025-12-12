@@ -11590,13 +11590,24 @@ function UpdateFilesModal({ website, onClose }: { website: Website; onClose: () 
 // ============================================================================
 
 function WebsiteWizard({ website, onClose }: { website: Website | null; onClose: () => void }) {
+  // NEW IP-FIRST FLOW:
+  // Step 1: Upload files (to Vercel Blob)
+  // Step 2: Create Server (get IP)
+  // Step 3: Deploy Files (to server via SSH, test at IP)
+  // Step 4: Configure Domain (nginx + DNS)
+  // Step 5: Install SSL
+
   // Determine starting step based on website state
   const getInitialStep = (): number => {
     if (!website) return 1;
     if (!website.zipFileUrl) return 1;
-    if (!website.domain) return 2;
-    if (!website.dropletId) return 3;
-    return 4;
+    if (!website.dropletId) return 2;
+    if (!website.dropletIp) return 2; // Still waiting for IP
+    if (!["FILES_UPLOADED", "DNS_CONFIGURING", "SSL_PENDING", "LIVE"].includes(website.status)) return 3;
+    if (!website.domain) return 4;
+    if (website.status === "LIVE") return 5;
+    if (website.status === "SSL_PENDING" || website.status === "DNS_CONFIGURING") return 5;
+    return 5;
   };
 
   const [step, setStep] = useState(getInitialStep());
@@ -11610,24 +11621,36 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
 
-  // Step 2: Domain
-  const [domainMode, setDomainMode] = useState<"search" | "existing">("existing"); // Default to existing
+  // Step 2: Server
+  const [region, setRegion] = useState("nyc1");
+  const [creatingDroplet, setCreatingDroplet] = useState(false);
+  const [dropletError, setDropletError] = useState("");
+  const [waitingForIp, setWaitingForIp] = useState(false);
+
+  // Step 3: Deploy Files
+  const [deployingFiles, setDeployingFiles] = useState(false);
+  const [filesDeployError, setFilesDeployError] = useState("");
+  const [ipTestResult, setIpTestResult] = useState<{ accessible: boolean; status: number | null } | null>(null);
+
+  // Step 4: Domain
+  const [domainMode, setDomainMode] = useState<"search" | "existing">("existing");
   const [domainKeyword, setDomainKeyword] = useState("");
   const [domainResults, setDomainResults] = useState<DomainResult[]>([]);
   const [selectedDomain, setSelectedDomain] = useState("");
-  const [existingDomain, setExistingDomain] = useState(""); // For "Use Existing Domain"
+  const [existingDomain, setExistingDomain] = useState("");
   const [searchingDomains, setSearchingDomains] = useState(false);
   const [purchasingDomain, setPurchasingDomain] = useState(false);
   const [settingDomain, setSettingDomain] = useState(false);
   const [domainError, setDomainError] = useState("");
-  const [showManualDnsConfirm, setShowManualDnsConfirm] = useState(false); // For domains not in Namecheap
+  const [showManualDnsConfirm, setShowManualDnsConfirm] = useState(false);
+  const [configuringDomain, setConfiguringDomain] = useState(false);
 
-  // Step 3: Server
-  const [region, setRegion] = useState("nyc1");
-  const [creatingDroplet, setCreatingDroplet] = useState(false);
-  const [dropletError, setDropletError] = useState("");
+  // Step 5: SSL
+  const [installingSSL, setInstallingSSL] = useState(false);
+  const [sslError, setSslError] = useState("");
+  const [domainTestResult, setDomainTestResult] = useState<{ accessible: boolean; status: number | null } | null>(null);
 
-  // Step 4: Deploy
+  // Legacy state (kept for compatibility)
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState("");
   const [dnsMessage, setDnsMessage] = useState("");
@@ -11792,7 +11815,7 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
     }
   };
 
-  // Step 2: Purchase domain
+  // Step 4: Purchase domain
   const handlePurchaseDomain = async () => {
     if (!selectedDomain) return;
 
@@ -11808,7 +11831,7 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Purchase failed");
       setCurrentWebsite(data.website);
-      setStep(3);
+      // Stay on step 4 - domain is now set, user can configure DNS
     } catch (error) {
       setDomainError(error instanceof Error ? error.message : "Purchase failed");
     } finally {
@@ -11816,7 +11839,7 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
     }
   };
 
-  // Step 2: Set existing domain (no purchase)
+  // Step 4: Set existing domain (no purchase)
   const handleSetExistingDomain = async (confirmManualDns = false) => {
     const domain = existingDomain.trim().toLowerCase();
     if (!domain) {
@@ -11851,7 +11874,7 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
 
       if (!res.ok) throw new Error(data.error || "Failed to set domain");
       setCurrentWebsite(data.website);
-      setStep(3);
+      // Stay on step 4 - domain is now set, user can configure DNS
     } catch (error) {
       setDomainError(error instanceof Error ? error.message : "Failed to set domain");
     } finally {
@@ -11859,7 +11882,7 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
     }
   };
 
-  // Step 3: Create droplet
+  // Step 2: Create droplet
   const handleCreateDroplet = async () => {
     setCreatingDroplet(true);
     setDropletError("");
@@ -11873,7 +11896,8 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create server");
       setCurrentWebsite(data.website);
-      setStep(4);
+      // Don't advance step - stay on step 2 and wait for IP
+      // The UI will show "Server Created" and wait for IP
     } catch (error) {
       setDropletError(error instanceof Error ? error.message : "Server creation failed");
     } finally {
@@ -11881,7 +11905,7 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
     }
   };
 
-  // Cancel deployment - stop polling, reset to step 3
+  // Cancel deployment - stop polling, reset to step 2
   const handleCancelDeployment = async () => {
     setPollingActive(false);
     setDeployProgress(null);
@@ -11913,8 +11937,8 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
       }
     }
 
-    // Go back to step 3
-    setStep(3);
+    // Go back to step 2 (server creation)
+    setStep(2);
   };
 
   // Step 4: Deploy
@@ -11975,10 +11999,10 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
               {currentWebsite ? `Deploy: ${currentWebsite.name}` : "New Website"}
             </h2>
             <div className="flex items-center gap-2 mt-2">
-              {[1, 2, 3, 4].map((s) => (
+              {[1, 2, 3, 4, 5].map((s) => (
                 <div
                   key={s}
-                  className={`w-8 h-1 rounded ${s <= step ? "bg-emerald-500" : "bg-slate-700"}`}
+                  className={`w-6 h-1 rounded ${s <= step ? "bg-emerald-500" : "bg-slate-700"}`}
                 />
               ))}
             </div>
@@ -12102,18 +12126,267 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                 disabled={uploading || (!name.trim() && !currentWebsite)}
                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition"
               >
-                {uploading ? "Uploading..." : "Continue to Domain Selection"}
+                {uploading ? "Uploading..." : "Continue to Server Creation"}
               </button>
             </div>
           )}
 
-          {/* Step 2: Domain */}
+          {/* Step 2: Create Server */}
           {step === 2 && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-medium text-slate-200 mb-4">Step 2: Choose Domain</h3>
+                <h3 className="text-lg font-medium text-slate-200 mb-4">Step 2: Create Server</h3>
+                <p className="text-slate-400 text-sm mb-6">
+                  Select a server region and create your DigitalOcean droplet. Once the server is ready, you can deploy your files.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Server Region</label>
+                <select
+                  value={region}
+                  onChange={(e) => setRegion(e.target.value)}
+                  className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
+                >
+                  {regions.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                <h4 className="font-medium text-slate-200 mb-2">Server Specs</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-slate-500">Type:</span>
+                    <span className="text-slate-300 ml-2">Basic Droplet</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Cost:</span>
+                    <span className="text-slate-300 ml-2">~$6/month</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">RAM:</span>
+                    <span className="text-slate-300 ml-2">1 GB</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">CPU:</span>
+                    <span className="text-slate-300 ml-2">1 vCPU</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Storage:</span>
+                    <span className="text-slate-300 ml-2">25 GB SSD</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">OS:</span>
+                    <span className="text-slate-300 ml-2">Ubuntu 22.04</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Show server info if already created */}
+              {currentWebsite?.dropletId && (
+                <div className="bg-emerald-900/20 rounded-lg p-4 border border-emerald-700/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-emerald-400">✓</span>
+                    <span className="text-emerald-300 font-medium">Server Created</span>
+                  </div>
+                  {currentWebsite.dropletIp ? (
+                    <div className="text-sm space-y-1">
+                      <p className="text-slate-300">IP Address: <code className="bg-slate-800 px-2 py-0.5 rounded">{currentWebsite.dropletIp}</code></p>
+                      <p className="text-slate-400">Server is ready for file deployment.</p>
+                    </div>
+                  ) : (
+                    <p className="text-amber-300 text-sm flex items-center gap-2">
+                      <span className="animate-pulse">●</span>
+                      Waiting for IP address... (usually 30-60 seconds)
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {dropletError && (
+                <p className="text-red-400 text-sm">{dropletError}</p>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setStep(1)}
+                  className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg font-medium transition"
+                >
+                  Back
+                </button>
+                {currentWebsite?.dropletId && currentWebsite?.dropletIp ? (
+                  <button
+                    onClick={() => setStep(3)}
+                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition"
+                  >
+                    Continue to File Deployment
+                  </button>
+                ) : currentWebsite?.dropletId ? (
+                  <button
+                    onClick={async () => {
+                      setWaitingForIp(true);
+                      // Poll for IP
+                      for (let i = 0; i < 20; i++) {
+                        await new Promise(r => setTimeout(r, 3000));
+                        try {
+                          const res = await fetch(`/api/websites/${currentWebsite.id}/droplet`);
+                          const data = await res.json();
+                          if (data.droplet?.networks?.v4?.[0]?.ip_address) {
+                            // Update website with IP
+                            const updateRes = await fetch(`/api/websites/${currentWebsite.id}`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ dropletIp: data.droplet.networks.v4[0].ip_address }),
+                            });
+                            const updateData = await updateRes.json();
+                            if (updateData.website) {
+                              setCurrentWebsite(updateData.website);
+                            }
+                            break;
+                          }
+                        } catch {}
+                      }
+                      setWaitingForIp(false);
+                    }}
+                    disabled={waitingForIp}
+                    className="flex-1 py-3 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 text-white rounded-lg font-medium transition"
+                  >
+                    {waitingForIp ? "Waiting for IP..." : "Check for IP Address"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleCreateDroplet}
+                    disabled={creatingDroplet}
+                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition"
+                  >
+                    {creatingDroplet ? "Creating Server..." : "Create Server"}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Deploy Files */}
+          {step === 3 && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-medium text-slate-200 mb-4">Step 3: Deploy Files</h3>
+                <p className="text-slate-400 text-sm mb-6">
+                  Upload your website files to the server. After deployment, test that your site works at the IP address.
+                </p>
+              </div>
+
+              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700 space-y-3">
+                <h4 className="font-medium text-slate-200">Server Ready</h4>
+                <div className="text-sm space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400">✓</span>
+                    <span className="text-slate-300">Server IP: <code className="bg-slate-800 px-2 py-0.5 rounded">{currentWebsite?.dropletIp}</code></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400">✓</span>
+                    <span className="text-slate-300">Files ready: {currentWebsite?.zipFileUrl ? "Yes" : "No"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* IP Test Result */}
+              {ipTestResult && (
+                <div className={`rounded-lg p-4 border ${ipTestResult.accessible ? "bg-emerald-900/20 border-emerald-700/50" : "bg-amber-900/20 border-amber-700/50"}`}>
+                  {ipTestResult.accessible ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-emerald-400 text-lg">✓</span>
+                      <div>
+                        <p className="text-emerald-300 font-medium">Site is accessible!</p>
+                        <p className="text-slate-400 text-sm">Your site is working at http://{currentWebsite?.dropletIp}/</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-amber-300 font-medium">Site returned HTTP {ipTestResult.status}</p>
+                      <p className="text-slate-400 text-sm">Check that your zip contains index.html or index.php</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {filesDeployError && (
+                <p className="text-red-400 text-sm">{filesDeployError}</p>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setStep(2)}
+                  className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg font-medium transition"
+                >
+                  Back
+                </button>
+                {ipTestResult?.accessible ? (
+                  <button
+                    onClick={() => setStep(4)}
+                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition"
+                  >
+                    Continue to Domain Setup
+                  </button>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      setDeployingFiles(true);
+                      setFilesDeployError("");
+                      setIpTestResult(null);
+                      try {
+                        const res = await fetch(`/api/websites/${currentWebsite?.id}/files`, {
+                          method: "POST",
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || "Failed to deploy files");
+                        setIpTestResult({
+                          accessible: data.siteAccessible,
+                          status: data.httpStatus,
+                        });
+                        // Refresh website data
+                        const refreshRes = await fetch(`/api/websites/${currentWebsite?.id}`);
+                        const refreshData = await refreshRes.json();
+                        if (refreshData.website) {
+                          setCurrentWebsite(refreshData.website);
+                        }
+                      } catch (error) {
+                        setFilesDeployError(error instanceof Error ? error.message : "Deployment failed");
+                      } finally {
+                        setDeployingFiles(false);
+                      }
+                    }}
+                    disabled={deployingFiles}
+                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition"
+                  >
+                    {deployingFiles ? "Deploying Files..." : "Deploy Files to Server"}
+                  </button>
+                )}
+              </div>
+
+              {/* Test Site Button */}
+              {currentWebsite?.dropletIp && (
+                <div className="flex justify-center">
+                  <button
+                    onClick={() => window.open(`http://${currentWebsite.dropletIp}/`, '_blank')}
+                    className="text-sm text-slate-400 hover:text-slate-300 underline"
+                  >
+                    Open http://{currentWebsite.dropletIp}/ in new tab
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 4: Domain */}
+          {step === 4 && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-medium text-slate-200 mb-4">Step 4: Configure Domain</h3>
                 <p className="text-slate-400 text-sm mb-4">
-                  Use a domain you already own, or search and purchase a new one.
+                  Set your domain and configure DNS to point to your server.
                 </p>
               </div>
 
@@ -12146,8 +12419,7 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                 <div className="space-y-4">
                   <div className="bg-emerald-900/20 rounded-lg p-4 border border-emerald-700/50">
                     <p className="text-emerald-300 text-sm">
-                      Enter a domain you've already purchased on Namecheap (or any registrar).
-                      After creating the server, you'll get DNS records to configure.
+                      Enter a domain you've already purchased. DNS will be auto-configured if it's in your Namecheap account.
                     </p>
                   </div>
 
@@ -12263,16 +12535,60 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                 <p className="text-red-400 text-sm">{domainError}</p>
               )}
 
+              {/* Show domain if already set */}
+              {currentWebsite?.domain && (
+                <div className="bg-emerald-900/20 rounded-lg p-4 border border-emerald-700/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-emerald-400">✓</span>
+                    <span className="text-emerald-300 font-medium">Domain Set: {currentWebsite.domain}</span>
+                  </div>
+                  <p className="text-slate-400 text-sm">Domain is configured and ready for SSL.</p>
+                </div>
+              )}
+
               <div className="flex gap-3">
                 <button
-                  onClick={() => setStep(1)}
+                  onClick={() => setStep(3)}
                   className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg font-medium transition"
                 >
                   Back
                 </button>
-                {domainMode === "existing" ? (
+                {currentWebsite?.domain ? (
                   <button
-                    onClick={() => handleSetExistingDomain(false)}
+                    onClick={async () => {
+                      setConfiguringDomain(true);
+                      setDomainError("");
+                      try {
+                        // Configure nginx and DNS for the domain
+                        const res = await fetch(`/api/websites/${currentWebsite.id}/configure-domain`, {
+                          method: "POST",
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || "Failed to configure domain");
+                        // Refresh website
+                        const refreshRes = await fetch(`/api/websites/${currentWebsite.id}`);
+                        const refreshData = await refreshRes.json();
+                        if (refreshData.website) {
+                          setCurrentWebsite(refreshData.website);
+                        }
+                        setStep(5);
+                      } catch (error) {
+                        setDomainError(error instanceof Error ? error.message : "Configuration failed");
+                      } finally {
+                        setConfiguringDomain(false);
+                      }
+                    }}
+                    disabled={configuringDomain}
+                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition"
+                  >
+                    {configuringDomain ? "Configuring DNS..." : "Configure Domain & Continue to SSL"}
+                  </button>
+                ) : domainMode === "existing" ? (
+                  <button
+                    onClick={async () => {
+                      await handleSetExistingDomain(false);
+                      // After setting domain, configure it
+                    }}
                     disabled={settingDomain || !existingDomain.trim() || showManualDnsConfirm}
                     className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition"
                   >
@@ -12291,300 +12607,152 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
             </div>
           )}
 
-          {/* Step 3: Server */}
-          {step === 3 && (
+          {/* Step 5: SSL */}
+          {step === 5 && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-medium text-slate-200 mb-4">Step 3: Create Server</h3>
+                <h3 className="text-lg font-medium text-slate-200 mb-4">Step 5: Install SSL</h3>
                 <p className="text-slate-400 text-sm mb-6">
-                  Select a server region and create your DigitalOcean droplet.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Server Region</label>
-                <select
-                  value={region}
-                  onChange={(e) => setRegion(e.target.value)}
-                  className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
-                >
-                  {regions.map((r) => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-                <h4 className="font-medium text-slate-200 mb-2">Server Specs</h4>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-slate-500">Type:</span>
-                    <span className="text-slate-300 ml-2">Basic Droplet</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500">Cost:</span>
-                    <span className="text-slate-300 ml-2">~$6/month</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500">RAM:</span>
-                    <span className="text-slate-300 ml-2">1 GB</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500">CPU:</span>
-                    <span className="text-slate-300 ml-2">1 vCPU</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500">Storage:</span>
-                    <span className="text-slate-300 ml-2">25 GB SSD</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500">OS:</span>
-                    <span className="text-slate-300 ml-2">Ubuntu 22.04</span>
-                  </div>
-                </div>
-              </div>
-
-              {dropletError && (
-                <p className="text-red-400 text-sm">{dropletError}</p>
-              )}
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setStep(2)}
-                  className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg font-medium transition"
-                >
-                  Back
-                </button>
-                <button
-                  onClick={handleCreateDroplet}
-                  disabled={creatingDroplet}
-                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition"
-                >
-                  {creatingDroplet ? "Creating Server..." : "Create Server"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 4: Deploy */}
-          {step === 4 && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-medium text-slate-200 mb-4">Step 4: Deploy Website</h3>
-                <p className="text-slate-400 text-sm mb-6">
-                  Configure DNS and deploy your website with automatic SSL.
+                  Install a free Let's Encrypt SSL certificate for your domain.
                 </p>
               </div>
 
               <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700 space-y-3">
-                <h4 className="font-medium text-slate-200">Deployment Summary</h4>
+                <h4 className="font-medium text-slate-200">Summary</h4>
                 <div className="text-sm space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="text-emerald-400">✓</span>
-                    <span className="text-slate-300">Files uploaded</span>
+                    <span className="text-slate-300">Files deployed</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400">✓</span>
+                    <span className="text-slate-300">Server: {currentWebsite?.dropletIp}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-emerald-400">✓</span>
                     <span className="text-slate-300">Domain: {currentWebsite?.domain}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-emerald-400">✓</span>
-                    <span className="text-slate-300">Server created in {currentWebsite?.dropletRegion}</span>
-                  </div>
-                  {currentWebsite?.dropletIp && (
+                </div>
+              </div>
+
+              {/* Test domain accessibility */}
+              {domainTestResult && (
+                <div className={`rounded-lg p-4 border ${domainTestResult.accessible ? "bg-emerald-900/20 border-emerald-700/50" : "bg-amber-900/20 border-amber-700/50"}`}>
+                  {domainTestResult.accessible ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-emerald-400">✓</span>
-                      <span className="text-slate-300">IP: {currentWebsite.dropletIp}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* DNS Status Message */}
-              {dnsMessage && (
-                <div className={`rounded-lg p-4 border ${dnsMessage.includes("failed") || dnsMessage.includes("error") || dnsMessage.includes("manually") ? "bg-amber-900/20 border-amber-700/50" : "bg-emerald-900/20 border-emerald-700/50"}`}>
-                  <p className={`text-sm ${dnsMessage.includes("failed") || dnsMessage.includes("error") || dnsMessage.includes("manually") ? "text-amber-300" : "text-emerald-300"}`}>
-                    {dnsMessage}
-                  </p>
-                </div>
-              )}
-
-              {/* Manual DNS Reference (collapsed) */}
-              {currentWebsite?.dropletIp && (
-                <details className="bg-slate-800/30 rounded-lg border border-slate-700">
-                  <summary className="px-4 py-3 text-sm text-slate-400 cursor-pointer hover:text-slate-300">
-                    Manual DNS Configuration (if auto-config fails)
-                  </summary>
-                  <div className="px-4 pb-4">
-                    <p className="text-slate-500 text-xs mb-3">
-                      DNS is configured automatically via Namecheap when you deploy. Use these only if needed:
-                    </p>
-                    <div className="bg-slate-900/50 rounded-lg p-3 font-mono text-xs space-y-1">
-                      <div className="flex items-center gap-3">
-                        <span className="text-slate-500 w-12">Type:</span>
-                        <span className="text-amber-300">A</span>
-                        <span className="text-slate-500 w-12 ml-4">Host:</span>
-                        <span className="text-emerald-300">@</span>
-                        <span className="text-slate-500 w-12 ml-4">Value:</span>
-                        <span className="text-emerald-300">{currentWebsite.dropletIp}</span>
-                        <button
-                          onClick={() => navigator.clipboard.writeText(currentWebsite.dropletIp!)}
-                          className="text-slate-500 hover:text-slate-300 ml-2"
-                        >
-                          Copy
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-slate-500 w-12">Type:</span>
-                        <span className="text-amber-300">A</span>
-                        <span className="text-slate-500 w-12 ml-4">Host:</span>
-                        <span className="text-emerald-300">www</span>
-                        <span className="text-slate-500 w-12 ml-4">Value:</span>
-                        <span className="text-emerald-300">{currentWebsite.dropletIp}</span>
-                      </div>
-                    </div>
-                  </div>
-                </details>
-              )}
-
-              <div className="bg-blue-900/20 rounded-lg p-4 border border-blue-700/50">
-                <h4 className="font-medium text-blue-300 mb-2">What happens when you deploy:</h4>
-                <ul className="text-sm text-blue-200/80 space-y-1 list-disc list-inside">
-                  <li>Wait for server to finish setup</li>
-                  <li>DNS automatically configured via Namecheap</li>
-                  <li>Website files deployed to server</li>
-                  <li>SSL certificate obtained (after DNS propagates)</li>
-                </ul>
-              </div>
-
-              {deployError && (
-                <p className="text-red-400 text-sm">{deployError}</p>
-              )}
-
-              {/* Progress Bar - shown during polling */}
-              {(pollingActive || deployProgress) && deployProgress && (
-                <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700 space-y-4">
-                  <h4 className="font-medium text-slate-200">Deployment Progress</h4>
-
-                  {/* Progress bar */}
-                  <div className="w-full bg-slate-700 rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full transition-all duration-500 ${
-                        deployProgress.stage === "error" ? "bg-red-500" : "bg-emerald-500"
-                      }`}
-                      style={{ width: `${deployProgress.percentage}%` }}
-                    />
-                  </div>
-
-                  {/* Stage indicator */}
-                  <div className="flex items-center gap-2">
-                    {deployProgress.stage === "live" ? (
                       <span className="text-emerald-400 text-lg">✓</span>
-                    ) : deployProgress.stage === "error" ? (
-                      <span className="text-red-400 text-lg">✗</span>
-                    ) : (
-                      <span className="animate-pulse text-amber-400">●</span>
-                    )}
-                    <span className={`text-sm ${
-                      deployProgress.stage === "error" ? "text-red-400" :
-                      deployProgress.stage === "live" ? "text-emerald-400" : "text-slate-300"
-                    }`}>
-                      {deployProgress.message}
-                    </span>
-                  </div>
-
-                  {/* Stage steps */}
-                  <div className="flex justify-between text-xs">
-                    <span className={deployProgress.percentage >= 25 ? "text-emerald-400" : "text-slate-500"}>
-                      DNS {deployProgress.percentage >= 25 ? "✓" : ""}
-                    </span>
-                    <span className={deployProgress.percentage >= 50 ? "text-emerald-400" : "text-slate-500"}>
-                      SSL {deployProgress.percentage >= 50 ? "✓" : ""}
-                    </span>
-                    <span className={deployProgress.percentage >= 75 ? "text-emerald-400" : "text-slate-500"}>
-                      Verify {deployProgress.percentage >= 75 && deployProgress.stage !== "error" ? "✓" : ""}
-                    </span>
-                    <span className={deployProgress.percentage >= 100 ? "text-emerald-400" : "text-slate-500"}>
-                      Live {deployProgress.percentage >= 100 ? "✓" : ""}
-                    </span>
-                  </div>
-
-                  {/* Polling indicator and cancel button */}
-                  {pollingActive && deployProgress.stage !== "live" && deployProgress.stage !== "error" && (
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-slate-500">
-                        Checking status every 30 seconds...
-                      </p>
-                      <button
-                        onClick={handleCancelDeployment}
-                        className="text-xs text-red-400 hover:text-red-300 transition"
-                      >
-                        Cancel
-                      </button>
+                      <div>
+                        <p className="text-emerald-300 font-medium">Domain is accessible via HTTP!</p>
+                        <p className="text-slate-400 text-sm">Ready to install SSL certificate.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-amber-300 font-medium">Domain not yet accessible (HTTP {domainTestResult.status})</p>
+                      <p className="text-slate-400 text-sm">DNS may still be propagating. This can take 5-30 minutes.</p>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* 404 Error Alert */}
-              {deployProgress?.stage === "error" && (
-                <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-4">
-                  <p className="text-red-400 font-medium">Site Not Responding</p>
-                  <p className="text-sm text-slate-400 mt-1">
-                    Your DNS is configured correctly, but the site returned an error.
-                    Check that your zip file contains an index.html or index.php file.
-                  </p>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      onClick={() => {
-                        setPollingActive(true);
-                        setDeployProgress({
-                          stage: "checking_site",
-                          message: "Rechecking site...",
-                          percentage: 75,
-                        });
-                      }}
-                      className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-sm transition"
-                    >
-                      Retry Check
-                    </button>
-                    <button
-                      onClick={() => window.open(`https://${currentWebsite?.domain}`, '_blank')}
-                      className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-sm transition"
-                    >
-                      Open Site
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {currentWebsite?.status === "LIVE" || deployProgress?.stage === "live" ? (
+              {/* Live status */}
+              {currentWebsite?.status === "LIVE" && (
                 <div className="text-center py-6">
                   <div className="text-5xl mb-4">🎉</div>
                   <h4 className="text-xl font-semibold text-emerald-400 mb-2">Website is Live!</h4>
                   <a
-                    href={`https://${currentWebsite?.domain}`}
+                    href={`https://${currentWebsite.domain}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-emerald-400 hover:text-emerald-300 underline"
                   >
-                    Visit https://{currentWebsite?.domain}
+                    Visit https://{currentWebsite.domain}
                   </a>
                 </div>
-              ) : (
+              )}
+
+              {sslError && (
+                <p className="text-red-400 text-sm">{sslError}</p>
+              )}
+
+              {currentWebsite?.status !== "LIVE" && (
                 <div className="flex gap-3">
                   <button
-                    onClick={() => setStep(3)}
+                    onClick={() => setStep(4)}
                     className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg font-medium transition"
                   >
                     Back
                   </button>
                   <button
-                    onClick={handleDeploy}
-                    disabled={deploying || pollingActive}
+                    onClick={async () => {
+                      // First check if domain is accessible
+                      setInstallingSSL(true);
+                      setSslError("");
+                      try {
+                        // Test domain HTTP access first
+                        const checkRes = await fetch(`/api/websites/${currentWebsite?.id}/configure-domain`);
+                        const checkData = await checkRes.json();
+                        setDomainTestResult({
+                          accessible: checkData.siteAccessible,
+                          status: checkData.httpStatus,
+                        });
+
+                        if (!checkData.siteAccessible) {
+                          setSslError("Domain not accessible yet. DNS may still be propagating. Try again in a few minutes.");
+                          setInstallingSSL(false);
+                          return;
+                        }
+
+                        // Install SSL
+                        const res = await fetch(`/api/websites/${currentWebsite?.id}/ssl`, {
+                          method: "POST",
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || "Failed to install SSL");
+
+                        // Refresh website
+                        const refreshRes = await fetch(`/api/websites/${currentWebsite?.id}`);
+                        const refreshData = await refreshRes.json();
+                        if (refreshData.website) {
+                          setCurrentWebsite(refreshData.website);
+                        }
+                      } catch (error) {
+                        setSslError(error instanceof Error ? error.message : "SSL installation failed");
+                      } finally {
+                        setInstallingSSL(false);
+                      }
+                    }}
+                    disabled={installingSSL}
                     className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition"
                   >
-                    {deploying ? "Deploying..." : pollingActive ? "Checking status..." : "Deploy Website"}
+                    {installingSSL ? "Installing SSL..." : "Install SSL Certificate"}
+                  </button>
+                </div>
+              )}
+
+              {/* Check DNS / Test Domain Button */}
+              {currentWebsite?.domain && currentWebsite?.status !== "LIVE" && (
+                <div className="flex justify-center gap-4">
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/websites/${currentWebsite.id}/configure-domain`);
+                        const data = await res.json();
+                        setDomainTestResult({
+                          accessible: data.siteAccessible,
+                          status: data.httpStatus,
+                        });
+                      } catch {}
+                    }}
+                    className="text-sm text-slate-400 hover:text-slate-300 underline"
+                  >
+                    Check if domain is accessible
+                  </button>
+                  <button
+                    onClick={() => window.open(`http://${currentWebsite.domain}/`, '_blank')}
+                    className="text-sm text-slate-400 hover:text-slate-300 underline"
+                  >
+                    Open http://{currentWebsite.domain}/ in new tab
                   </button>
                 </div>
               )}
