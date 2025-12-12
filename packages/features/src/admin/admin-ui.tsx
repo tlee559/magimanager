@@ -10909,6 +10909,8 @@ function WebsitesView() {
   const [loading, setLoading] = useState(true);
   const [showWizard, setShowWizard] = useState(false);
   const [selectedWebsite, setSelectedWebsite] = useState<Website | null>(null);
+  const [expandedSsh, setExpandedSsh] = useState<string | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
 
   const fetchWebsites = async () => {
     try {
@@ -11042,6 +11044,26 @@ function WebsitesView() {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {site.status === "LIVE" && (
+                      <>
+                        <button
+                          onClick={() => setExpandedSsh(expandedSsh === site.id ? null : site.id)}
+                          className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm rounded transition"
+                          title="SSH Details"
+                        >
+                          SSH
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedWebsite(site);
+                            setShowUpdateModal(true);
+                          }}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded transition"
+                        >
+                          Update Files
+                        </button>
+                      </>
+                    )}
                     {site.status !== "LIVE" && site.status !== "FAILED" && (
                       <button
                         onClick={() => {
@@ -11061,10 +11083,70 @@ function WebsitesView() {
                     </button>
                   </div>
                 </div>
+
+                {/* SSH Details Panel */}
+                {expandedSsh === site.id && site.dropletIp && (
+                  <div className="border-t border-slate-700 bg-slate-900/50 p-4">
+                    <h4 className="text-sm font-medium text-slate-300 mb-3">SSH Access</h4>
+                    <div className="space-y-3 font-mono text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-500">Command:</span>
+                        <code className="bg-slate-800 px-2 py-1 rounded text-emerald-400">
+                          ssh root@{site.dropletIp}
+                        </code>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(`ssh root@${site.dropletIp}`)}
+                          className="text-xs text-slate-400 hover:text-slate-200"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-500">Web Root:</span>
+                        <code className="bg-slate-800 px-2 py-1 rounded text-amber-400">
+                          /var/www/{site.domain}
+                        </code>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(`/var/www/${site.domain}`)}
+                          className="text-xs text-slate-400 hover:text-slate-200"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-500">SFTP:</span>
+                        <code className="bg-slate-800 px-2 py-1 rounded text-blue-400">
+                          sftp root@{site.dropletIp}
+                        </code>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(`sftp root@${site.dropletIp}`)}
+                          className="text-xs text-slate-400 hover:text-slate-200"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-3">
+                      SSH key was configured when the droplet was created. Check your DigitalOcean account for the SSH key.
+                    </p>
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
+      )}
+
+      {/* Update Files Modal */}
+      {showUpdateModal && selectedWebsite && (
+        <UpdateFilesModal
+          website={selectedWebsite}
+          onClose={() => {
+            setShowUpdateModal(false);
+            setSelectedWebsite(null);
+            fetchWebsites();
+          }}
+        />
       )}
 
       {/* Wizard Modal */}
@@ -11078,6 +11160,260 @@ function WebsitesView() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+// ============================================================================
+// UPDATE FILES MODAL - UPLOAD NEW ZIP TO EXISTING DROPLET
+// ============================================================================
+
+function UpdateFilesModal({ website, onClose }: { website: Website; onClose: () => void }) {
+  const [uploadMode, setUploadMode] = useState<"file" | "gdrive">("file");
+  const [zipFile, setZipFile] = useState<File | null>(null);
+  const [gdriveUrl, setGdriveUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [deploying, setDeploying] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [status, setStatus] = useState("");
+  const [deploymentInfo, setDeploymentInfo] = useState<{ sshCommand: string; deployCommand: string; oneLineCommand: string } | null>(null);
+
+  const handleUploadAndDeploy = async () => {
+    if (uploadMode === "file" && !zipFile) {
+      setError("Please select a zip file");
+      return;
+    }
+    if (uploadMode === "gdrive" && !gdriveUrl.trim()) {
+      setError("Please enter a Google Drive link");
+      return;
+    }
+
+    setUploading(true);
+    setError("");
+    setStatus(uploadMode === "gdrive" ? "Processing Google Drive link..." : "Uploading files...");
+
+    try {
+      // Step 1: Upload new zip file (either direct or from Google Drive)
+      let uploadRes: Response;
+      if (uploadMode === "gdrive") {
+        uploadRes = await fetch(`/api/websites/${website.id}/upload`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ gdriveUrl: gdriveUrl.trim() }),
+        });
+      } else {
+        const formData = new FormData();
+        formData.append("file", zipFile!);
+        uploadRes = await fetch(`/api/websites/${website.id}/upload`, {
+          method: "POST",
+          body: formData,
+        });
+      }
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok) throw new Error(uploadData.error || "Failed to upload file");
+
+      setUploading(false);
+      setDeploying(true);
+      setStatus("Deploying to server...");
+
+      // Step 2: Redeploy files to droplet
+      const deployRes = await fetch(`/api/websites/${website.id}/redeploy`, {
+        method: "POST",
+      });
+      const deployData = await deployRes.json();
+      if (!deployRes.ok) throw new Error(deployData.error || "Failed to deploy files");
+
+      setDeploymentInfo(deployData.deployment || null);
+      setSuccess(true);
+      setStatus("Files updated successfully!");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setUploading(false);
+      setDeploying(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-slate-900 rounded-xl border border-slate-700 w-full max-w-lg">
+        <div className="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-slate-100">Update Website Files</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-200">✕</button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+            <div className="text-sm space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400">Website:</span>
+                <span className="text-slate-200">{website.name}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400">Domain:</span>
+                <span className="text-emerald-400">{website.domain}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400">Server:</span>
+                <span className="text-slate-200">{website.dropletIp}</span>
+              </div>
+            </div>
+          </div>
+
+          {!success ? (
+            <>
+              {/* Upload Mode Toggle */}
+              <div className="flex gap-2 p-1 bg-slate-800 rounded-lg">
+                <button
+                  onClick={() => { setUploadMode("file"); setGdriveUrl(""); }}
+                  className={`flex-1 py-2 px-3 rounded text-sm font-medium transition ${
+                    uploadMode === "file"
+                      ? "bg-slate-700 text-white"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  Upload File
+                </button>
+                <button
+                  onClick={() => { setUploadMode("gdrive"); setZipFile(null); }}
+                  className={`flex-1 py-2 px-3 rounded text-sm font-medium transition ${
+                    uploadMode === "gdrive"
+                      ? "bg-slate-700 text-white"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  Google Drive Link
+                </button>
+              </div>
+
+              {uploadMode === "file" ? (
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    New Zip File
+                  </label>
+                  <div
+                    className={`border-2 border-dashed rounded-lg p-6 text-center transition ${
+                      zipFile ? "border-emerald-500 bg-emerald-900/20" : "border-slate-600 hover:border-slate-500"
+                    }`}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const file = e.dataTransfer.files[0];
+                      if (file?.name.endsWith(".zip")) setZipFile(file);
+                    }}
+                  >
+                    {zipFile ? (
+                      <div className="text-emerald-400">
+                        <span className="text-2xl">📦</span>
+                        <p className="mt-2 font-medium">{zipFile.name}</p>
+                        <p className="text-sm text-slate-400">
+                          {(zipFile.size / 1024 / 1024).toFixed(2)} MB
+                        </p>
+                        <button
+                          onClick={() => setZipFile(null)}
+                          className="mt-2 text-sm text-red-400 hover:text-red-300"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="text-slate-400">
+                        <span className="text-3xl">📁</span>
+                        <p className="mt-2">Drag & drop a .zip file or</p>
+                        <label className="mt-2 inline-block px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded cursor-pointer transition">
+                          Browse Files
+                          <input
+                            type="file"
+                            accept=".zip"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) setZipFile(file);
+                            }}
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Google Drive Link
+                  </label>
+                  <input
+                    type="url"
+                    value={gdriveUrl}
+                    onChange={(e) => setGdriveUrl(e.target.value)}
+                    placeholder="https://drive.google.com/file/d/..."
+                    className="w-full px-4 py-3 bg-slate-800 border border-slate-600 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+                  />
+                  <p className="mt-2 text-xs text-slate-500">
+                    Paste a Google Drive share link. The file must be shared publicly or with "Anyone with the link".
+                  </p>
+                </div>
+              )}
+
+              <div className="bg-amber-900/20 rounded-lg p-3 border border-amber-700/50">
+                <p className="text-amber-300 text-sm">
+                  This will replace all files in /var/www/{website.domain}/ with the contents of the new zip file.
+                </p>
+              </div>
+
+              {status && !error && (
+                <p className="text-blue-400 text-sm">{status}</p>
+              )}
+
+              {error && (
+                <p className="text-red-400 text-sm">{error}</p>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={onClose}
+                  className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg font-medium transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUploadAndDeploy}
+                  disabled={(uploadMode === "file" ? !zipFile : !gdriveUrl.trim()) || uploading || deploying}
+                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition"
+                >
+                  {uploading ? "Uploading..." : deploying ? "Deploying..." : "Upload & Deploy"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-6">
+              <div className="text-5xl mb-4">✅</div>
+              <h4 className="text-xl font-semibold text-emerald-400 mb-2">Files Updated!</h4>
+              <p className="text-slate-400 text-sm mb-4">
+                Your website has been updated with the new files.
+              </p>
+              {deploymentInfo && (
+                <details className="text-left bg-slate-800/50 rounded-lg p-4 mb-4">
+                  <summary className="cursor-pointer text-slate-300 hover:text-slate-100">
+                    Manual Deployment Command (if needed)
+                  </summary>
+                  <div className="mt-3 space-y-2 font-mono text-xs">
+                    <code className="block bg-slate-900 p-2 rounded text-emerald-400 overflow-x-auto">
+                      {deploymentInfo.oneLineCommand}
+                    </code>
+                  </div>
+                </details>
+              )}
+              <button
+                onClick={onClose}
+                className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition"
+              >
+                Close
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -11101,7 +11437,9 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
 
   // Step 1: Name & Upload
   const [name, setName] = useState(website?.name || "");
+  const [uploadMode, setUploadMode] = useState<"file" | "gdrive">("file");
   const [zipFile, setZipFile] = useState<File | null>(null);
+  const [gdriveUrl, setGdriveUrl] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
 
@@ -11142,8 +11480,12 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
       setUploadError("Please enter a website name");
       return;
     }
-    if (!zipFile && !currentWebsite?.zipFileUrl) {
+    if (uploadMode === "file" && !zipFile && !currentWebsite?.zipFileUrl) {
       setUploadError("Please select a zip file");
+      return;
+    }
+    if (uploadMode === "gdrive" && !gdriveUrl.trim() && !currentWebsite?.zipFileUrl) {
+      setUploadError("Please enter a Google Drive link");
       return;
     }
 
@@ -11166,8 +11508,17 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
         setCurrentWebsite(createData.website);
       }
 
-      // Upload zip if provided
-      if (zipFile) {
+      // Upload zip if provided (either file or Google Drive)
+      if (uploadMode === "gdrive" && gdriveUrl.trim()) {
+        const uploadRes = await fetch(`/api/websites/${websiteId}/upload`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ gdriveUrl: gdriveUrl.trim() }),
+        });
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok) throw new Error(uploadData.error || "Failed to upload from Google Drive");
+        setCurrentWebsite(uploadData.website);
+      } else if (zipFile) {
         const formData = new FormData();
         formData.append("file", zipFile);
 
@@ -11379,36 +11730,79 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">Website Files (ZIP)</label>
-                <div className="border-2 border-dashed border-slate-700 rounded-lg p-8 text-center hover:border-slate-600 transition">
-                  <input
-                    type="file"
-                    accept=".zip"
-                    onChange={(e) => setZipFile(e.target.files?.[0] || null)}
-                    className="hidden"
-                    id="zip-upload"
-                  />
-                  <label htmlFor="zip-upload" className="cursor-pointer">
-                    {zipFile ? (
-                      <div>
-                        <div className="text-4xl mb-2">📦</div>
-                        <p className="text-slate-200 font-medium">{zipFile.name}</p>
-                        <p className="text-slate-400 text-sm">{(zipFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                      </div>
-                    ) : currentWebsite?.zipFileUrl ? (
-                      <div>
-                        <div className="text-4xl mb-2">✅</div>
-                        <p className="text-emerald-400 font-medium">File already uploaded</p>
-                        <p className="text-slate-400 text-sm">Click to replace</p>
-                      </div>
-                    ) : (
-                      <div>
-                        <div className="text-4xl mb-2">📁</div>
-                        <p className="text-slate-300">Click to upload or drag and drop</p>
-                        <p className="text-slate-500 text-sm mt-1">ZIP files only, max 50MB</p>
-                      </div>
-                    )}
-                  </label>
+
+                {/* Upload Mode Toggle */}
+                <div className="flex gap-2 p-1 bg-slate-800 rounded-lg mb-4 border border-slate-700">
+                  <button
+                    onClick={() => { setUploadMode("file"); setGdriveUrl(""); }}
+                    className={`flex-1 py-2 px-3 rounded text-sm font-medium transition ${
+                      uploadMode === "file"
+                        ? "bg-slate-700 text-white"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Upload File
+                  </button>
+                  <button
+                    onClick={() => { setUploadMode("gdrive"); setZipFile(null); }}
+                    className={`flex-1 py-2 px-3 rounded text-sm font-medium transition ${
+                      uploadMode === "gdrive"
+                        ? "bg-slate-700 text-white"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Google Drive Link
+                  </button>
                 </div>
+
+                {uploadMode === "file" ? (
+                  <div className="border-2 border-dashed border-slate-700 rounded-lg p-8 text-center hover:border-slate-600 transition">
+                    <input
+                      type="file"
+                      accept=".zip"
+                      onChange={(e) => setZipFile(e.target.files?.[0] || null)}
+                      className="hidden"
+                      id="zip-upload"
+                    />
+                    <label htmlFor="zip-upload" className="cursor-pointer">
+                      {zipFile ? (
+                        <div>
+                          <div className="text-4xl mb-2">📦</div>
+                          <p className="text-slate-200 font-medium">{zipFile.name}</p>
+                          <p className="text-slate-400 text-sm">{(zipFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                        </div>
+                      ) : currentWebsite?.zipFileUrl ? (
+                        <div>
+                          <div className="text-4xl mb-2">✅</div>
+                          <p className="text-emerald-400 font-medium">File already uploaded</p>
+                          <p className="text-slate-400 text-sm">Click to replace</p>
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="text-4xl mb-2">📁</div>
+                          <p className="text-slate-300">Click to upload or drag and drop</p>
+                          <p className="text-slate-500 text-sm mt-1">ZIP files only, max 50MB</p>
+                        </div>
+                      )}
+                    </label>
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      type="url"
+                      value={gdriveUrl}
+                      onChange={(e) => setGdriveUrl(e.target.value)}
+                      placeholder="https://drive.google.com/file/d/..."
+                      className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                    />
+                    <p className="mt-2 text-xs text-slate-500">
+                      Paste a Google Drive share link. The file must be shared publicly or with "Anyone with the link".
+                    </p>
+                    {currentWebsite?.zipFileUrl && (
+                      <p className="mt-2 text-emerald-400 text-sm">✅ File already uploaded. Enter a new link to replace it.</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {uploadError && (
