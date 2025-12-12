@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       data: {
         name: name.trim(),
         status: "PENDING",
-        createdBy: auth.userId,
+        createdBy: auth.user!.id,
       },
     });
 
