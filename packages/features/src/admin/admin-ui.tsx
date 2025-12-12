@@ -1494,7 +1494,7 @@ function IdentitiesListView({
                     key={identity.id}
                     onClick={() => onSelectIdentity(identity.id)}
                     className={`border-t border-slate-800 hover:bg-slate-800/60 transition cursor-pointer ${
-                      identity.inactive ? "bg-red-950/40" : ""
+                      identity.inactive ? "!bg-red-950/50 border-l-4 border-l-red-500" : ""
                     } ${identity.archived ? "opacity-60" : ""}`}
                   >
                     <td className="px-4 py-3 text-sm text-slate-100">

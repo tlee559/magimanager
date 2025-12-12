@@ -134,6 +134,8 @@ class IdentityRepository {
     if (data.zipcode !== undefined) updateData.zipcode = data.zipcode;
     if (data.geo !== undefined) updateData.geo = data.geo;
     if (data.website !== undefined) updateData.website = data.website;
+    if (data.websiteNotes !== undefined) updateData.websiteNotes = data.websiteNotes;
+    if (data.websiteCompleted !== undefined) updateData.websiteCompleted = data.websiteCompleted;
     if (data.notes !== undefined) updateData.notes = data.notes;
     if (data.email !== undefined) updateData.email = data.email;
     if (data.emailPassword !== undefined) updateData.emailPassword = data.emailPassword;
@@ -144,6 +146,7 @@ class IdentityRepository {
     if (data.ccCvv !== undefined) updateData.ccCvv = data.ccCvv;
     if (data.ccName !== undefined) updateData.ccName = data.ccName;
     if (data.billingZip !== undefined) updateData.billingZip = data.billingZip;
+    if (data.inactive !== undefined) updateData.inactive = data.inactive;
     if (data.archived !== undefined) {
       updateData.archived = data.archived;
       updateData.archivedAt = data.archived ? new Date() : null;
