@@ -216,7 +216,8 @@ class NamecheapClient {
 
   /**
    * Purchase a domain using account's default contact info
-   * Uses credit card profile on file (Billingtype=CCPF)
+   * Note: Namecheap API requires prepaid account balance - no direct CC support
+   * Enable Auto-Refill in Namecheap account settings to auto-charge card when low
    */
   async purchaseDomain(domain: string, years: number = 1): Promise<DomainPurchaseResult> {
     try {
@@ -226,9 +227,8 @@ class NamecheapClient {
       const xml = await this.request('namecheap.domains.create', {
         DomainName: domain,
         Years: years.toString(),
-        // Use credit card on file instead of account balance
-        // Billingtype: CC = credit card, CCPF = credit card profile, FUNDS = account balance
-        Billingtype: 'CCPF',
+        // Note: Namecheap API uses account balance only - no direct credit card support
+        // You must have sufficient funds in your Namecheap account, or enable Auto-Refill
         AddFreeWhoisguard: 'yes',
         WGEnabled: 'yes',
         // Namecheap will use the account's default contact if we don't specify
