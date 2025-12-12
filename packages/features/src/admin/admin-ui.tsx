@@ -11870,6 +11870,31 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
     }
   };
 
+  // Cancel deployment - stop polling, reset to step 3
+  const handleCancelDeployment = async () => {
+    setPollingActive(false);
+    setDeployProgress(null);
+    setDeploying(false);
+    setDeployError("");
+    setDnsMessage("");
+
+    // Try to delete droplet (don't fail if it can't)
+    if (currentWebsite?.dropletId) {
+      try {
+        await fetch(`/api/websites/${currentWebsite.id}/droplet`, {
+          method: "DELETE",
+        });
+      } catch {
+        // Ignore delete errors - just reset UI
+      }
+    }
+
+    // Go back to step 3
+    setStep(3);
+    // Refresh to get latest status
+    await refreshWebsite();
+  };
+
   // Step 4: Deploy
   const handleDeploy = async () => {
     if (!currentWebsite?.id) {
@@ -12430,11 +12455,19 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                     </span>
                   </div>
 
-                  {/* Polling indicator */}
+                  {/* Polling indicator and cancel button */}
                   {pollingActive && deployProgress.stage !== "live" && deployProgress.stage !== "error" && (
-                    <p className="text-xs text-slate-500 text-center">
-                      Checking status every 30 seconds...
-                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-slate-500">
+                        Checking status every 30 seconds...
+                      </p>
+                      <button
+                        onClick={handleCancelDeployment}
+                        className="text-xs text-red-400 hover:text-red-300 transition"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
