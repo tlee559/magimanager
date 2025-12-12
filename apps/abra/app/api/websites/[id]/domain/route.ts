@@ -64,7 +64,7 @@ export async function POST(
         const baseName = cleanKeyword.split(".")[0];
         // Check both the exact domain entered AND variations with other TLDs
         const exactResult = await client.checkDomain(cleanKeyword);
-        const otherResults = await client.searchDomains(baseName, searchTlds.filter(tld => !cleanKeyword.endsWith(`.${tld}`)));
+        const otherResults = await client.searchDomains(baseName, searchTlds.filter((tld: string) => !cleanKeyword.endsWith(`.${tld}`)));
         // Put the exact domain first, then other TLD options
         results = [exactResult, ...otherResults];
       } else {
