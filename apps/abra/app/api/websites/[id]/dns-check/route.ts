@@ -48,36 +48,42 @@ export async function GET(
                        dnsResults.wwwCname === website.domain ||
                        dnsResults.wwwCname === `www.${website.domain}`;
 
-    // Check if site is reachable and get HTTP status
-    let siteReachable = false;
-    let sslValid = false;
+    // Check site reachability - HTTP first (faster), then HTTPS
+    let httpReachable = false;
+    let httpsReachable = false;
     let httpStatus: number | null = null;
     let siteError: string | null = null;
 
+    // First check HTTP (site should work on port 80 before SSL)
     try {
-      const siteResponse = await fetch(`https://${website.domain}`, {
+      const httpResponse = await fetch(`http://${website.domain}`, {
         method: "HEAD",
-        redirect: "follow",
+        redirect: "manual",
       });
-      httpStatus = siteResponse.status;
-      siteReachable = siteResponse.ok || siteResponse.status === 301 || siteResponse.status === 302;
-      sslValid = true; // If fetch succeeded over HTTPS, SSL is valid
-    } catch (e) {
-      // Try HTTP if HTTPS fails
+      httpStatus = httpResponse.status;
+      httpReachable = httpResponse.ok || httpResponse.status === 301 || httpResponse.status === 302;
+    } catch (httpError) {
+      httpReachable = false;
+      siteError = httpError instanceof Error ? httpError.message : "HTTP connection failed";
+    }
+
+    // Then check HTTPS (only if HTTP works, to see if SSL is ready)
+    if (httpReachable) {
       try {
-        const httpResponse = await fetch(`http://${website.domain}`, {
+        const httpsResponse = await fetch(`https://${website.domain}`, {
           method: "HEAD",
-          redirect: "manual", // Don't follow redirects to avoid SSL issues
+          redirect: "follow",
         });
-        httpStatus = httpResponse.status;
-        siteReachable = httpResponse.ok || httpResponse.status === 301 || httpResponse.status === 302;
-      } catch (httpError) {
-        siteReachable = false;
-        siteError = httpError instanceof Error ? httpError.message : "Connection failed";
+        httpsReachable = httpsResponse.ok || httpsResponse.status === 301 || httpsResponse.status === 302;
+        if (httpsResponse.status >= 400) {
+          httpStatus = httpsResponse.status; // Update status if HTTPS returns error
+        }
+      } catch {
+        httpsReachable = false; // SSL not ready yet, but that's okay
       }
     }
 
-    // Calculate progress stage
+    // Calculate progress stage - prioritize HTTP working first
     let progress: { stage: string; message: string; percentage: number };
 
     if (!aRecordCorrect) {
@@ -86,30 +92,29 @@ export async function GET(
         message: "DNS propagating... This can take up to 30 minutes.",
         percentage: 25,
       };
-    } else if (!sslValid) {
+    } else if (!httpReachable) {
       progress = {
-        stage: "ssl_pending",
-        message: "DNS configured! Installing SSL certificate...",
+        stage: "server_starting",
+        message: "DNS configured! Waiting for server to respond...",
         percentage: 50,
       };
     } else if (httpStatus && httpStatus >= 400) {
-      // DNS correct, SSL valid, but site returns error
       progress = {
         stage: "error",
         message: `Site returned ${httpStatus}. Check your files.`,
         percentage: 75,
       };
-    } else if (siteReachable) {
+    } else if (!httpsReachable) {
       progress = {
-        stage: "live",
-        message: "Website is live!",
-        percentage: 100,
+        stage: "ssl_pending",
+        message: "Site working! Installing SSL certificate...",
+        percentage: 75,
       };
     } else {
       progress = {
-        stage: "checking_site",
-        message: "SSL installed! Verifying site...",
-        percentage: 75,
+        stage: "live",
+        message: "Website is live with SSL!",
+        percentage: 100,
       };
     }
 
@@ -125,13 +130,13 @@ export async function GET(
         nameservers: dnsResults.nameservers,
       },
       site: {
-        reachable: siteReachable,
-        sslValid,
+        httpReachable,
+        httpsReachable,
         httpStatus,
         error: siteError,
       },
       progress,
-      healthy: aRecordCorrect && siteReachable,
+      healthy: aRecordCorrect && httpReachable,
     });
   } catch (error) {
     console.error("DNS check failed:", error);
