@@ -11124,7 +11124,6 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
   // Step 4: Deploy
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState("");
-  const [configuringDns, setConfiguringDns] = useState(false);
   const [dnsMessage, setDnsMessage] = useState("");
 
   const regions = [
@@ -11293,25 +11292,6 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
   };
 
   // Step 4: Deploy
-  // Configure DNS via Namecheap API
-  const handleConfigureDns = async () => {
-    setConfiguringDns(true);
-    setDnsMessage("");
-
-    try {
-      const res = await fetch(`/api/websites/${currentWebsite?.id}/dns`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "DNS configuration failed");
-      setDnsMessage(data.message || "DNS configured successfully!");
-    } catch (error) {
-      setDnsMessage(error instanceof Error ? error.message : "DNS configuration failed");
-    } finally {
-      setConfiguringDns(false);
-    }
-  };
-
   const handleDeploy = async () => {
     setDeploying(true);
     setDeployError("");
@@ -11326,7 +11306,9 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
 
       // Show DNS status message
       if (data.dnsConfigured) {
-        setDnsMessage("DNS auto-configured via Namecheap!");
+        setDnsMessage("✓ DNS auto-configured via Namecheap!");
+      } else if (data.success) {
+        setDnsMessage("DNS needs to be configured manually - see instructions below.");
       }
 
       // If successful, mark as live
@@ -11704,75 +11686,60 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                 </div>
               </div>
 
-              {/* DNS Configuration */}
-              {currentWebsite?.dropletIp && (
-                <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-medium text-slate-200">DNS Configuration</h4>
-                    <button
-                      onClick={handleConfigureDns}
-                      disabled={configuringDns}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white text-sm rounded-lg font-medium transition"
-                    >
-                      {configuringDns ? "Configuring..." : "Auto-Configure DNS"}
-                    </button>
-                  </div>
-
-                  {dnsMessage && (
-                    <p className={`text-sm mb-3 ${dnsMessage.includes("failed") || dnsMessage.includes("error") ? "text-red-400" : "text-emerald-400"}`}>
-                      {dnsMessage}
-                    </p>
-                  )}
-
-                  <p className="text-slate-400 text-sm mb-3">
-                    Click "Auto-Configure DNS" to automatically set A records via Namecheap API,
-                    or manually configure in your registrar:
-                  </p>
-                  <div className="bg-slate-900/50 rounded-lg p-3 font-mono text-sm space-y-2">
-                    <div className="flex items-center gap-4">
-                      <span className="text-slate-500 w-16">Type:</span>
-                      <span className="text-amber-300">A Record</span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-slate-500 w-16">Host:</span>
-                      <span className="text-emerald-300">@</span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-slate-500 w-16">Value:</span>
-                      <span className="text-emerald-300">{currentWebsite.dropletIp}</span>
-                      <button
-                        onClick={() => navigator.clipboard.writeText(currentWebsite.dropletIp!)}
-                        className="text-xs text-slate-400 hover:text-slate-200"
-                      >
-                        Copy
-                      </button>
-                    </div>
-                    <div className="border-t border-slate-700 my-2"></div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-slate-500 w-16">Type:</span>
-                      <span className="text-amber-300">A Record</span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-slate-500 w-16">Host:</span>
-                      <span className="text-emerald-300">www</span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-slate-500 w-16">Value:</span>
-                      <span className="text-emerald-300">{currentWebsite.dropletIp}</span>
-                    </div>
-                  </div>
-                  <p className="text-slate-500 text-xs mt-3">
-                    DNS propagation can take 5-30 minutes.
+              {/* DNS Status Message */}
+              {dnsMessage && (
+                <div className={`rounded-lg p-4 border ${dnsMessage.includes("failed") || dnsMessage.includes("error") || dnsMessage.includes("manually") ? "bg-amber-900/20 border-amber-700/50" : "bg-emerald-900/20 border-emerald-700/50"}`}>
+                  <p className={`text-sm ${dnsMessage.includes("failed") || dnsMessage.includes("error") || dnsMessage.includes("manually") ? "text-amber-300" : "text-emerald-300"}`}>
+                    {dnsMessage}
                   </p>
                 </div>
+              )}
+
+              {/* Manual DNS Reference (collapsed) */}
+              {currentWebsite?.dropletIp && (
+                <details className="bg-slate-800/30 rounded-lg border border-slate-700">
+                  <summary className="px-4 py-3 text-sm text-slate-400 cursor-pointer hover:text-slate-300">
+                    Manual DNS Configuration (if auto-config fails)
+                  </summary>
+                  <div className="px-4 pb-4">
+                    <p className="text-slate-500 text-xs mb-3">
+                      DNS is configured automatically via Namecheap when you deploy. Use these only if needed:
+                    </p>
+                    <div className="bg-slate-900/50 rounded-lg p-3 font-mono text-xs space-y-1">
+                      <div className="flex items-center gap-3">
+                        <span className="text-slate-500 w-12">Type:</span>
+                        <span className="text-amber-300">A</span>
+                        <span className="text-slate-500 w-12 ml-4">Host:</span>
+                        <span className="text-emerald-300">@</span>
+                        <span className="text-slate-500 w-12 ml-4">Value:</span>
+                        <span className="text-emerald-300">{currentWebsite.dropletIp}</span>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(currentWebsite.dropletIp!)}
+                          className="text-slate-500 hover:text-slate-300 ml-2"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-slate-500 w-12">Type:</span>
+                        <span className="text-amber-300">A</span>
+                        <span className="text-slate-500 w-12 ml-4">Host:</span>
+                        <span className="text-emerald-300">www</span>
+                        <span className="text-slate-500 w-12 ml-4">Value:</span>
+                        <span className="text-emerald-300">{currentWebsite.dropletIp}</span>
+                      </div>
+                    </div>
+                  </div>
+                </details>
               )}
 
               <div className="bg-blue-900/20 rounded-lg p-4 border border-blue-700/50">
                 <h4 className="font-medium text-blue-300 mb-2">What happens when you deploy:</h4>
                 <ul className="text-sm text-blue-200/80 space-y-1 list-disc list-inside">
                   <li>Wait for server to finish setup</li>
-                  <li>Website files will be deployed to server</li>
-                  <li>SSL certificate will be obtained (requires DNS to be configured)</li>
+                  <li>DNS automatically configured via Namecheap</li>
+                  <li>Website files deployed to server</li>
+                  <li>SSL certificate obtained (after DNS propagates)</li>
                 </ul>
               </div>
 
