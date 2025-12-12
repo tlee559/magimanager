@@ -90,8 +90,10 @@ export async function POST(
 
       // Verify domain exists in Namecheap account (if Namecheap is configured)
       let domainVerified = false;
+      let namecheapConfigured = false;
       try {
         const ncClient = await getNamecheapClientFromSettings();
+        namecheapConfigured = true;
         const accountDomains = await ncClient.listDomains();
         const foundDomain = accountDomains.find(
           (d) => d.domain.toLowerCase() === cleanDomain
@@ -106,9 +108,22 @@ export async function POST(
             );
           }
         } else {
-          // Domain not found in Namecheap - warn user but allow to proceed
-          // They might have the domain at another registrar
-          console.log(`Domain ${cleanDomain} not found in Namecheap account - may be at another registrar`);
+          // Domain not found in Namecheap - check if user confirmed manual DNS
+          const { confirmManualDns } = body;
+          if (!confirmManualDns) {
+            // Return special response asking user to confirm
+            return NextResponse.json(
+              {
+                error: `Domain "${cleanDomain}" was not found in your Namecheap account.`,
+                notInNamecheap: true,
+                domain: cleanDomain,
+                message: "This domain is not in your Namecheap account. You can either purchase it first, or proceed with manual DNS configuration at your current registrar."
+              },
+              { status: 400 }
+            );
+          }
+          // User confirmed they want to proceed with manual DNS
+          console.log(`Domain ${cleanDomain} not in Namecheap - user confirmed manual DNS`);
         }
       } catch (error) {
         // Namecheap not configured - that's okay, DNS can be managed manually

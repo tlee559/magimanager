@@ -11620,6 +11620,7 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
   const [purchasingDomain, setPurchasingDomain] = useState(false);
   const [settingDomain, setSettingDomain] = useState(false);
   const [domainError, setDomainError] = useState("");
+  const [showManualDnsConfirm, setShowManualDnsConfirm] = useState(false); // For domains not in Namecheap
 
   // Step 3: Server
   const [region, setRegion] = useState("nyc1");
@@ -11816,7 +11817,7 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
   };
 
   // Step 2: Set existing domain (no purchase)
-  const handleSetExistingDomain = async () => {
+  const handleSetExistingDomain = async (confirmManualDns = false) => {
     const domain = existingDomain.trim().toLowerCase();
     if (!domain) {
       setDomainError("Please enter a domain");
@@ -11830,14 +11831,24 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
 
     setSettingDomain(true);
     setDomainError("");
+    setShowManualDnsConfirm(false);
 
     try {
       const res = await fetch(`/api/websites/${currentWebsite?.id}/domain`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "set", domain }),
+        body: JSON.stringify({ action: "set", domain, confirmManualDns }),
       });
       const data = await res.json();
+
+      // Check if domain wasn't found in Namecheap
+      if (!res.ok && data.notInNamecheap) {
+        setShowManualDnsConfirm(true);
+        setDomainError(data.message || "Domain not found in Namecheap");
+        setSettingDomain(false);
+        return;
+      }
+
       if (!res.ok) throw new Error(data.error || "Failed to set domain");
       setCurrentWebsite(data.website);
       setStep(3);
@@ -12146,7 +12157,7 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                       type="text"
                       value={existingDomain}
                       onChange={(e) => setExistingDomain(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleSetExistingDomain()}
+                      onKeyDown={(e) => e.key === "Enter" && handleSetExistingDomain(false)}
                       placeholder="example.com"
                       className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                     />
@@ -12216,7 +12227,39 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                 </div>
               )}
 
-              {domainError && (
+              {/* Domain not in Namecheap - offer to purchase or continue manually */}
+              {showManualDnsConfirm && (
+                <div className="bg-amber-900/30 border border-amber-500/50 rounded-lg p-4 space-y-3">
+                  <p className="text-amber-400 font-medium">Domain Not Found in Namecheap</p>
+                  <p className="text-slate-300 text-sm">
+                    "{existingDomain}" is not in your Namecheap account. Would you like to:
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        // Switch to purchase mode and search for this domain
+                        setShowManualDnsConfirm(false);
+                        setDomainError("");
+                        setDomainMode("search");
+                        setDomainKeyword(existingDomain.split(".")[0]); // Use keyword from domain
+                        handleSearchDomains();
+                      }}
+                      className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition text-sm"
+                    >
+                      Purchase This Domain
+                    </button>
+                    <button
+                      onClick={() => handleSetExistingDomain(true)}
+                      disabled={settingDomain}
+                      className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg font-medium transition text-sm"
+                    >
+                      {settingDomain ? "..." : "I'll Configure DNS Manually"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {domainError && !showManualDnsConfirm && (
                 <p className="text-red-400 text-sm">{domainError}</p>
               )}
 
@@ -12229,11 +12272,11 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                 </button>
                 {domainMode === "existing" ? (
                   <button
-                    onClick={handleSetExistingDomain}
-                    disabled={settingDomain || !existingDomain.trim()}
+                    onClick={() => handleSetExistingDomain(false)}
+                    disabled={settingDomain || !existingDomain.trim() || showManualDnsConfirm}
                     className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition"
                   >
-                    {settingDomain ? "Setting Domain..." : `Use ${existingDomain.trim() || "Domain"}`}
+                    {settingDomain ? "Checking Domain..." : `Use ${existingDomain.trim() || "Domain"}`}
                   </button>
                 ) : (
                   <button
