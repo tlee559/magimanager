@@ -11811,14 +11811,24 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
 
   // Step 4: Deploy
   const handleDeploy = async () => {
+    if (!currentWebsite?.id) {
+      setDeployError("No website selected");
+      return;
+    }
+
     setDeploying(true);
     setDeployError("");
+    setDnsMessage("");
 
     try {
-      const res = await fetch(`/api/websites/${currentWebsite?.id}/deploy`, {
+      console.log("Starting deployment for website:", currentWebsite.id);
+      const res = await fetch(`/api/websites/${currentWebsite.id}/deploy`, {
         method: "POST",
       });
+      console.log("Deploy response status:", res.status);
       const data = await res.json();
+      console.log("Deploy response data:", data);
+
       if (!res.ok) throw new Error(data.error || "Deployment failed");
       setCurrentWebsite(data.website);
 
@@ -11831,13 +11841,19 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
 
       // If successful, mark as live
       if (data.success) {
-        await fetch(`/api/websites/${currentWebsite?.id}/deploy`, {
+        const patchRes = await fetch(`/api/websites/${currentWebsite.id}/deploy`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sslEnabled: true }),
         });
+        const patchData = await patchRes.json();
+        console.log("Patch response:", patchData);
+        if (patchData.website) {
+          setCurrentWebsite(patchData.website);
+        }
       }
     } catch (error) {
+      console.error("Deploy error:", error);
       setDeployError(error instanceof Error ? error.message : "Deployment failed");
     } finally {
       setDeploying(false);
