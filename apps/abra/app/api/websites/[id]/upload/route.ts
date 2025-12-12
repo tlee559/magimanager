@@ -26,47 +26,93 @@ function extractGoogleDriveFileId(url: string): string | null {
 
 /**
  * Download file from Google Drive using direct download URL
+ * Google Drive requires files to be shared with "Anyone with the link" to download without auth
  */
 async function downloadFromGoogleDrive(fileId: string): Promise<{ buffer: ArrayBuffer; size: number }> {
-  // Google Drive direct download URL
+  // Try the export download URL first (works for most files)
   const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+
+  console.log(`Attempting to download from Google Drive: ${fileId}`);
 
   const response = await fetch(downloadUrl, {
     redirect: "follow",
     headers: {
-      "User-Agent": "Mozilla/5.0 (compatible; MagiManager/1.0)",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Accept": "*/*",
     },
   });
 
+  console.log(`Google Drive response status: ${response.status}, content-type: ${response.headers.get("content-type")}`);
+
   if (!response.ok) {
-    throw new Error(`Failed to download from Google Drive: ${response.status}`);
+    if (response.status === 404) {
+      throw new Error("Google Drive file not found. Check that the file ID is correct.");
+    }
+    throw new Error(`Google Drive returned error ${response.status}. Make sure the file is shared publicly.`);
   }
 
-  // Check if we got a virus scan warning page (for larger files)
+  // Check if we got a virus scan warning page (for larger files) or access denied page
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("text/html")) {
-    // Google shows a confirmation page for larger files
-    // Try to extract the confirmation token and retry
     const html = await response.text();
+    console.log(`Got HTML response, length: ${html.length}`);
+
+    // Check for access denied / not shared
+    if (html.includes("Google Drive - Access Denied") || html.includes("You need access") || html.includes("Request access")) {
+      throw new Error("Access denied. Make sure the file is shared with 'Anyone with the link' in Google Drive sharing settings.");
+    }
+
+    // Check for file not found
+    if (html.includes("isn't available") || html.includes("file you requested does not exist")) {
+      throw new Error("Google Drive file not found or has been deleted.");
+    }
+
+    // Google shows a confirmation page for larger files (virus scan warning)
+    // Try to extract the confirmation token and retry
     const confirmMatch = html.match(/confirm=([0-9A-Za-z_-]+)/);
+    const uuidMatch = html.match(/uuid=([0-9A-Za-z_-]+)/);
+
     if (confirmMatch) {
-      const confirmUrl = `https://drive.google.com/uc?export=download&confirm=${confirmMatch[1]}&id=${fileId}`;
+      console.log("Found virus scan confirmation page, retrying with token...");
+      let confirmUrl = `https://drive.google.com/uc?export=download&confirm=${confirmMatch[1]}&id=${fileId}`;
+      if (uuidMatch) {
+        confirmUrl += `&uuid=${uuidMatch[1]}`;
+      }
+
       const confirmResponse = await fetch(confirmUrl, {
         redirect: "follow",
         headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; MagiManager/1.0)",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "*/*",
         },
       });
+
       if (!confirmResponse.ok) {
-        throw new Error("Failed to download large file from Google Drive");
+        throw new Error("Failed to download large file from Google Drive after virus scan confirmation.");
       }
+
+      const confirmContentType = confirmResponse.headers.get("content-type") || "";
+      if (confirmContentType.includes("text/html")) {
+        throw new Error("Google Drive file could not be downloaded. It may require authentication or is too large for direct download.");
+      }
+
       const buffer = await confirmResponse.arrayBuffer();
+      console.log(`Downloaded ${buffer.byteLength} bytes after confirmation`);
       return { buffer, size: buffer.byteLength };
     }
-    throw new Error("Google Drive file is not accessible. Make sure it's shared publicly.");
+
+    // If we can't find a confirm token, the file might not be properly shared
+    throw new Error("Google Drive file is not accessible. Make sure it's shared with 'Anyone with the link' (not 'Restricted').");
   }
 
   const buffer = await response.arrayBuffer();
+  console.log(`Downloaded ${buffer.byteLength} bytes directly`);
+
+  // Sanity check - if the file is tiny, it might be an error page
+  if (buffer.byteLength < 100) {
+    throw new Error("Downloaded file is too small. The Google Drive link may be invalid or the file may not be shared properly.");
+  }
+
   return { buffer, size: buffer.byteLength };
 }
 
@@ -220,6 +266,8 @@ export async function POST(
   } catch (error) {
     console.error("Failed to upload file:", error);
 
+    const errorMessage = error instanceof Error ? error.message : "Upload failed";
+
     // Try to update status to failed
     try {
       const { id } = await params;
@@ -227,7 +275,7 @@ export async function POST(
         where: { id },
         data: {
           status: "FAILED",
-          errorMessage: error instanceof Error ? error.message : "Upload failed",
+          errorMessage,
         },
       });
     } catch {
@@ -235,7 +283,7 @@ export async function POST(
     }
 
     return NextResponse.json(
-      { error: "Failed to upload file" },
+      { error: errorMessage },
       { status: 500 }
     );
   }
