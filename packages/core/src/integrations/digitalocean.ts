@@ -340,8 +340,9 @@ export function generateWebsiteUserData(options: {
   domain: string;
   zipUrl?: string;       // URL to download website zip from
   cloakerZipUrl?: string; // URL to download np/ cloaker from
+  sshPassword?: string;  // Root password for SSH access
 }): string {
-  const { domain, zipUrl, cloakerZipUrl } = options;
+  const { domain, zipUrl, cloakerZipUrl, sshPassword } = options;
 
   return `#!/bin/bash
 set -e
@@ -349,6 +350,15 @@ set -e
 # Log all output
 exec > >(tee /var/log/user-data.log) 2>&1
 echo "Starting server setup for ${domain}..."
+
+${sshPassword ? `
+# Set root password and enable password authentication
+echo "root:${sshPassword}" | chpasswd
+sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+systemctl restart sshd
+echo "SSH password authentication enabled."
+` : '# No SSH password provided - SSH key only'}
 
 # Update system
 apt-get update

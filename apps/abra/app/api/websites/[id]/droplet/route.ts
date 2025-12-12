@@ -1,12 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/api-auth";
+import crypto from "crypto";
 import {
   getDigitalOceanClientFromSettings,
   generateWebsiteUserData,
   DROPLET_SIZES,
   DEFAULT_DROPLET_IMAGE,
 } from "@magimanager/core";
+
+/**
+ * Generate a secure random password for SSH access
+ */
+function generateSecurePassword(length: number = 16): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%&*';
+  let password = '';
+  const randomBytes = crypto.randomBytes(length);
+  for (let i = 0; i < length; i++) {
+    password += chars[randomBytes[i] % chars.length];
+  }
+  return password;
+}
 
 // GET /api/websites/[id]/droplet - Get droplet status
 export async function GET(
@@ -108,12 +122,16 @@ export async function POST(
       );
     }
 
+    // Generate SSH password
+    const sshPassword = generateSecurePassword(16);
+
     // Update status
     await prisma.website.update({
       where: { id },
       data: {
         status: "DROPLET_CREATING",
         statusMessage: "Creating server...",
+        sshPassword, // Store the password
       },
     });
 
@@ -121,6 +139,7 @@ export async function POST(
     const userData = generateWebsiteUserData({
       domain: website.domain,
       zipUrl: website.zipFileUrl || undefined,
+      sshPassword, // Pass password to cloud-init
       // TODO: Upload cloaker zip to blob and provide URL
     });
 

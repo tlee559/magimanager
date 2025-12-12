@@ -1554,6 +1554,7 @@ model Website {
   dropletIp           String?       // Droplet public IP
   dropletRegion       String?       // e.g., "nyc1"
   dropletSize         String?       // e.g., "s-1vcpu-1gb"
+  sshPassword         String?       // Generated SSH root password
 
   // Status
   status              WebsiteStatus @default(PENDING)

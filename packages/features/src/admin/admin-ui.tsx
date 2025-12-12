@@ -10867,6 +10867,7 @@ type Website = {
   dropletIp: string | null;
   dropletRegion: string | null;
   dropletSize: string | null;
+  sshPassword: string | null;
   status: string;
   statusMessage: string | null;
   errorMessage: string | null;
@@ -11158,6 +11159,20 @@ function WebsitesView() {
                           Copy
                         </button>
                       </div>
+                      {site.sshPassword && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-500">Password:</span>
+                          <code className="bg-slate-800 px-2 py-1 rounded text-rose-400">
+                            {site.sshPassword}
+                          </code>
+                          <button
+                            onClick={() => navigator.clipboard.writeText(site.sshPassword!)}
+                            className="text-xs text-slate-400 hover:text-slate-200"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      )}
                       <div className="flex items-center gap-2">
                         <span className="text-slate-500">Web Root:</span>
                         <code className="bg-slate-800 px-2 py-1 rounded text-amber-400">
@@ -11183,9 +11198,15 @@ function WebsitesView() {
                         </button>
                       </div>
                     </div>
-                    <p className="text-xs text-slate-500 mt-3">
-                      SSH key was configured when the droplet was created. Check your DigitalOcean account for the SSH key.
-                    </p>
+                    {site.sshPassword ? (
+                      <p className="text-xs text-slate-500 mt-3">
+                        Use the password above to connect via SSH. Username is <span className="text-slate-300">root</span>.
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-500 mt-3">
+                        SSH key was configured when the droplet was created. Check your DigitalOcean account for the SSH key.
+                      </p>
+                    )}
                   </div>
                 )}
 
