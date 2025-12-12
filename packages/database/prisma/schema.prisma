@@ -222,6 +222,12 @@ model AppSettings {
   telegramBotToken      String?  // Telegram bot token from @BotFather
   telegramChatId        String?  // Telegram chat/group ID for notifications
 
+  // 1-Click Websites API Keys
+  namecheapApiKey       String?
+  namecheapUsername     String?
+  namecheapWhitelistIp  String?
+  digitaloceanApiKey    String?
+
   // Decommission Alert Settings
   decommissionAlertOnAccountDeath    Boolean @default(true)  // Alert when last account is archived/deleted/banned
   decommissionAlertOnIdentityArchive Boolean @default(true)  // Alert when identity is archived directly
@@ -1510,4 +1516,71 @@ model AdSpyJob {
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+}
+
+// ============================================================================
+// 1-CLICK WEBSITES
+// ============================================================================
+
+enum WebsiteStatus {
+  PENDING           // Initial state
+  UPLOADING         // Zip file being uploaded
+  DOMAIN_PENDING    // Searching/purchasing domain
+  DOMAIN_PURCHASED  // Domain purchased, DNS pending
+  DROPLET_CREATING  // Creating DigitalOcean droplet
+  DROPLET_READY     // Droplet created, waiting for boot
+  DEPLOYING         // Uploading files, configuring nginx
+  SSL_PENDING       // Running certbot
+  LIVE              // Website is live
+  FAILED            // Deployment failed
+}
+
+model Website {
+  id                  String        @id @default(cuid())
+  name                String        // Display name
+
+  // File upload
+  zipFileUrl          String?       // Vercel Blob URL for uploaded zip
+  zipFileSize         Int?          // Size in bytes
+
+  // Domain info
+  domain              String?       // Purchased domain (e.g., example.com)
+  domainOrderId       String?       // Namecheap order ID
+  domainPurchasePrice Decimal?      @db.Decimal(10, 2) // Price paid
+
+  // DigitalOcean info
+  dropletId           String?       // DigitalOcean droplet ID
+  dropletIp           String?       // Droplet public IP
+  dropletRegion       String?       // e.g., "nyc1"
+  dropletSize         String?       // e.g., "s-1vcpu-1gb"
+
+  // Status
+  status              WebsiteStatus @default(PENDING)
+  statusMessage       String?       // Human-readable status message
+  errorMessage        String?       @db.Text
+  sslEnabled          Boolean       @default(false)
+
+  // Timestamps
+  deployedAt          DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  createdBy           String        // User ID
+
+  // Relations
+  activities          WebsiteActivity[]
+
+  @@index([status])
+  @@index([createdBy])
+}
+
+model WebsiteActivity {
+  id          String   @id @default(cuid())
+  websiteId   String
+  action      String   // "CREATED", "ZIP_UPLOADED", "DOMAIN_PURCHASED", etc.
+  details     String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  website     Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@index([websiteId])
 }

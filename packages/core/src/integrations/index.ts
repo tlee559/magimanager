@@ -65,3 +65,29 @@ export {
   type GoLoginFingerprint,
   type BrowserLaunchResult,
 } from "./gologin";
+
+// Namecheap Domain Registration
+export {
+  createNamecheapClient,
+  getNamecheapClientFromSettings,
+  type NamecheapConfig,
+  type DomainAvailability,
+  type DomainPurchaseResult,
+  type DnsRecord,
+} from "./namecheap";
+
+// DigitalOcean Droplets
+export {
+  createDigitalOceanClient,
+  getDigitalOceanClientFromSettings,
+  generateWebsiteUserData,
+  generateBasicServerUserData,
+  DROPLET_SIZES,
+  DROPLET_REGIONS,
+  DEFAULT_DROPLET_IMAGE,
+  type DropletConfig,
+  type Droplet,
+  type SshKey,
+  type Region,
+  type Size,
+} from "./digitalocean";

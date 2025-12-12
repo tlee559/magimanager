@@ -1,0 +1,248 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
+import { requireAdmin } from "@/lib/api-auth";
+import {
+  getDigitalOceanClientFromSettings,
+  generateWebsiteUserData,
+  DROPLET_SIZES,
+  DEFAULT_DROPLET_IMAGE,
+} from "@magimanager/core";
+
+// GET /api/websites/[id]/droplet - Get droplet status
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await requireAdmin();
+  if (!auth.authorized) return auth.error;
+
+  try {
+    const { id } = await params;
+
+    const website = await prisma.website.findUnique({
+      where: { id },
+    });
+
+    if (!website) {
+      return NextResponse.json(
+        { error: "Website not found" },
+        { status: 404 }
+      );
+    }
+
+    if (!website.dropletId) {
+      return NextResponse.json(
+        { error: "No droplet associated with this website" },
+        { status: 400 }
+      );
+    }
+
+    // Get DigitalOcean client
+    const client = await getDigitalOceanClientFromSettings();
+    const droplet = await client.getDroplet(parseInt(website.dropletId));
+
+    return NextResponse.json({
+      droplet,
+      website: {
+        id: website.id,
+        status: website.status,
+        statusMessage: website.statusMessage,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to get droplet status:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to get droplet status" },
+      { status: 500 }
+    );
+  }
+}
+
+// POST /api/websites/[id]/droplet - Create droplet
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await requireAdmin();
+  if (!auth.authorized) return auth.error;
+
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    const { region = "nyc1", size = "s-1vcpu-1gb" } = body;
+
+    // Check website exists and has domain
+    const website = await prisma.website.findUnique({
+      where: { id },
+    });
+
+    if (!website) {
+      return NextResponse.json(
+        { error: "Website not found" },
+        { status: 404 }
+      );
+    }
+
+    if (!website.domain) {
+      return NextResponse.json(
+        { error: "Domain must be purchased before creating droplet" },
+        { status: 400 }
+      );
+    }
+
+    if (website.dropletId) {
+      return NextResponse.json(
+        { error: "Droplet already exists for this website" },
+        { status: 400 }
+      );
+    }
+
+    // Get DigitalOcean client
+    let client;
+    try {
+      client = await getDigitalOceanClientFromSettings();
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "DigitalOcean not configured" },
+        { status: 400 }
+      );
+    }
+
+    // Update status
+    await prisma.website.update({
+      where: { id },
+      data: {
+        status: "DROPLET_CREATING",
+        statusMessage: "Creating server...",
+      },
+    });
+
+    // Generate user-data script
+    const userData = generateWebsiteUserData({
+      domain: website.domain,
+      zipUrl: website.zipFileUrl || undefined,
+      // TODO: Upload cloaker zip to blob and provide URL
+    });
+
+    // Create droplet
+    const droplet = await client.createDroplet({
+      name: website.domain.replace(/\./g, "-"),
+      region,
+      size,
+      image: DEFAULT_DROPLET_IMAGE,
+      userData,
+      tags: ["1-click-website", `website-${id}`],
+    });
+
+    // Update website with droplet info
+    const updated = await prisma.website.update({
+      where: { id },
+      data: {
+        dropletId: droplet.id.toString(),
+        dropletRegion: region,
+        dropletSize: size,
+        status: "DROPLET_CREATING",
+        statusMessage: "Server created, waiting for it to become active...",
+      },
+    });
+
+    // Log activity
+    await prisma.websiteActivity.create({
+      data: {
+        websiteId: id,
+        action: "DROPLET_CREATED",
+        details: `Created droplet #${droplet.id} in ${region} (${size})`,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      website: updated,
+      droplet,
+    });
+  } catch (error) {
+    console.error("Failed to create droplet:", error);
+
+    // Try to update status to failed
+    try {
+      const { id } = await params;
+      await prisma.website.update({
+        where: { id },
+        data: {
+          status: "FAILED",
+          errorMessage: error instanceof Error ? error.message : "Droplet creation failed",
+        },
+      });
+    } catch {
+      // Ignore update error
+    }
+
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to create droplet" },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/websites/[id]/droplet - Delete droplet
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await requireAdmin();
+  if (!auth.authorized) return auth.error;
+
+  try {
+    const { id } = await params;
+
+    const website = await prisma.website.findUnique({
+      where: { id },
+    });
+
+    if (!website) {
+      return NextResponse.json(
+        { error: "Website not found" },
+        { status: 404 }
+      );
+    }
+
+    if (!website.dropletId) {
+      return NextResponse.json(
+        { error: "No droplet associated with this website" },
+        { status: 400 }
+      );
+    }
+
+    // Get DigitalOcean client and delete droplet
+    const client = await getDigitalOceanClientFromSettings();
+    await client.deleteDroplet(parseInt(website.dropletId));
+
+    // Update website
+    await prisma.website.update({
+      where: { id },
+      data: {
+        dropletId: null,
+        dropletIp: null,
+        status: "DOMAIN_PURCHASED",
+        statusMessage: "Droplet deleted. You can create a new one.",
+      },
+    });
+
+    // Log activity
+    await prisma.websiteActivity.create({
+      data: {
+        websiteId: id,
+        action: "DROPLET_DELETED",
+        details: `Deleted droplet #${website.dropletId}`,
+      },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Failed to delete droplet:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to delete droplet" },
+      { status: 500 }
+    );
+  }
+}

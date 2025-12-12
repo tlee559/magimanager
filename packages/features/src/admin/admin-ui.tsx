@@ -203,7 +203,7 @@ type Notification = {
   createdAt: Date;
 };
 
-export type View = "dashboard" | "identities" | "create-identity" | "identity-detail" | "edit-identity" | "import-identities" | "ad-accounts" | "team" | "settings" | "my-accounts" | "requests" | "admin-requests" | "system" | "sms-dashboard" | "authenticator" | "tutorial" | "faq";
+export type View = "dashboard" | "identities" | "create-identity" | "identity-detail" | "edit-identity" | "import-identities" | "ad-accounts" | "team" | "settings" | "my-accounts" | "requests" | "admin-requests" | "system" | "sms-dashboard" | "authenticator" | "tutorial" | "faq" | "websites";
 
 // ============================================================================
 // LOGO COMPONENT
@@ -249,6 +249,7 @@ const VIEW_TO_PATH: Record<View, string> = {
   "authenticator": "/admin/authenticator",
   "tutorial": "/admin/tutorial",
   "faq": "/admin/faq",
+  "websites": "/admin/websites",
 };
 
 const PATH_TO_VIEW: Record<string, View> = {
@@ -270,6 +271,7 @@ const PATH_TO_VIEW: Record<string, View> = {
   "/admin/authenticator": "authenticator",
   "/admin/tutorial": "tutorial",
   "/admin/faq": "faq",
+  "/admin/websites": "websites",
 };
 
 function getViewFromPath(pathname: string): View {
@@ -524,6 +526,13 @@ export function AdminApp({
       );
     }
 
+    // 1-Click Websites - Admin only
+    if (userRole === "SUPER_ADMIN" || userRole === "ADMIN") {
+      items.push(
+        { id: "websites" as View, label: "1-Click Websites", icon: "🌐" }
+      );
+    }
+
     // Authenticator - for admins and managers
     if (userRole === "SUPER_ADMIN" || userRole === "ADMIN" || userRole === "MANAGER") {
       items.push(
@@ -657,6 +666,7 @@ export function AdminApp({
               </div>
             )}
             {view === "authenticator" && <h1 className="text-lg font-semibold text-slate-50">2FA Authenticator</h1>}
+            {view === "websites" && <h1 className="text-lg font-semibold text-slate-50">1-Click Websites</h1>}
           </div>
           <div className="flex items-center gap-6">
             {/* Notification Bell */}
@@ -989,6 +999,7 @@ export function AdminApp({
             )}
             {view === "tutorial" && <TutorialView />}
             {view === "faq" && <FAQView />}
+            {view === "websites" && <WebsitesView />}
           </div>
         </div>
       </main>
@@ -7193,6 +7204,13 @@ function SettingsView() {
   const [showGoogleKey, setShowGoogleKey] = useState(false);
   const [showTextverifiedKey, setShowTextverifiedKey] = useState(false);
   const [showTelegramToken, setShowTelegramToken] = useState(false);
+  // 1-Click Websites API keys
+  const [namecheapApiKey, setNamecheapApiKey] = useState<string>("");
+  const [namecheapUsername, setNamecheapUsername] = useState<string>("");
+  const [namecheapWhitelistIp, setNamecheapWhitelistIp] = useState<string>("");
+  const [digitaloceanApiKey, setDigitaloceanApiKey] = useState<string>("");
+  const [showNamecheapKey, setShowNamecheapKey] = useState(false);
+  const [showDigitaloceanKey, setShowDigitaloceanKey] = useState(false);
   // MCC Connection state
   const [mccStatus, setMccStatus] = useState<{
     connected: boolean;
@@ -7261,6 +7279,11 @@ function SettingsView() {
         setIdentityArchivedAlertEnabled(data.identityArchivedAlertEnabled ?? true);
         setIdentityArchivedAlertViaApp(data.identityArchivedAlertViaApp ?? true);
         setIdentityArchivedAlertViaTelegram(data.identityArchivedAlertViaTelegram ?? true);
+        // 1-Click Websites API keys
+        setNamecheapApiKey(data.namecheapApiKey || "");
+        setNamecheapUsername(data.namecheapUsername || "");
+        setNamecheapWhitelistIp(data.namecheapWhitelistIp || "");
+        setDigitaloceanApiKey(data.digitaloceanApiKey || "");
       }
     } catch (error) {
       console.error("Failed to fetch settings:", error);
@@ -7388,6 +7411,11 @@ function SettingsView() {
           identityArchivedAlertEnabled,
           identityArchivedAlertViaApp,
           identityArchivedAlertViaTelegram,
+          // 1-Click Websites API keys
+          namecheapApiKey,
+          namecheapUsername,
+          namecheapWhitelistIp,
+          digitaloceanApiKey,
         }),
       });
 
@@ -8119,6 +8147,124 @@ function SettingsView() {
               </ol>
             </div>
           </div>
+        </div>
+
+        {/* 1-Click Websites API Keys Section */}
+        <div className="mt-6 pt-6 border-t border-slate-800">
+          <h2 className="text-sm font-semibold text-slate-100 mb-4">
+            1-Click Websites
+          </h2>
+          <p className="text-xs text-slate-400 mb-4">
+            Configure API keys for domain registration and server provisioning.
+          </p>
+
+          <form onSubmit={handleSave} className="space-y-6">
+            {/* Namecheap Section */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium text-slate-200">Namecheap</h3>
+              <p className="text-xs text-slate-500">
+                API credentials for domain search and purchase. Get your API key from{" "}
+                <a href="https://ap.www.namecheap.com/settings/tools/apiaccess" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">
+                  Namecheap API Access
+                </a>
+              </p>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Username
+                </label>
+                <input
+                  type="text"
+                  value={namecheapUsername}
+                  onChange={(e) => setNamecheapUsername(e.target.value)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  placeholder="Your Namecheap username"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  API Key
+                </label>
+                <div className="relative">
+                  <input
+                    type={showNamecheapKey ? "text" : "password"}
+                    value={namecheapApiKey}
+                    onChange={(e) => setNamecheapApiKey(e.target.value)}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 pr-10 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                    placeholder="Enter API key"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNamecheapKey(!showNamecheapKey)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                  >
+                    {showNamecheapKey ? "Hide" : "Show"}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Whitelisted IP Address
+                </label>
+                <input
+                  type="text"
+                  value={namecheapWhitelistIp}
+                  onChange={(e) => setNamecheapWhitelistIp(e.target.value)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  placeholder="e.g., 123.456.789.0"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  The IP address that is whitelisted in your Namecheap API settings. This is required for API access.
+                </p>
+              </div>
+            </div>
+
+            {/* DigitalOcean Section */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium text-slate-200">DigitalOcean</h3>
+              <p className="text-xs text-slate-500">
+                API token for creating and managing droplets. Get your token from{" "}
+                <a href="https://cloud.digitalocean.com/account/api/tokens" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">
+                  DigitalOcean API Tokens
+                </a>
+              </p>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  API Token
+                </label>
+                <div className="relative">
+                  <input
+                    type={showDigitaloceanKey ? "text" : "password"}
+                    value={digitaloceanApiKey}
+                    onChange={(e) => setDigitaloceanApiKey(e.target.value)}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 pr-10 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                    placeholder="Enter API token"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowDigitaloceanKey(!showDigitaloceanKey)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                  >
+                    {showDigitaloceanKey ? "Hide" : "Show"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Save Button */}
+            <div className="pt-4">
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-4 py-2 rounded-lg bg-emerald-500 text-slate-950 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                {saving ? "Saving..." : "Save API Keys"}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
       )}
@@ -10563,6 +10709,778 @@ function FAQView() {
               );
             })}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// WEBSITES VIEW - 1-CLICK WEBSITES
+// ============================================================================
+
+type Website = {
+  id: string;
+  name: string;
+  zipFileUrl: string | null;
+  zipFileSize: number | null;
+  domain: string | null;
+  domainOrderId: string | null;
+  domainPurchasePrice: number | null;
+  dropletId: string | null;
+  dropletIp: string | null;
+  dropletRegion: string | null;
+  dropletSize: string | null;
+  status: string;
+  statusMessage: string | null;
+  errorMessage: string | null;
+  sslEnabled: boolean;
+  deployedAt: string | null;
+  createdAt: string;
+  createdBy: string;
+  activities: WebsiteActivity[];
+};
+
+type WebsiteActivity = {
+  id: string;
+  action: string;
+  details: string | null;
+  createdAt: string;
+};
+
+type DomainResult = {
+  domain: string;
+  available: boolean;
+  premium: boolean;
+  price?: number;
+};
+
+const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
+  PENDING: { bg: "bg-slate-700", text: "text-slate-300", label: "Pending" },
+  UPLOADING: { bg: "bg-blue-900/50", text: "text-blue-400", label: "Uploading" },
+  DOMAIN_PENDING: { bg: "bg-yellow-900/50", text: "text-yellow-400", label: "Domain Pending" },
+  DOMAIN_PURCHASED: { bg: "bg-emerald-900/50", text: "text-emerald-400", label: "Domain Ready" },
+  DROPLET_CREATING: { bg: "bg-blue-900/50", text: "text-blue-400", label: "Creating Server" },
+  DROPLET_READY: { bg: "bg-emerald-900/50", text: "text-emerald-400", label: "Server Ready" },
+  DEPLOYING: { bg: "bg-blue-900/50", text: "text-blue-400", label: "Deploying" },
+  SSL_PENDING: { bg: "bg-yellow-900/50", text: "text-yellow-400", label: "SSL Pending" },
+  LIVE: { bg: "bg-emerald-900/50", text: "text-emerald-400", label: "Live" },
+  FAILED: { bg: "bg-red-900/50", text: "text-red-400", label: "Failed" },
+};
+
+function WebsitesView() {
+  const [websites, setWebsites] = useState<Website[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showWizard, setShowWizard] = useState(false);
+  const [selectedWebsite, setSelectedWebsite] = useState<Website | null>(null);
+
+  const fetchWebsites = async () => {
+    try {
+      const res = await fetch("/api/websites");
+      const data = await res.json();
+      if (data.websites) {
+        setWebsites(data.websites);
+      }
+    } catch (error) {
+      console.error("Failed to fetch websites:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchWebsites();
+  }, []);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this website? This cannot be undone.")) return;
+
+    try {
+      const res = await fetch(`/api/websites/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        fetchWebsites();
+      }
+    } catch (error) {
+      console.error("Failed to delete website:", error);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-10 bg-slate-800 rounded w-48"></div>
+          <div className="h-64 bg-slate-800 rounded"></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <p className="text-slate-400 text-sm">
+            Deploy simple websites with automated domain registration and server setup
+          </p>
+        </div>
+        <button
+          onClick={() => setShowWizard(true)}
+          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition flex items-center gap-2"
+        >
+          <span>+</span>
+          New Website
+        </button>
+      </div>
+
+      {websites.length === 0 ? (
+        <div className="text-center py-16 bg-slate-800/30 rounded-lg border border-slate-700">
+          <div className="text-5xl mb-4">🌐</div>
+          <h3 className="text-xl font-semibold text-slate-200 mb-2">No websites yet</h3>
+          <p className="text-slate-400 mb-6">Create your first 1-click website to get started</p>
+          <button
+            onClick={() => setShowWizard(true)}
+            className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition"
+          >
+            Create Website
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {websites.map((site) => {
+            const statusConfig = STATUS_COLORS[site.status] || STATUS_COLORS.PENDING;
+            return (
+              <div
+                key={site.id}
+                className="bg-slate-800/50 rounded-lg border border-slate-700 p-5 hover:border-slate-600 transition"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="text-lg font-semibold text-slate-100">{site.name}</h3>
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusConfig.bg} ${statusConfig.text}`}>
+                        {statusConfig.label}
+                      </span>
+                    </div>
+
+                    {site.domain && (
+                      <div className="flex items-center gap-2 text-sm text-slate-300 mb-1">
+                        <span>🌐</span>
+                        {site.status === "LIVE" ? (
+                          <a
+                            href={`https://${site.domain}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-emerald-400 hover:text-emerald-300 underline"
+                          >
+                            {site.domain}
+                          </a>
+                        ) : (
+                          <span>{site.domain}</span>
+                        )}
+                      </div>
+                    )}
+
+                    {site.dropletIp && (
+                      <div className="flex items-center gap-2 text-sm text-slate-400 mb-1">
+                        <span>🖥️</span>
+                        <span>IP: {site.dropletIp}</span>
+                        {site.dropletRegion && <span className="text-slate-500">({site.dropletRegion})</span>}
+                      </div>
+                    )}
+
+                    {site.statusMessage && (
+                      <p className="text-sm text-slate-400 mt-2">{site.statusMessage}</p>
+                    )}
+
+                    {site.errorMessage && (
+                      <p className="text-sm text-red-400 mt-2">{site.errorMessage}</p>
+                    )}
+
+                    <div className="flex items-center gap-4 mt-3 text-xs text-slate-500">
+                      <span>Created {new Date(site.createdAt).toLocaleDateString()}</span>
+                      {site.deployedAt && (
+                        <span>Deployed {new Date(site.deployedAt).toLocaleDateString()}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {site.status !== "LIVE" && site.status !== "FAILED" && (
+                      <button
+                        onClick={() => {
+                          setSelectedWebsite(site);
+                          setShowWizard(true);
+                        }}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded transition"
+                      >
+                        Continue
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDelete(site.id)}
+                      className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm rounded transition"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Wizard Modal */}
+      {showWizard && (
+        <WebsiteWizard
+          website={selectedWebsite}
+          onClose={() => {
+            setShowWizard(false);
+            setSelectedWebsite(null);
+            fetchWebsites();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// WEBSITE WIZARD - MULTI-STEP DEPLOYMENT
+// ============================================================================
+
+function WebsiteWizard({ website, onClose }: { website: Website | null; onClose: () => void }) {
+  // Determine starting step based on website state
+  const getInitialStep = (): number => {
+    if (!website) return 1;
+    if (!website.zipFileUrl) return 1;
+    if (!website.domain) return 2;
+    if (!website.dropletId) return 3;
+    return 4;
+  };
+
+  const [step, setStep] = useState(getInitialStep());
+  const [currentWebsite, setCurrentWebsite] = useState<Website | null>(website);
+
+  // Step 1: Name & Upload
+  const [name, setName] = useState(website?.name || "");
+  const [zipFile, setZipFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+
+  // Step 2: Domain
+  const [domainKeyword, setDomainKeyword] = useState("");
+  const [domainResults, setDomainResults] = useState<DomainResult[]>([]);
+  const [selectedDomain, setSelectedDomain] = useState("");
+  const [searchingDomains, setSearchingDomains] = useState(false);
+  const [purchasingDomain, setPurchasingDomain] = useState(false);
+  const [domainError, setDomainError] = useState("");
+
+  // Step 3: Server
+  const [region, setRegion] = useState("nyc1");
+  const [creatingDroplet, setCreatingDroplet] = useState(false);
+  const [dropletError, setDropletError] = useState("");
+
+  // Step 4: Deploy
+  const [deploying, setDeploying] = useState(false);
+  const [deployError, setDeployError] = useState("");
+
+  const regions = [
+    { value: "nyc1", label: "New York 1" },
+    { value: "nyc3", label: "New York 3" },
+    { value: "sfo3", label: "San Francisco 3" },
+    { value: "ams3", label: "Amsterdam 3" },
+    { value: "lon1", label: "London 1" },
+    { value: "fra1", label: "Frankfurt 1" },
+    { value: "sgp1", label: "Singapore 1" },
+  ];
+
+  // Step 1: Create website and upload zip
+  const handleUpload = async () => {
+    if (!name.trim()) {
+      setUploadError("Please enter a website name");
+      return;
+    }
+    if (!zipFile && !currentWebsite?.zipFileUrl) {
+      setUploadError("Please select a zip file");
+      return;
+    }
+
+    setUploading(true);
+    setUploadError("");
+
+    try {
+      let websiteId = currentWebsite?.id;
+
+      // Create website if new
+      if (!websiteId) {
+        const createRes = await fetch("/api/websites", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: name.trim() }),
+        });
+        const createData = await createRes.json();
+        if (!createRes.ok) throw new Error(createData.error || "Failed to create website");
+        websiteId = createData.website.id;
+        setCurrentWebsite(createData.website);
+      }
+
+      // Upload zip if provided
+      if (zipFile) {
+        const formData = new FormData();
+        formData.append("file", zipFile);
+
+        const uploadRes = await fetch(`/api/websites/${websiteId}/upload`, {
+          method: "POST",
+          body: formData,
+        });
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok) throw new Error(uploadData.error || "Failed to upload file");
+        setCurrentWebsite(uploadData.website);
+      }
+
+      setStep(2);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Step 2: Search domains
+  const handleSearchDomains = async () => {
+    if (!domainKeyword.trim()) return;
+
+    setSearchingDomains(true);
+    setDomainError("");
+    setDomainResults([]);
+
+    try {
+      const res = await fetch(`/api/websites/${currentWebsite?.id}/domain`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "search", keyword: domainKeyword.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Search failed");
+      setDomainResults(data.results || []);
+    } catch (error) {
+      setDomainError(error instanceof Error ? error.message : "Search failed");
+    } finally {
+      setSearchingDomains(false);
+    }
+  };
+
+  // Step 2: Purchase domain
+  const handlePurchaseDomain = async () => {
+    if (!selectedDomain) return;
+
+    setPurchasingDomain(true);
+    setDomainError("");
+
+    try {
+      const res = await fetch(`/api/websites/${currentWebsite?.id}/domain`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "purchase", domain: selectedDomain }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Purchase failed");
+      setCurrentWebsite(data.website);
+      setStep(3);
+    } catch (error) {
+      setDomainError(error instanceof Error ? error.message : "Purchase failed");
+    } finally {
+      setPurchasingDomain(false);
+    }
+  };
+
+  // Step 3: Create droplet
+  const handleCreateDroplet = async () => {
+    setCreatingDroplet(true);
+    setDropletError("");
+
+    try {
+      const res = await fetch(`/api/websites/${currentWebsite?.id}/droplet`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ region }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create server");
+      setCurrentWebsite(data.website);
+      setStep(4);
+    } catch (error) {
+      setDropletError(error instanceof Error ? error.message : "Server creation failed");
+    } finally {
+      setCreatingDroplet(false);
+    }
+  };
+
+  // Step 4: Deploy
+  const handleDeploy = async () => {
+    setDeploying(true);
+    setDeployError("");
+
+    try {
+      const res = await fetch(`/api/websites/${currentWebsite?.id}/deploy`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Deployment failed");
+      setCurrentWebsite(data.website);
+
+      // If successful, mark as live
+      if (data.success) {
+        await fetch(`/api/websites/${currentWebsite?.id}/deploy`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sslEnabled: true }),
+        });
+      }
+    } catch (error) {
+      setDeployError(error instanceof Error ? error.message : "Deployment failed");
+    } finally {
+      setDeploying(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-slate-900 rounded-xl border border-slate-700 w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-100">
+              {currentWebsite ? `Deploy: ${currentWebsite.name}` : "New Website"}
+            </h2>
+            <div className="flex items-center gap-2 mt-2">
+              {[1, 2, 3, 4].map((s) => (
+                <div
+                  key={s}
+                  className={`w-8 h-1 rounded ${s <= step ? "bg-emerald-500" : "bg-slate-700"}`}
+                />
+              ))}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-200 transition"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {/* Step 1: Name & Upload */}
+          {step === 1 && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-medium text-slate-200 mb-4">Step 1: Upload Website Files</h3>
+                <p className="text-slate-400 text-sm mb-6">
+                  Give your website a name and upload a zip file containing your HTML/PHP files.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Website Name</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="My Website"
+                  className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Website Files (ZIP)</label>
+                <div className="border-2 border-dashed border-slate-700 rounded-lg p-8 text-center hover:border-slate-600 transition">
+                  <input
+                    type="file"
+                    accept=".zip"
+                    onChange={(e) => setZipFile(e.target.files?.[0] || null)}
+                    className="hidden"
+                    id="zip-upload"
+                  />
+                  <label htmlFor="zip-upload" className="cursor-pointer">
+                    {zipFile ? (
+                      <div>
+                        <div className="text-4xl mb-2">📦</div>
+                        <p className="text-slate-200 font-medium">{zipFile.name}</p>
+                        <p className="text-slate-400 text-sm">{(zipFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                      </div>
+                    ) : currentWebsite?.zipFileUrl ? (
+                      <div>
+                        <div className="text-4xl mb-2">✅</div>
+                        <p className="text-emerald-400 font-medium">File already uploaded</p>
+                        <p className="text-slate-400 text-sm">Click to replace</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="text-4xl mb-2">📁</div>
+                        <p className="text-slate-300">Click to upload or drag and drop</p>
+                        <p className="text-slate-500 text-sm mt-1">ZIP files only, max 50MB</p>
+                      </div>
+                    )}
+                  </label>
+                </div>
+              </div>
+
+              {uploadError && (
+                <p className="text-red-400 text-sm">{uploadError}</p>
+              )}
+
+              <button
+                onClick={handleUpload}
+                disabled={uploading || (!name.trim() && !currentWebsite)}
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition"
+              >
+                {uploading ? "Uploading..." : "Continue to Domain Selection"}
+              </button>
+            </div>
+          )}
+
+          {/* Step 2: Domain */}
+          {step === 2 && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-medium text-slate-200 mb-4">Step 2: Choose Domain</h3>
+                <p className="text-slate-400 text-sm mb-6">
+                  Search for and purchase a domain name for your website.
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={domainKeyword}
+                  onChange={(e) => setDomainKeyword(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearchDomains()}
+                  placeholder="Enter keyword (e.g., mywebsite)"
+                  className="flex-1 px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
+                />
+                <button
+                  onClick={handleSearchDomains}
+                  disabled={searchingDomains || !domainKeyword.trim()}
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white rounded-lg font-medium transition"
+                >
+                  {searchingDomains ? "..." : "Search"}
+                </button>
+              </div>
+
+              {domainResults.length > 0 && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-slate-300">Available Domains</label>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {domainResults.map((result) => (
+                      <button
+                        key={result.domain}
+                        onClick={() => result.available && setSelectedDomain(result.domain)}
+                        disabled={!result.available}
+                        className={`w-full px-4 py-3 rounded-lg border text-left transition ${
+                          selectedDomain === result.domain
+                            ? "bg-emerald-900/30 border-emerald-500 text-emerald-400"
+                            : result.available
+                            ? "bg-slate-800 border-slate-700 text-slate-200 hover:border-slate-600"
+                            : "bg-slate-800/50 border-slate-700/50 text-slate-500"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{result.domain}</span>
+                          {result.available ? (
+                            <span className="text-emerald-400 text-sm">Available</span>
+                          ) : (
+                            <span className="text-slate-500 text-sm">Taken</span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {domainError && (
+                <p className="text-red-400 text-sm">{domainError}</p>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setStep(1)}
+                  className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg font-medium transition"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={handlePurchaseDomain}
+                  disabled={purchasingDomain || !selectedDomain}
+                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition"
+                >
+                  {purchasingDomain ? "Purchasing..." : `Purchase ${selectedDomain || "Domain"}`}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Server */}
+          {step === 3 && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-medium text-slate-200 mb-4">Step 3: Create Server</h3>
+                <p className="text-slate-400 text-sm mb-6">
+                  Select a server region and create your DigitalOcean droplet.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Server Region</label>
+                <select
+                  value={region}
+                  onChange={(e) => setRegion(e.target.value)}
+                  className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
+                >
+                  {regions.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                <h4 className="font-medium text-slate-200 mb-2">Server Specs</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-slate-500">Type:</span>
+                    <span className="text-slate-300 ml-2">Basic Droplet</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Cost:</span>
+                    <span className="text-slate-300 ml-2">~$6/month</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">RAM:</span>
+                    <span className="text-slate-300 ml-2">1 GB</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">CPU:</span>
+                    <span className="text-slate-300 ml-2">1 vCPU</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Storage:</span>
+                    <span className="text-slate-300 ml-2">25 GB SSD</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">OS:</span>
+                    <span className="text-slate-300 ml-2">Ubuntu 22.04</span>
+                  </div>
+                </div>
+              </div>
+
+              {dropletError && (
+                <p className="text-red-400 text-sm">{dropletError}</p>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setStep(2)}
+                  className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg font-medium transition"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={handleCreateDroplet}
+                  disabled={creatingDroplet}
+                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition"
+                >
+                  {creatingDroplet ? "Creating Server..." : "Create Server"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Deploy */}
+          {step === 4 && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-medium text-slate-200 mb-4">Step 4: Deploy Website</h3>
+                <p className="text-slate-400 text-sm mb-6">
+                  Configure DNS and deploy your website with automatic SSL.
+                </p>
+              </div>
+
+              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700 space-y-3">
+                <h4 className="font-medium text-slate-200">Deployment Summary</h4>
+                <div className="text-sm space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400">✓</span>
+                    <span className="text-slate-300">Files uploaded</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400">✓</span>
+                    <span className="text-slate-300">Domain: {currentWebsite?.domain}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400">✓</span>
+                    <span className="text-slate-300">Server created in {currentWebsite?.dropletRegion}</span>
+                  </div>
+                  {currentWebsite?.dropletIp && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-emerald-400">✓</span>
+                      <span className="text-slate-300">IP: {currentWebsite.dropletIp}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-blue-900/20 rounded-lg p-4 border border-blue-700/50">
+                <h4 className="font-medium text-blue-300 mb-2">What happens when you deploy:</h4>
+                <ul className="text-sm text-blue-200/80 space-y-1 list-disc list-inside">
+                  <li>Wait for server to finish setup</li>
+                  <li>Configure DNS to point to server</li>
+                  <li>Website files will be deployed</li>
+                  <li>SSL certificate will be obtained (may take a few minutes)</li>
+                </ul>
+              </div>
+
+              {deployError && (
+                <p className="text-red-400 text-sm">{deployError}</p>
+              )}
+
+              {currentWebsite?.status === "LIVE" ? (
+                <div className="text-center py-6">
+                  <div className="text-5xl mb-4">🎉</div>
+                  <h4 className="text-xl font-semibold text-emerald-400 mb-2">Website is Live!</h4>
+                  <a
+                    href={`https://${currentWebsite.domain}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-emerald-400 hover:text-emerald-300 underline"
+                  >
+                    Visit https://{currentWebsite.domain}
+                  </a>
+                </div>
+              ) : (
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setStep(3)}
+                    className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg font-medium transition"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleDeploy}
+                    disabled={deploying}
+                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition"
+                  >
+                    {deploying ? "Deploying..." : "Deploy Website"}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
