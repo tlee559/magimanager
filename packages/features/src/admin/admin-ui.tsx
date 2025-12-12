@@ -11889,10 +11889,21 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
       }
     }
 
+    // Refresh website data to get latest status
+    if (currentWebsite?.id) {
+      try {
+        const res = await fetch(`/api/websites/${currentWebsite.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setCurrentWebsite(data.website);
+        }
+      } catch {
+        // Ignore fetch errors
+      }
+    }
+
     // Go back to step 3
     setStep(3);
-    // Refresh to get latest status
-    await refreshWebsite();
   };
 
   // Step 4: Deploy
