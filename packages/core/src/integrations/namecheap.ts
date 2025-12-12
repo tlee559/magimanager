@@ -216,9 +216,9 @@ class NamecheapClient {
 
   /**
    * Purchase a domain using account's default contact info
-   * Uses credit card on file by default (instead of account balance)
+   * Uses credit card profile on file (Billingtype=CCPF)
    */
-  async purchaseDomain(domain: string, years: number = 1, useCreditCard: boolean = true): Promise<DomainPurchaseResult> {
+  async purchaseDomain(domain: string, years: number = 1): Promise<DomainPurchaseResult> {
     try {
       // Namecheap requires contact info, but will use account defaults if using proper API
       // For domains, we need to provide registrant info
@@ -227,7 +227,8 @@ class NamecheapClient {
         DomainName: domain,
         Years: years.toString(),
         // Use credit card on file instead of account balance
-        ...(useCreditCard && { UseCreditCard: 'yes' }),
+        // Billingtype: CC = credit card, CCPF = credit card profile, FUNDS = account balance
+        Billingtype: 'CCPF',
         AddFreeWhoisguard: 'yes',
         WGEnabled: 'yes',
         // Namecheap will use the account's default contact if we don't specify
