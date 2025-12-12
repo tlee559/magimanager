@@ -11255,16 +11255,16 @@ function WebsitesView() {
                         </div>
                       </div>
                     </div>
-                    {dnsStatus[site.id].data?.dns.nameservers.length > 0 && (
+                    {(dnsStatus[site.id]?.data?.dns?.nameservers?.length ?? 0) > 0 && (
                       <div className="mt-3 pt-3 border-t border-slate-700/50">
                         <p className="text-slate-500 text-xs mb-1">Nameservers</p>
                         <code className="text-slate-400 text-xs">
-                          {dnsStatus[site.id].data?.dns.nameservers.join(", ")}
+                          {dnsStatus[site.id]?.data?.dns?.nameservers?.join(", ")}
                         </code>
                       </div>
                     )}
-                    {dnsStatus[site.id].error && (
-                      <p className="text-red-400 text-xs mt-2">{dnsStatus[site.id].error}</p>
+                    {dnsStatus[site.id]?.error && (
+                      <p className="text-red-400 text-xs mt-2">{dnsStatus[site.id]?.error}</p>
                     )}
                   </div>
                 )}
