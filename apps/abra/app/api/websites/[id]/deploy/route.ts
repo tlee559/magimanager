@@ -45,7 +45,14 @@ export async function POST(
 
     // Get clients
     const doClient = await getDigitalOceanClientFromSettings();
-    const ncClient = await getNamecheapClientFromSettings();
+
+    // Namecheap client is optional - DNS can be configured manually
+    let ncClient = null;
+    try {
+      ncClient = await getNamecheapClientFromSettings();
+    } catch {
+      // Namecheap not configured - DNS will need to be set manually
+    }
 
     // Update status
     await prisma.website.update({
@@ -93,28 +100,41 @@ export async function POST(
       },
     });
 
-    // Configure DNS to point to droplet
-    try {
-      const dnsSuccess = await ncClient.pointToServer(website.domain, droplet.publicIpv4!);
+    // Configure DNS to point to droplet (only if Namecheap is configured)
+    let dnsConfigured = false;
+    if (ncClient) {
+      try {
+        const dnsSuccess = await ncClient.pointToServer(website.domain, droplet.publicIpv4!);
 
-      if (!dnsSuccess) {
-        throw new Error("DNS configuration failed");
+        if (dnsSuccess) {
+          dnsConfigured = true;
+          await prisma.websiteActivity.create({
+            data: {
+              websiteId: id,
+              action: "DNS_CONFIGURED",
+              details: `DNS A records automatically set to ${droplet.publicIpv4}`,
+            },
+          });
+        } else {
+          throw new Error("DNS configuration returned false");
+        }
+      } catch (error) {
+        // DNS config failed but server is up - continue with warning
+        await prisma.websiteActivity.create({
+          data: {
+            websiteId: id,
+            action: "DNS_WARNING",
+            details: `DNS auto-configuration failed: ${error instanceof Error ? error.message : "Unknown error"}. You may need to configure DNS manually.`,
+          },
+        });
       }
-
+    } else {
+      // Namecheap not configured - log that DNS needs manual setup
       await prisma.websiteActivity.create({
         data: {
           websiteId: id,
-          action: "DNS_CONFIGURED",
-          details: `DNS A records set to ${droplet.publicIpv4}`,
-        },
-      });
-    } catch (error) {
-      // DNS config failed but server is up - continue with warning
-      await prisma.websiteActivity.create({
-        data: {
-          websiteId: id,
-          action: "DNS_WARNING",
-          details: `DNS auto-configuration failed: ${error instanceof Error ? error.message : "Unknown error"}. You may need to configure DNS manually.`,
+          action: "DNS_MANUAL",
+          details: `Namecheap not configured. Please manually set DNS A records for @ and www to ${droplet.publicIpv4}`,
         },
       });
     }
@@ -136,7 +156,10 @@ export async function POST(
         ip: droplet.publicIpv4,
         status: droplet.status,
       },
-      message: `Website is deploying. Server IP: ${droplet.publicIpv4}. DNS has been configured. SSL will activate once DNS propagates.`,
+      dnsConfigured,
+      message: dnsConfigured
+        ? `Website is deploying. Server IP: ${droplet.publicIpv4}. DNS has been auto-configured. SSL will activate once DNS propagates.`
+        : `Website is deploying. Server IP: ${droplet.publicIpv4}. Please configure DNS manually (A records for @ and www pointing to ${droplet.publicIpv4}). SSL will activate once DNS propagates.`,
     });
   } catch (error) {
     console.error("Deployment failed:", error);
