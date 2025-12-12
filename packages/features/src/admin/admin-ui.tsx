@@ -10322,7 +10322,7 @@ function PlaceholderView({ title }: { title: string}) {
 // FAQ VIEW
 // ============================================================================
 
-type FAQSection = "overview" | "workflow" | "identities" | "accounts" | "team" | "integrations" | "dashboard";
+type FAQSection = "overview" | "workflow" | "identities" | "accounts" | "team" | "integrations" | "dashboard" | "1click";
 
 type FAQItem = {
   question: string;
@@ -10353,6 +10353,7 @@ function FAQView() {
     { id: "team", title: "Team Management", icon: "4" },
     { id: "integrations", title: "Integrations", icon: "5" },
     { id: "dashboard", title: "Dashboard", icon: "6" },
+    { id: "1click", title: "1-Click Websites", icon: "7" },
   ];
 
   const faqContent: Record<FAQSection, FAQItem[]> = {
@@ -10472,6 +10473,52 @@ function FAQView() {
       {
         question: "What is the pipeline diagram?",
         answer: "The pipeline is a picture showing how accounts flow through the system - from creating an identity, to setting up GoLogin, to creating the account, to warmup, to handoff. It helps you see where everything is at a glance."
+      }
+    ],
+    "1click": [
+      {
+        question: "What is 1-Click Websites?",
+        answer: "1-Click Websites lets you quickly deploy simple landing pages for your ad accounts. It handles everything automatically: uploading your website files, buying a domain through Namecheap, creating a server on DigitalOcean, and setting up SSL. Each identity can have their own website for their campaigns."
+      },
+      {
+        question: "What do I need to set up 1-Click Websites?",
+        answer: "You need three things configured in Settings > Integrations: (1) Namecheap API credentials (for buying domains), (2) DigitalOcean API key (for creating servers), and (3) A proxy server with a static IP (because Namecheap requires IP whitelisting). The proxy server is the tricky part - see below for setup instructions."
+      },
+      {
+        question: "Why do I need a proxy server?",
+        answer: "Namecheap's API requires you to whitelist specific IP addresses that can make API calls. The problem is that ABRA runs on Vercel, which uses dynamic IPs that change constantly. So we need a small server with a static IP to act as a middleman - ABRA sends requests to the proxy, and the proxy forwards them to Namecheap using its whitelisted IP."
+      },
+      {
+        question: "How do I set up the proxy server on DigitalOcean?",
+        answer: "1. Log into DigitalOcean and create a new Droplet. 2. Choose the cheapest option ($4-6/mo): Ubuntu 22.04, Basic plan, Regular CPU, smallest size. 3. Pick any region (NYC is fine). 4. Add your SSH key so you can log in. 5. Create the droplet and note its IP address. 6. SSH into the server and follow the proxy setup steps below."
+      },
+      {
+        question: "What commands do I run to set up the proxy?",
+        answer: "SSH into your droplet, then run these commands:\\n\\n1. Update the system:\\n   sudo apt update && sudo apt upgrade -y\\n\\n2. Install Node.js:\\n   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -\\n   sudo apt install -y nodejs\\n\\n3. Create the proxy script:\\n   sudo mkdir -p /opt/proxy\\n   sudo nano /opt/proxy/server.js\\n\\nPaste the proxy code (see next question), save with Ctrl+X, Y, Enter.\\n\\n4. Install PM2 and start:\\n   sudo npm install -g pm2\\n   cd /opt/proxy && pm2 start server.js --name proxy\\n   pm2 startup && pm2 save"
+      },
+      {
+        question: "What is the proxy server code?",
+        answer: "Create /opt/proxy/server.js with this code:\\n\\nconst http = require('http');\\nconst https = require('https');\\nconst { URL } = require('url');\\n\\nconst server = http.createServer(async (req, res) => {\\n  res.setHeader('Access-Control-Allow-Origin', '*');\\n  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');\\n  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');\\n\\n  if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }\\n  if (req.method !== 'POST') { res.writeHead(405); res.end('Method not allowed'); return; }\\n\\n  let body = '';\\n  req.on('data', chunk => body += chunk);\\n  req.on('end', async () => {\\n    try {\\n      const { url } = JSON.parse(body);\\n      const parsed = new URL(url);\\n      const client = parsed.protocol === 'https:' ? https : http;\\n      const proxyReq = client.request(url, { method: 'GET' }, proxyRes => {\\n        let data = '';\\n        proxyRes.on('data', chunk => data += chunk);\\n        proxyRes.on('end', () => { res.writeHead(200); res.end(data); });\\n      });\\n      proxyReq.on('error', e => { res.writeHead(500); res.end(e.message); });\\n      proxyReq.end();\\n    } catch (e) { res.writeHead(400); res.end('Invalid request'); }\\n  });\\n});\\n\\nserver.listen(3000, () => console.log('Proxy running on port 3000'));"
+      },
+      {
+        question: "How do I configure ABRA to use the proxy?",
+        answer: "1. Go to Settings > Integrations in ABRA. 2. In the Namecheap section, enter your Namecheap username and API key. 3. For 'Whitelist IP', enter your proxy server's IP address (the droplet's IP). 4. For 'Proxy URL', enter: http://YOUR_DROPLET_IP:3000 (replace with actual IP). 5. Save settings. 6. Finally, log into Namecheap and whitelist your proxy server's IP in their API settings."
+      },
+      {
+        question: "How do I test if the proxy is working?",
+        answer: "From your terminal, run: curl -X POST http://YOUR_DROPLET_IP:3000 -H 'Content-Type: application/json' -d '{\"url\": \"https://httpbin.org/ip\"}'\\n\\nIf working, you'll see a response showing your droplet's IP address. If you see your droplet's IP in the response, the proxy is working correctly."
+      },
+      {
+        question: "What if domain search shows '.com.com' errors?",
+        answer: "This happens if you type a full domain like 'example.com' in the search. The search is designed for keywords (like 'example') and adds TLDs automatically. You can enter either: (1) Just the keyword: 'mysite' - will search mysite.com, mysite.net, etc., or (2) A full domain: 'mysite.com' - will check that exact domain plus show other TLD options."
+      },
+      {
+        question: "How much does a proxy server cost?",
+        answer: "The smallest DigitalOcean droplet costs about $4-6/month. It's just forwarding small API requests, so you don't need anything powerful. One proxy server can handle all your Namecheap API calls."
+      },
+      {
+        question: "Can I use the same proxy for other things?",
+        answer: "Yes! Any API that requires IP whitelisting can use this same proxy server. Just send a POST request with the target URL in the body. The proxy doesn't care what API you're calling - it just forwards requests."
       }
     ]
   };
@@ -10608,6 +10655,73 @@ function FAQView() {
     </div>
   );
 
+  // Proxy architecture diagram for 1-Click Websites
+  const ProxyDiagram = () => (
+    <div className="my-6 p-6 bg-slate-800/50 rounded-xl border border-slate-700">
+      <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">Why We Need a Proxy Server</h4>
+      <div className="flex flex-wrap items-center justify-center gap-3 md:gap-6">
+        {/* ABRA on Vercel */}
+        <div className="px-4 py-3 rounded-lg border bg-blue-500/20 border-blue-500/40 text-center min-w-[120px]">
+          <div className="font-semibold text-sm text-blue-300">ABRA</div>
+          <div className="text-xs text-blue-300/70 mt-1">on Vercel</div>
+          <div className="text-xs text-red-400 mt-2">Dynamic IPs</div>
+        </div>
+
+        <svg className="w-6 h-6 text-slate-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+
+        {/* Proxy Server */}
+        <div className="px-4 py-3 rounded-lg border bg-emerald-500/20 border-emerald-500/40 text-center min-w-[140px]">
+          <div className="font-semibold text-sm text-emerald-300">Proxy Droplet</div>
+          <div className="text-xs text-emerald-300/70 mt-1">DigitalOcean</div>
+          <div className="text-xs text-emerald-400 mt-2">Static IP ✓</div>
+        </div>
+
+        <svg className="w-6 h-6 text-slate-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+
+        {/* Namecheap */}
+        <div className="px-4 py-3 rounded-lg border bg-amber-500/20 border-amber-500/40 text-center min-w-[120px]">
+          <div className="font-semibold text-sm text-amber-300">Namecheap</div>
+          <div className="text-xs text-amber-300/70 mt-1">API</div>
+          <div className="text-xs text-amber-400 mt-2">IP Whitelist</div>
+        </div>
+      </div>
+      <p className="text-center text-xs text-slate-400 mt-4">
+        Namecheap requires whitelisted IPs. Vercel&apos;s IPs change, so we route through a proxy with a fixed IP.
+      </p>
+    </div>
+  );
+
+  // 1-Click Website deployment flow diagram
+  const OneClickFlowDiagram = () => (
+    <div className="my-6 p-6 bg-slate-800/50 rounded-xl border border-slate-700">
+      <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">1-Click Website Deployment Flow</h4>
+      <div className="flex flex-wrap items-center justify-center gap-2 md:gap-4">
+        {[
+          { label: "1. Upload", sub: "ZIP file (50MB max)", color: "bg-indigo-500/20 border-indigo-500/40 text-indigo-300" },
+          { label: "2. Domain", sub: "Search & purchase", color: "bg-purple-500/20 border-purple-500/40 text-purple-300" },
+          { label: "3. Server", sub: "Create droplet", color: "bg-blue-500/20 border-blue-500/40 text-blue-300" },
+          { label: "4. Deploy", sub: "Files + SSL", color: "bg-emerald-500/20 border-emerald-500/40 text-emerald-300" },
+        ].map((step, i, arr) => (
+          <div key={step.label} className="flex items-center gap-2 md:gap-4">
+            <div className={`px-4 py-3 rounded-lg border ${step.color} text-center min-w-[110px]`}>
+              <div className="font-semibold text-sm">{step.label}</div>
+              <div className="text-xs opacity-70 mt-1">{step.sub}</div>
+            </div>
+            {i < arr.length - 1 && (
+              <svg className="w-6 h-6 text-slate-600 flex-shrink-0 hidden md:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex gap-6 h-full">
       {/* Sidebar Navigation */}
@@ -10667,6 +10781,14 @@ function FAQView() {
 
           {/* Show roles diagram on team section */}
           {activeSection === "team" && <RolesDiagram />}
+
+          {/* Show 1-Click diagrams */}
+          {activeSection === "1click" && (
+            <>
+              <OneClickFlowDiagram />
+              <ProxyDiagram />
+            </>
+          )}
 
           {/* FAQ Accordion */}
           <div className="space-y-3">
