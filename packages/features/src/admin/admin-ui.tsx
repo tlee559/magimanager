@@ -7616,11 +7616,11 @@ function SettingsView() {
 
           <div className="flex items-center gap-4">
             <a
-              href="javascript:(function(){var cid=location.href.match(/\/(\d{3}-\d{3}-\d{4})\//)?.[1]||document.querySelector('[data-customer-id]')?.dataset.customerId;if(cid){var w=600,h=700,l=(screen.width-w)/2,t=(screen.height-h)/2;window.open('https://abra.magimanager.com/api/oauth/google-ads/authorize?cid='+cid.replace(/-/g,''),'oauth','width='+w+',height='+h+',left='+l+',top='+t);}else{alert('Could not detect CID. Make sure you are on a Google Ads account page.');}})();"
+              href={"javascript:(function(){var cid=location.href.match(/\\/(\\d{3}-\\d{3}-\\d{4})\\//)?.[1]||document.querySelector('[data-customer-id]')?.dataset.customerId;if(cid){var w=600,h=700,l=(screen.width-w)/2,t=(screen.height-h)/2;window.open('https://abra.magimanager.com/api/oauth/google-ads/authorize?cid='+cid.replace(/-/g,''),'oauth','width='+w+',height='+h+',left='+l+',top='+t);}else{alert('Could not detect CID. Make sure you are on a Google Ads account page.');}})();"}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-slate-950 font-semibold text-sm cursor-move hover:bg-emerald-400 transition"
               onClick={(e) => {
                 e.preventDefault();
-                alert('Drag this button to your bookmarks bar to install it. Don\'t click it here!');
+                alert("Drag this button to your bookmarks bar to install it. Don't click it here!");
               }}
               draggable
             >
@@ -8073,11 +8073,11 @@ function SettingsView() {
         <h2 className="text-sm font-semibold text-slate-100 mb-4">
           API Keys
         </h2>
-          <p className="text-xs text-slate-400 mb-6">
-            Configure API keys for third-party integrations.
-          </p>
+        <p className="text-xs text-slate-400 mb-6">
+          Configure API keys for third-party integrations.
+        </p>
 
-          <form onSubmit={handleSave} className="space-y-8">
+        <form onSubmit={handleSave} className="space-y-8">
             {/* GoLogin Section */}
             <div className="space-y-3">
               <h3 className="text-sm font-medium text-slate-200">GoLogin</h3>
@@ -8221,18 +8221,17 @@ function SettingsView() {
               </div>
             </div>
 
-            {/* Save Button */}
-            <div className="pt-4">
-              <button
-                type="submit"
-                disabled={saving}
-                className="px-6 py-2 rounded-lg bg-emerald-500 text-slate-950 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
-              >
-                {saving ? "Saving..." : "Save API Keys"}
-              </button>
-            </div>
-          </form>
-        </div>
+          {/* Save Button */}
+          <div className="pt-4">
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-6 py-2 rounded-lg bg-emerald-500 text-slate-950 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            >
+              {saving ? "Saving..." : "Save API Keys"}
+            </button>
+          </div>
+        </form>
       </div>
       )}
 
