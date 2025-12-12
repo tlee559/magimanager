@@ -216,8 +216,9 @@ class NamecheapClient {
 
   /**
    * Purchase a domain using account's default contact info
+   * Uses credit card on file by default (instead of account balance)
    */
-  async purchaseDomain(domain: string, years: number = 1): Promise<DomainPurchaseResult> {
+  async purchaseDomain(domain: string, years: number = 1, useCreditCard: boolean = true): Promise<DomainPurchaseResult> {
     try {
       // Namecheap requires contact info, but will use account defaults if using proper API
       // For domains, we need to provide registrant info
@@ -225,6 +226,8 @@ class NamecheapClient {
       const xml = await this.request('namecheap.domains.create', {
         DomainName: domain,
         Years: years.toString(),
+        // Use credit card on file instead of account balance
+        ...(useCreditCard && { UseCreditCard: 'yes' }),
         AddFreeWhoisguard: 'yes',
         WGEnabled: 'yes',
         // Namecheap will use the account's default contact if we don't specify
