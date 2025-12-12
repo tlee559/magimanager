@@ -48,14 +48,18 @@ export async function GET(
                        dnsResults.wwwCname === website.domain ||
                        dnsResults.wwwCname === `www.${website.domain}`;
 
-    // Check if site is reachable
+    // Check if site is reachable and get HTTP status
     let siteReachable = false;
     let sslValid = false;
+    let httpStatus: number | null = null;
+    let siteError: string | null = null;
+
     try {
       const siteResponse = await fetch(`https://${website.domain}`, {
         method: "HEAD",
         redirect: "follow",
       });
+      httpStatus = siteResponse.status;
       siteReachable = siteResponse.ok || siteResponse.status === 301 || siteResponse.status === 302;
       sslValid = true; // If fetch succeeded over HTTPS, SSL is valid
     } catch (e) {
@@ -65,10 +69,48 @@ export async function GET(
           method: "HEAD",
           redirect: "manual", // Don't follow redirects to avoid SSL issues
         });
+        httpStatus = httpResponse.status;
         siteReachable = httpResponse.ok || httpResponse.status === 301 || httpResponse.status === 302;
-      } catch {
+      } catch (httpError) {
         siteReachable = false;
+        siteError = httpError instanceof Error ? httpError.message : "Connection failed";
       }
+    }
+
+    // Calculate progress stage
+    let progress: { stage: string; message: string; percentage: number };
+
+    if (!aRecordCorrect) {
+      progress = {
+        stage: "dns_propagating",
+        message: "DNS propagating... This can take up to 30 minutes.",
+        percentage: 25,
+      };
+    } else if (!sslValid) {
+      progress = {
+        stage: "ssl_pending",
+        message: "DNS configured! Installing SSL certificate...",
+        percentage: 50,
+      };
+    } else if (httpStatus && httpStatus >= 400) {
+      // DNS correct, SSL valid, but site returns error
+      progress = {
+        stage: "error",
+        message: `Site returned ${httpStatus}. Check your files.`,
+        percentage: 75,
+      };
+    } else if (siteReachable) {
+      progress = {
+        stage: "live",
+        message: "Website is live!",
+        percentage: 100,
+      };
+    } else {
+      progress = {
+        stage: "checking_site",
+        message: "SSL installed! Verifying site...",
+        percentage: 75,
+      };
     }
 
     return NextResponse.json({
@@ -85,7 +127,10 @@ export async function GET(
       site: {
         reachable: siteReachable,
         sslValid,
+        httpStatus,
+        error: siteError,
       },
+      progress,
       healthy: aRecordCorrect && siteReachable,
     });
   } catch (error) {

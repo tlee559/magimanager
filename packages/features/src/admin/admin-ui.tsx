@@ -11631,6 +11631,14 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
   const [deployError, setDeployError] = useState("");
   const [dnsMessage, setDnsMessage] = useState("");
 
+  // Auto-polling for DNS/SSL status
+  const [pollingActive, setPollingActive] = useState(false);
+  const [deployProgress, setDeployProgress] = useState<{
+    stage: string;
+    message: string;
+    percentage: number;
+  } | null>(null);
+
   const regions = [
     { value: "nyc1", label: "New York 1" },
     { value: "nyc3", label: "New York 3" },
@@ -11640,6 +11648,59 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
     { value: "fra1", label: "Frankfurt 1" },
     { value: "sgp1", label: "Singapore 1" },
   ];
+
+  // Auto-poll DNS status every 30 seconds after deployment
+  useEffect(() => {
+    if (!pollingActive || !currentWebsite?.id) return;
+
+    const pollDns = async () => {
+      try {
+        const res = await fetch(`/api/websites/${currentWebsite.id}/dns-check`);
+        const data = await res.json();
+
+        if (data.progress) {
+          setDeployProgress(data.progress);
+
+          // Stop polling when live
+          if (data.progress.stage === "live") {
+            setPollingActive(false);
+            // Auto-mark as LIVE via PATCH
+            const patchRes = await fetch(`/api/websites/${currentWebsite.id}/deploy`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sslEnabled: data.site?.sslValid ?? true }),
+            });
+            const patchData = await patchRes.json();
+            if (patchData.website) {
+              setCurrentWebsite(patchData.website);
+            }
+          }
+
+          // Stop polling on error (404, 500, etc.)
+          if (data.progress.stage === "error") {
+            setPollingActive(false);
+          }
+        }
+      } catch (error) {
+        console.error("DNS poll error:", error);
+      }
+    };
+
+    // Initial check immediately
+    pollDns();
+
+    // Then poll every 30 seconds
+    const interval = setInterval(pollDns, 30000);
+
+    return () => clearInterval(interval);
+  }, [pollingActive, currentWebsite?.id]);
+
+  // Resume polling if website is in SSL_PENDING status when wizard opens
+  useEffect(() => {
+    if (currentWebsite?.status === "SSL_PENDING" && !pollingActive) {
+      setPollingActive(true);
+    }
+  }, [currentWebsite?.status]);
 
   // Step 1: Create website and upload zip
   const handleUpload = async () => {
@@ -11819,6 +11880,7 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
     setDeploying(true);
     setDeployError("");
     setDnsMessage("");
+    setDeployProgress(null);
 
     try {
       console.log("Starting deployment for website:", currentWebsite.id);
@@ -11839,18 +11901,14 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
         setDnsMessage("DNS needs to be configured manually - see instructions below.");
       }
 
-      // If successful, mark as live
+      // Start auto-polling to track DNS propagation and SSL installation
       if (data.success) {
-        const patchRes = await fetch(`/api/websites/${currentWebsite.id}/deploy`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sslEnabled: true }),
+        setPollingActive(true);
+        setDeployProgress({
+          stage: "dns_propagating",
+          message: "Deployment started! Waiting for DNS propagation...",
+          percentage: 25,
         });
-        const patchData = await patchRes.json();
-        console.log("Patch response:", patchData);
-        if (patchData.website) {
-          setCurrentWebsite(patchData.website);
-        }
       }
     } catch (error) {
       console.error("Deploy error:", error);
@@ -12324,17 +12382,106 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                 <p className="text-red-400 text-sm">{deployError}</p>
               )}
 
-              {currentWebsite?.status === "LIVE" ? (
+              {/* Progress Bar - shown during polling */}
+              {(pollingActive || deployProgress) && deployProgress && (
+                <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700 space-y-4">
+                  <h4 className="font-medium text-slate-200">Deployment Progress</h4>
+
+                  {/* Progress bar */}
+                  <div className="w-full bg-slate-700 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full transition-all duration-500 ${
+                        deployProgress.stage === "error" ? "bg-red-500" : "bg-emerald-500"
+                      }`}
+                      style={{ width: `${deployProgress.percentage}%` }}
+                    />
+                  </div>
+
+                  {/* Stage indicator */}
+                  <div className="flex items-center gap-2">
+                    {deployProgress.stage === "live" ? (
+                      <span className="text-emerald-400 text-lg">✓</span>
+                    ) : deployProgress.stage === "error" ? (
+                      <span className="text-red-400 text-lg">✗</span>
+                    ) : (
+                      <span className="animate-pulse text-amber-400">●</span>
+                    )}
+                    <span className={`text-sm ${
+                      deployProgress.stage === "error" ? "text-red-400" :
+                      deployProgress.stage === "live" ? "text-emerald-400" : "text-slate-300"
+                    }`}>
+                      {deployProgress.message}
+                    </span>
+                  </div>
+
+                  {/* Stage steps */}
+                  <div className="flex justify-between text-xs">
+                    <span className={deployProgress.percentage >= 25 ? "text-emerald-400" : "text-slate-500"}>
+                      DNS {deployProgress.percentage >= 25 ? "✓" : ""}
+                    </span>
+                    <span className={deployProgress.percentage >= 50 ? "text-emerald-400" : "text-slate-500"}>
+                      SSL {deployProgress.percentage >= 50 ? "✓" : ""}
+                    </span>
+                    <span className={deployProgress.percentage >= 75 ? "text-emerald-400" : "text-slate-500"}>
+                      Verify {deployProgress.percentage >= 75 && deployProgress.stage !== "error" ? "✓" : ""}
+                    </span>
+                    <span className={deployProgress.percentage >= 100 ? "text-emerald-400" : "text-slate-500"}>
+                      Live {deployProgress.percentage >= 100 ? "✓" : ""}
+                    </span>
+                  </div>
+
+                  {/* Polling indicator */}
+                  {pollingActive && deployProgress.stage !== "live" && deployProgress.stage !== "error" && (
+                    <p className="text-xs text-slate-500 text-center">
+                      Checking status every 30 seconds...
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* 404 Error Alert */}
+              {deployProgress?.stage === "error" && (
+                <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-4">
+                  <p className="text-red-400 font-medium">Site Not Responding</p>
+                  <p className="text-sm text-slate-400 mt-1">
+                    Your DNS is configured correctly, but the site returned an error.
+                    Check that your zip file contains an index.html or index.php file.
+                  </p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => {
+                        setPollingActive(true);
+                        setDeployProgress({
+                          stage: "checking_site",
+                          message: "Rechecking site...",
+                          percentage: 75,
+                        });
+                      }}
+                      className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-sm transition"
+                    >
+                      Retry Check
+                    </button>
+                    <button
+                      onClick={() => window.open(`https://${currentWebsite?.domain}`, '_blank')}
+                      className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-sm transition"
+                    >
+                      Open Site
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {currentWebsite?.status === "LIVE" || deployProgress?.stage === "live" ? (
                 <div className="text-center py-6">
                   <div className="text-5xl mb-4">🎉</div>
                   <h4 className="text-xl font-semibold text-emerald-400 mb-2">Website is Live!</h4>
                   <a
-                    href={`https://${currentWebsite.domain}`}
+                    href={`https://${currentWebsite?.domain}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-emerald-400 hover:text-emerald-300 underline"
                   >
-                    Visit https://{currentWebsite.domain}
+                    Visit https://{currentWebsite?.domain}
                   </a>
                 </div>
               ) : (
@@ -12347,10 +12494,10 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                   </button>
                   <button
                     onClick={handleDeploy}
-                    disabled={deploying}
+                    disabled={deploying || pollingActive}
                     className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition"
                   >
-                    {deploying ? "Deploying..." : "Deploy Website"}
+                    {deploying ? "Deploying..." : pollingActive ? "Checking status..." : "Deploy Website"}
                   </button>
                 </div>
               )}
