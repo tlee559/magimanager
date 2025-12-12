@@ -52,12 +52,29 @@ export async function POST(
         );
       }
 
+      const cleanKeyword = keyword.toLowerCase().trim();
       const searchTlds = tlds || ["com", "net", "org", "io", "co"];
-      const results = await client.searchDomains(keyword.toLowerCase().trim(), searchTlds);
+
+      // Check if user entered a full domain (contains a dot)
+      // If so, extract just the domain name part and also check the exact domain
+      let results: DomainAvailability[];
+      if (cleanKeyword.includes(".")) {
+        // User entered something like "example.com"
+        // Extract the base name (everything before first dot)
+        const baseName = cleanKeyword.split(".")[0];
+        // Check both the exact domain entered AND variations with other TLDs
+        const exactResult = await client.checkDomain(cleanKeyword);
+        const otherResults = await client.searchDomains(baseName, searchTlds.filter(tld => !cleanKeyword.endsWith(`.${tld}`)));
+        // Put the exact domain first, then other TLD options
+        results = [exactResult, ...otherResults];
+      } else {
+        // User entered just a keyword like "example"
+        results = await client.searchDomains(cleanKeyword, searchTlds);
+      }
 
       return NextResponse.json({
         results,
-        keyword: keyword.toLowerCase().trim(),
+        keyword: cleanKeyword,
       });
     }
 
