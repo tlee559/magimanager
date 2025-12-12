@@ -354,8 +354,16 @@ echo "Starting server setup for ${domain}..."
 ${sshPassword ? `
 # Set root password and enable password authentication
 echo "root:${sshPassword}" | chpasswd
+
+# Update main sshd_config
 sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
 sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+
+# Also update cloud-init SSH config (Ubuntu 22.04+)
+if [ -f /etc/ssh/sshd_config.d/50-cloud-init.conf ]; then
+  sed -i 's/^PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config.d/50-cloud-init.conf
+fi
+
 systemctl restart sshd
 echo "SSH password authentication enabled."
 ` : '# No SSH password provided - SSH key only'}
@@ -389,13 +397,13 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
 
     location / {
-        try_files $uri $uri/ /index.php?$query_string;
+        try_files \\$uri \\$uri/ /index.php?\\$query_string;
     }
 
-    location ~ \\.php$ {
+    location ~ \\.php\\$ {
         include snippets/fastcgi-php.conf;
         fastcgi_pass unix:/var/run/php/php-fpm.sock;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param SCRIPT_FILENAME \\$document_root\\$fastcgi_script_name;
     }
 
     location ~ /\\.ht {
@@ -403,7 +411,7 @@ server {
     }
 
     # Deny access to sensitive files
-    location ~* \\.(env|log|htaccess)$ {
+    location ~* \\.(env|log|htaccess)\\$ {
         deny all;
     }
 }
@@ -478,8 +486,16 @@ echo "Configuring server for ${domain} (from snapshot)..."
 ${sshPassword ? `
 # Set root password and enable password authentication
 echo "root:${sshPassword}" | chpasswd
+
+# Update main sshd_config
 sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
 sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+
+# Also update cloud-init SSH config (Ubuntu 22.04+)
+if [ -f /etc/ssh/sshd_config.d/50-cloud-init.conf ]; then
+  sed -i 's/^PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config.d/50-cloud-init.conf
+fi
+
 systemctl restart sshd
 echo "SSH password authentication enabled."
 ` : '# No SSH password provided'}
@@ -518,13 +534,13 @@ server {
     index index.php index.html index.htm;
 
     location / {
-        try_files $uri $uri/ /index.php?$query_string;
+        try_files \\$uri \\$uri/ /index.php?\\$query_string;
     }
 
-    location ~ \\.php$ {
+    location ~ \\.php\\$ {
         include snippets/fastcgi-php.conf;
         fastcgi_pass unix:/var/run/php/php8.1-fpm.sock;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param SCRIPT_FILENAME \\$document_root\\$fastcgi_script_name;
     }
 
     location ~ /\\.ht {
