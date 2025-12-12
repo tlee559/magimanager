@@ -48,6 +48,7 @@ export async function PATCH(request: NextRequest) {
       namecheapApiKey,
       namecheapUsername,
       namecheapWhitelistIp,
+      namecheapProxyUrl,
       digitaloceanApiKey,
       // Decommission alert settings
       decommissionAlertOnAccountDeath,
@@ -108,6 +109,7 @@ export async function PATCH(request: NextRequest) {
           ...(namecheapApiKey !== undefined && { namecheapApiKey: namecheapApiKey || null }),
           ...(namecheapUsername !== undefined && { namecheapUsername: namecheapUsername || null }),
           ...(namecheapWhitelistIp !== undefined && { namecheapWhitelistIp: namecheapWhitelistIp || null }),
+          ...(namecheapProxyUrl !== undefined && { namecheapProxyUrl: namecheapProxyUrl || null }),
           ...(digitaloceanApiKey !== undefined && { digitaloceanApiKey: digitaloceanApiKey || null }),
           // Decommission alert settings
           ...(decommissionAlertOnAccountDeath !== undefined && { decommissionAlertOnAccountDeath }),

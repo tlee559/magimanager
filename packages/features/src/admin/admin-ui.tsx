@@ -7208,6 +7208,7 @@ function SettingsView() {
   const [namecheapApiKey, setNamecheapApiKey] = useState<string>("");
   const [namecheapUsername, setNamecheapUsername] = useState<string>("");
   const [namecheapWhitelistIp, setNamecheapWhitelistIp] = useState<string>("");
+  const [namecheapProxyUrl, setNamecheapProxyUrl] = useState<string>("");
   const [digitaloceanApiKey, setDigitaloceanApiKey] = useState<string>("");
   const [showNamecheapKey, setShowNamecheapKey] = useState(false);
   const [showDigitaloceanKey, setShowDigitaloceanKey] = useState(false);
@@ -7283,6 +7284,7 @@ function SettingsView() {
         setNamecheapApiKey(data.namecheapApiKey || "");
         setNamecheapUsername(data.namecheapUsername || "");
         setNamecheapWhitelistIp(data.namecheapWhitelistIp || "");
+        setNamecheapProxyUrl(data.namecheapProxyUrl || "");
         setDigitaloceanApiKey(data.digitaloceanApiKey || "");
       }
     } catch (error) {
@@ -7415,6 +7417,7 @@ function SettingsView() {
           namecheapApiKey,
           namecheapUsername,
           namecheapWhitelistIp,
+          namecheapProxyUrl,
           digitaloceanApiKey,
         }),
       });
@@ -8186,11 +8189,35 @@ function SettingsView() {
                   value={namecheapWhitelistIp}
                   onChange={(e) => setNamecheapWhitelistIp(e.target.value)}
                   className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                  placeholder="e.g., 123.456.789.0"
+                  placeholder="e.g., 143.198.160.212"
                 />
                 <p className="text-xs text-slate-500 mt-1">
-                  The IP address whitelisted in your Namecheap API settings. Required for API access.
+                  The IP address whitelisted in your Namecheap API settings. Use the proxy server IP for reliable access.
                 </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Proxy Server URL (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={namecheapProxyUrl}
+                  onChange={(e) => setNamecheapProxyUrl(e.target.value)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  placeholder="e.g., http://143.198.160.212:3000/proxy"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Proxy server with static IP to route Namecheap API requests. Required because Vercel uses dynamic IPs.
+                </p>
+                <div className="mt-2 p-2 rounded bg-slate-950 border border-slate-700">
+                  <p className="text-xs text-emerald-400">
+                    Proxy Droplet IP: <span className="font-mono">143.198.160.212</span>
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Whitelist this IP in Namecheap API settings, then set the proxy URL above once configured.
+                  </p>
+                </div>
               </div>
             </div>
 

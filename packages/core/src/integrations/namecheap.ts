@@ -14,6 +14,7 @@ export interface NamecheapConfig {
   username: string;
   clientIp: string;
   useSandbox?: boolean;
+  proxyUrl?: string; // Optional proxy server URL (e.g., http://143.198.160.212:3000/proxy)
 }
 
 export interface DomainAvailability {
@@ -92,14 +93,17 @@ function getXmlElements(xml: string, tagName: string): string[] {
 class NamecheapClient {
   private config: NamecheapConfig;
   private baseUrl: string;
+  private proxyUrl?: string;
 
   constructor(config: NamecheapConfig) {
     this.config = config;
     this.baseUrl = config.useSandbox ? NAMECHEAP_SANDBOX_URL : NAMECHEAP_API_URL;
+    this.proxyUrl = config.proxyUrl;
   }
 
   /**
    * Make API request to Namecheap
+   * If proxyUrl is configured, routes request through the proxy server
    */
   private async request(command: string, params: Record<string, string> = {}): Promise<string> {
     const searchParams = new URLSearchParams({
@@ -111,7 +115,22 @@ class NamecheapClient {
       ...params,
     });
 
-    const response = await fetch(`${this.baseUrl}?${searchParams}`);
+    let response: Response;
+
+    if (this.proxyUrl) {
+      // Route through proxy server
+      response = await fetch(this.proxyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: `${this.baseUrl}?${searchParams}`,
+        }),
+      });
+    } else {
+      // Direct request
+      response = await fetch(`${this.baseUrl}?${searchParams}`);
+    }
+
     const text = await response.text();
 
     // Check for API errors
@@ -405,5 +424,6 @@ export async function getNamecheapClientFromSettings(): Promise<NamecheapClient>
     apiUser: settings.namecheapUsername,
     username: settings.namecheapUsername,
     clientIp: settings.namecheapWhitelistIp,
+    proxyUrl: settings.namecheapProxyUrl || undefined,
   });
 }

@@ -226,6 +226,7 @@ model AppSettings {
   namecheapApiKey       String?
   namecheapUsername     String?
   namecheapWhitelistIp  String?
+  namecheapProxyUrl     String?  // Proxy server URL for Namecheap API calls (static IP)
   digitaloceanApiKey    String?
 
   // Decommission Alert Settings
