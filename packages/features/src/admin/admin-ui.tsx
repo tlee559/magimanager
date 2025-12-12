@@ -8212,10 +8212,10 @@ function SettingsView() {
                 </p>
                 <div className="mt-2 p-2 rounded bg-slate-950 border border-slate-700">
                   <p className="text-xs text-emerald-400">
-                    Proxy Droplet IP: <span className="font-mono">143.198.160.212</span>
+                    Proxy Server: <span className="font-mono">http://147.182.219.69:3000</span>
                   </p>
                   <p className="text-xs text-slate-500 mt-1">
-                    Whitelist this IP in Namecheap API settings, then set the proxy URL above once configured.
+                    Whitelist IP <span className="font-mono text-slate-400">147.182.219.69</span> in Namecheap, then enter <span className="font-mono text-slate-400">http://147.182.219.69:3000</span> above.
                   </p>
                 </div>
               </div>
