@@ -168,7 +168,7 @@ export async function POST(
 
     // Determine if we should use snapshot or cloud-init
     const useSnapshot = !!settings?.digitaloceanSnapshotId;
-    const imageId = useSnapshot ? settings.digitaloceanSnapshotId : DEFAULT_DROPLET_IMAGE;
+    const imageId = useSnapshot ? settings!.digitaloceanSnapshotId! : DEFAULT_DROPLET_IMAGE;
 
     // Generate user-data script
     // If using snapshot, we just need a simple script to configure domain and download files
