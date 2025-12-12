@@ -6,6 +6,28 @@ import {
   type DomainAvailability,
 } from "@magimanager/core";
 
+/**
+ * Clean a domain input - strips protocol, www, trailing slashes
+ * "http://www.example.com/" -> "example.com"
+ */
+function cleanDomainInput(input: string): string {
+  let domain = input.toLowerCase().trim();
+
+  // Remove protocol
+  domain = domain.replace(/^https?:\/\//, "");
+
+  // Remove www.
+  domain = domain.replace(/^www\./, "");
+
+  // Remove trailing slash and path
+  domain = domain.split("/")[0];
+
+  // Remove any remaining whitespace
+  domain = domain.trim();
+
+  return domain;
+}
+
 // POST /api/websites/[id]/domain - Search or purchase domain
 export async function POST(
   request: NextRequest,
@@ -41,7 +63,7 @@ export async function POST(
         );
       }
 
-      const cleanDomain = domain.toLowerCase().trim();
+      const cleanDomain = cleanDomainInput(domain);
 
       // Basic validation
       if (!cleanDomain.includes(".") || cleanDomain.length < 4) {
@@ -66,6 +88,33 @@ export async function POST(
         );
       }
 
+      // Verify domain exists in Namecheap account (if Namecheap is configured)
+      let domainVerified = false;
+      try {
+        const ncClient = await getNamecheapClientFromSettings();
+        const accountDomains = await ncClient.listDomains();
+        const foundDomain = accountDomains.find(
+          (d) => d.domain.toLowerCase() === cleanDomain
+        );
+
+        if (foundDomain) {
+          domainVerified = true;
+          if (foundDomain.isExpired) {
+            return NextResponse.json(
+              { error: `Domain "${cleanDomain}" has expired in your Namecheap account. Please renew it first.` },
+              { status: 400 }
+            );
+          }
+        } else {
+          // Domain not found in Namecheap - warn user but allow to proceed
+          // They might have the domain at another registrar
+          console.log(`Domain ${cleanDomain} not found in Namecheap account - may be at another registrar`);
+        }
+      } catch (error) {
+        // Namecheap not configured - that's okay, DNS can be managed manually
+        console.log("Namecheap not configured, skipping domain verification");
+      }
+
       // Update website with domain info (no purchase)
       const updated = await prisma.website.update({
         where: { id },
@@ -81,7 +130,9 @@ export async function POST(
         data: {
           websiteId: id,
           action: "DOMAIN_SET",
-          details: `Using existing domain: ${cleanDomain}`,
+          details: domainVerified
+            ? `Using existing domain: ${cleanDomain} (verified in Namecheap)`
+            : `Using existing domain: ${cleanDomain} (DNS will need manual configuration if not in Namecheap)`,
         },
       });
 
@@ -147,7 +198,7 @@ export async function POST(
         );
       }
 
-      const result = await client.checkDomain(domain.toLowerCase().trim());
+      const result = await client.checkDomain(cleanDomainInput(domain));
       return NextResponse.json({ result });
     }
 
@@ -160,7 +211,7 @@ export async function POST(
         );
       }
 
-      const cleanPurchaseDomain = domain.toLowerCase().trim();
+      const cleanPurchaseDomain = cleanDomainInput(domain);
 
       // Check if domain is already used by another website
       const existingPurchaseWebsite = await prisma.website.findFirst({
@@ -187,7 +238,7 @@ export async function POST(
       });
 
       // First check availability
-      const availability = await client.checkDomain(domain.toLowerCase().trim());
+      const availability = await client.checkDomain(cleanPurchaseDomain);
       if (!availability.available) {
         await prisma.website.update({
           where: { id },
@@ -203,7 +254,7 @@ export async function POST(
       }
 
       // Purchase the domain
-      const result = await client.purchaseDomain(domain.toLowerCase().trim());
+      const result = await client.purchaseDomain(cleanPurchaseDomain);
 
       if (!result.success) {
         await prisma.website.update({
@@ -223,7 +274,7 @@ export async function POST(
       const updated = await prisma.website.update({
         where: { id },
         data: {
-          domain: domain.toLowerCase().trim(),
+          domain: cleanPurchaseDomain,
           domainOrderId: result.orderId,
           domainPurchasePrice: result.chargedAmount,
           status: "DOMAIN_PURCHASED",

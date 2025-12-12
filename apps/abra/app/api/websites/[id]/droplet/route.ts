@@ -22,6 +22,34 @@ function generateSecurePassword(length: number = 16): string {
   return password;
 }
 
+/**
+ * Generate a valid hostname from a domain
+ * DigitalOcean only allows: a-z, A-Z, 0-9, . and -
+ */
+function generateDropletName(domain: string): string {
+  // Clean the domain first (remove protocol, www, trailing slash)
+  let name = domain.toLowerCase().trim();
+  name = name.replace(/^https?:\/\//, "");
+  name = name.replace(/^www\./, "");
+  name = name.split("/")[0];
+
+  // Replace dots with dashes
+  name = name.replace(/\./g, "-");
+
+  // Remove any invalid characters (keep only a-z, 0-9, -)
+  name = name.replace(/[^a-z0-9-]/g, "");
+
+  // Remove leading/trailing dashes
+  name = name.replace(/^-+|-+$/g, "");
+
+  // Ensure it's not empty
+  if (!name) {
+    name = `website-${Date.now()}`;
+  }
+
+  return name;
+}
+
 // GET /api/websites/[id]/droplet - Get droplet status
 export async function GET(
   request: NextRequest,
@@ -145,7 +173,7 @@ export async function POST(
 
     // Create droplet
     const droplet = await client.createDroplet({
-      name: website.domain.replace(/\./g, "-"),
+      name: generateDropletName(website.domain),
       region,
       size,
       image: DEFAULT_DROPLET_IMAGE,
