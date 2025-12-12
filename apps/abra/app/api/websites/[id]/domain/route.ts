@@ -51,6 +51,21 @@ export async function POST(
         );
       }
 
+      // Check if domain is already used by another website
+      const existingWebsite = await prisma.website.findFirst({
+        where: {
+          domain: cleanDomain,
+          id: { not: id }, // Exclude current website
+        },
+      });
+
+      if (existingWebsite) {
+        return NextResponse.json(
+          { error: `Domain "${cleanDomain}" is already in use by another website (${existingWebsite.name})` },
+          { status: 400 }
+        );
+      }
+
       // Update website with domain info (no purchase)
       const updated = await prisma.website.update({
         where: { id },
@@ -141,6 +156,23 @@ export async function POST(
       if (!domain || typeof domain !== "string") {
         return NextResponse.json(
           { error: "Domain is required for purchase" },
+          { status: 400 }
+        );
+      }
+
+      const cleanPurchaseDomain = domain.toLowerCase().trim();
+
+      // Check if domain is already used by another website
+      const existingPurchaseWebsite = await prisma.website.findFirst({
+        where: {
+          domain: cleanPurchaseDomain,
+          id: { not: id }, // Exclude current website
+        },
+      });
+
+      if (existingPurchaseWebsite) {
+        return NextResponse.json(
+          { error: `Domain "${cleanPurchaseDomain}" is already in use by another website (${existingPurchaseWebsite.name})` },
           { status: 400 }
         );
       }

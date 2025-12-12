@@ -10911,6 +10911,49 @@ function WebsitesView() {
   const [selectedWebsite, setSelectedWebsite] = useState<Website | null>(null);
   const [expandedSsh, setExpandedSsh] = useState<string | null>(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [dnsStatus, setDnsStatus] = useState<Record<string, { loading: boolean; data: DnsCheckResult | null; error: string | null }>>({});
+
+  interface DnsCheckResult {
+    domain: string;
+    expectedIp: string;
+    dns: {
+      aRecords: string[];
+      wwwRecords: string[];
+      aRecordCorrect: boolean;
+      wwwCorrect: boolean;
+      nameservers: string[];
+    };
+    site: {
+      reachable: boolean;
+      sslValid: boolean;
+    };
+    healthy: boolean;
+  }
+
+  const checkDns = async (siteId: string) => {
+    setDnsStatus(prev => ({ ...prev, [siteId]: { loading: true, data: null, error: null } }));
+    try {
+      const res = await fetch(`/api/websites/${siteId}/dns-check`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "DNS check failed");
+      setDnsStatus(prev => ({ ...prev, [siteId]: { loading: false, data, error: null } }));
+    } catch (error) {
+      setDnsStatus(prev => ({ ...prev, [siteId]: { loading: false, data: null, error: error instanceof Error ? error.message : "Failed" } }));
+    }
+  };
+
+  const syncDns = async (siteId: string) => {
+    setDnsStatus(prev => ({ ...prev, [siteId]: { ...prev[siteId], loading: true } }));
+    try {
+      const res = await fetch(`/api/websites/${siteId}/dns-check`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "DNS sync failed");
+      // Re-check DNS after sync
+      setTimeout(() => checkDns(siteId), 2000);
+    } catch (error) {
+      setDnsStatus(prev => ({ ...prev, [siteId]: { loading: false, data: prev[siteId]?.data || null, error: error instanceof Error ? error.message : "Sync failed" } }));
+    }
+  };
 
   const fetchWebsites = async () => {
     try {
@@ -11047,6 +11090,20 @@ function WebsitesView() {
                     {site.status === "LIVE" && (
                       <>
                         <button
+                          onClick={() => checkDns(site.id)}
+                          disabled={dnsStatus[site.id]?.loading}
+                          className={`px-3 py-1.5 text-sm rounded transition ${
+                            dnsStatus[site.id]?.data?.healthy
+                              ? "bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30"
+                              : dnsStatus[site.id]?.data && !dnsStatus[site.id]?.data?.healthy
+                              ? "bg-amber-600/20 text-amber-400 hover:bg-amber-600/30"
+                              : "bg-slate-700 hover:bg-slate-600 text-slate-200"
+                          }`}
+                          title="Check DNS Status"
+                        >
+                          {dnsStatus[site.id]?.loading ? "..." : dnsStatus[site.id]?.data?.healthy ? "DNS ✓" : dnsStatus[site.id]?.data ? "DNS !" : "DNS"}
+                        </button>
+                        <button
                           onClick={() => setExpandedSsh(expandedSsh === site.id ? null : site.id)}
                           className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm rounded transition"
                           title="SSH Details"
@@ -11129,6 +11186,86 @@ function WebsitesView() {
                     <p className="text-xs text-slate-500 mt-3">
                       SSH key was configured when the droplet was created. Check your DigitalOcean account for the SSH key.
                     </p>
+                  </div>
+                )}
+
+                {/* DNS Status Panel */}
+                {dnsStatus[site.id]?.data && (
+                  <div className="border-t border-slate-700 bg-slate-900/50 p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-medium text-slate-300">DNS Status</h4>
+                      <div className="flex items-center gap-2">
+                        {!dnsStatus[site.id].data?.healthy && (
+                          <button
+                            onClick={() => syncDns(site.id)}
+                            disabled={dnsStatus[site.id]?.loading}
+                            className="px-3 py-1 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white text-xs rounded transition"
+                          >
+                            {dnsStatus[site.id]?.loading ? "Syncing..." : "Sync DNS"}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setDnsStatus(prev => ({ ...prev, [site.id]: { loading: false, data: null, error: null } }))}
+                          className="text-slate-400 hover:text-slate-200 text-xs"
+                        >
+                          Close
+                        </button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-slate-500 text-xs mb-1">A Record (@)</p>
+                        <div className="flex items-center gap-2">
+                          <span className={dnsStatus[site.id].data?.dns.aRecordCorrect ? "text-emerald-400" : "text-red-400"}>
+                            {dnsStatus[site.id].data?.dns.aRecordCorrect ? "✓" : "✗"}
+                          </span>
+                          <code className="text-slate-300 text-xs">
+                            {dnsStatus[site.id].data?.dns.aRecords.join(", ") || "Not set"}
+                          </code>
+                        </div>
+                        {!dnsStatus[site.id].data?.dns.aRecordCorrect && (
+                          <p className="text-xs text-slate-500 mt-1">Expected: {site.dropletIp}</p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-slate-500 text-xs mb-1">WWW Record</p>
+                        <div className="flex items-center gap-2">
+                          <span className={dnsStatus[site.id].data?.dns.wwwCorrect ? "text-emerald-400" : "text-amber-400"}>
+                            {dnsStatus[site.id].data?.dns.wwwCorrect ? "✓" : "!"}
+                          </span>
+                          <code className="text-slate-300 text-xs">
+                            {dnsStatus[site.id].data?.dns.wwwRecords.join(", ") || "Not set"}
+                          </code>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-slate-500 text-xs mb-1">Site Reachable</p>
+                        <div className="flex items-center gap-2">
+                          <span className={dnsStatus[site.id].data?.site.reachable ? "text-emerald-400" : "text-red-400"}>
+                            {dnsStatus[site.id].data?.site.reachable ? "✓ Yes" : "✗ No"}
+                          </span>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-slate-500 text-xs mb-1">SSL Valid</p>
+                        <div className="flex items-center gap-2">
+                          <span className={dnsStatus[site.id].data?.site.sslValid ? "text-emerald-400" : "text-amber-400"}>
+                            {dnsStatus[site.id].data?.site.sslValid ? "✓ Yes" : "! Pending"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    {dnsStatus[site.id].data?.dns.nameservers.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-slate-700/50">
+                        <p className="text-slate-500 text-xs mb-1">Nameservers</p>
+                        <code className="text-slate-400 text-xs">
+                          {dnsStatus[site.id].data?.dns.nameservers.join(", ")}
+                        </code>
+                      </div>
+                    )}
+                    {dnsStatus[site.id].error && (
+                      <p className="text-red-400 text-xs mt-2">{dnsStatus[site.id].error}</p>
+                    )}
                   </div>
                 )}
               </div>
