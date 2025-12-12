@@ -337,29 +337,54 @@ class NamecheapClient {
   }
 
   /**
-   * Get list of domains in account
+   * Get list of domains in account (with pagination to get all domains)
    */
   async listDomains(): Promise<Array<{ domain: string; expires: string; isExpired: boolean }>> {
-    const xml = await this.request('namecheap.domains.getList');
+    const allResults: Array<{ domain: string; expires: string; isExpired: boolean }> = [];
+    let page = 1;
+    const pageSize = 100; // Max allowed by Namecheap API
+    let hasMore = true;
 
-    const results: Array<{ domain: string; expires: string; isExpired: boolean }> = [];
-    const domainElements = getXmlElements(xml, 'Domain');
+    while (hasMore) {
+      const xml = await this.request('namecheap.domains.getList', {
+        PageSize: pageSize.toString(),
+        Page: page.toString(),
+      });
 
-    for (const elem of domainElements) {
-      const name = getXmlAttribute(elem, 'Domain', 'Name');
-      const expires = getXmlAttribute(elem, 'Domain', 'Expires');
-      const isExpired = getXmlAttribute(elem, 'Domain', 'IsExpired') === 'true';
+      const domainElements = getXmlElements(xml, 'Domain');
 
-      if (name) {
-        results.push({
-          domain: name,
-          expires: expires || '',
-          isExpired,
-        });
+      for (const elem of domainElements) {
+        const name = getXmlAttribute(elem, 'Domain', 'Name');
+        const expires = getXmlAttribute(elem, 'Domain', 'Expires');
+        const isExpired = getXmlAttribute(elem, 'Domain', 'IsExpired') === 'true';
+
+        if (name) {
+          allResults.push({
+            domain: name,
+            expires: expires || '',
+            isExpired,
+          });
+        }
+      }
+
+      // Check if there are more pages
+      // Namecheap returns TotalItems in the Paging element
+      const totalItemsStr = getXmlValue(xml, 'TotalItems');
+      const totalItems = totalItemsStr ? parseInt(totalItemsStr, 10) : 0;
+
+      if (allResults.length >= totalItems || domainElements.length < pageSize) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+
+      // Safety: max 50 pages (5000 domains) to prevent infinite loops
+      if (page > 50) {
+        hasMore = false;
       }
     }
 
-    return results;
+    return allResults;
   }
 
   /**
