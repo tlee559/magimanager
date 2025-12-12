@@ -1042,8 +1042,9 @@ function DashboardView({ identities, accounts, loading, onNavigate }: {
   loading: boolean;
   onNavigate: (view: View) => void;
 }) {
-  // Filter out archived items for dashboard stats
-  const activeIdentities = identities.filter(i => !i.archived);
+  // Filter out archived and inactive items for dashboard stats
+  const activeIdentities = identities.filter(i => !i.archived && !i.inactive);
+  const inactiveIdentities = identities.filter(i => !i.archived && i.inactive);
   const activeAccounts = accounts.filter(a => a.handoffStatus !== "archived");
 
   const recentIdentities = activeIdentities.slice(0, 4);
@@ -1097,6 +1098,9 @@ function DashboardView({ identities, accounts, loading, onNavigate }: {
           <p className="text-3xl font-semibold text-slate-50 mb-1">{activeIdentities.length}</p>
           <p className="text-xs text-slate-500">
             Stored ID profiles (KYC records).
+            {inactiveIdentities.length > 0 && (
+              <span className="text-red-400"> ({inactiveIdentities.length} inactive)</span>
+            )}
           </p>
         </div>
 
@@ -1249,6 +1253,7 @@ function IdentitiesListView({
   const [searchQuery, setSearchQuery] = useState("");
   const [geoFilter, setGeoFilter] = useState<string>("all");
   const [showArchived, setShowArchived] = useState(false);
+  const [hideInactive, setHideInactive] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
   // Get unique geos for filter dropdown
@@ -1263,6 +1268,9 @@ function IdentitiesListView({
       // Archive filter
       if (!showArchived && identity.archived) return false;
       if (showArchived && !identity.archived) return false;
+
+      // Inactive filter (hide inactive when toggle is on)
+      if (hideInactive && identity.inactive) return false;
 
       // Geo filter
       if (geoFilter !== "all" && identity.geo !== geoFilter) return false;
@@ -1283,7 +1291,7 @@ function IdentitiesListView({
 
       return true;
     });
-  }, [identities, searchQuery, geoFilter, showArchived]);
+  }, [identities, searchQuery, geoFilter, showArchived, hideInactive]);
 
   // Pagination
   const totalPages = Math.ceil(filteredIdentities.length / ITEMS_PER_PAGE);
@@ -1295,11 +1303,12 @@ function IdentitiesListView({
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, geoFilter, showArchived]);
+  }, [searchQuery, geoFilter, showArchived, hideInactive]);
 
   const hasIdentities = filteredIdentities.length > 0;
   const totalCount = identities.filter(i => showArchived ? i.archived : !i.archived).length;
   const archivedCount = identities.filter(i => i.archived).length;
+  const inactiveCount = identities.filter(i => !i.archived && i.inactive).length;
 
   return (
     <>
@@ -1384,6 +1393,23 @@ function IdentitiesListView({
             <option key={geo} value={geo}>{geo}</option>
           ))}
         </select>
+
+        {/* Hide Inactive Toggle */}
+        {inactiveCount > 0 && !showArchived && (
+          <button
+            onClick={() => setHideInactive(!hideInactive)}
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+              hideInactive
+                ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                : "bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700"
+            }`}
+          >
+            {hideInactive ? "Inactive Hidden" : "Hide Inactive"}
+            <span className="ml-1.5 px-1.5 py-0.5 text-xs bg-slate-700 rounded">
+              {inactiveCount}
+            </span>
+          </button>
+        )}
 
         {/* Show Archived Toggle */}
         <button
