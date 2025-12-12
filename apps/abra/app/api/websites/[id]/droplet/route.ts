@@ -1,26 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/api-auth";
-import crypto from "crypto";
 import {
   getDigitalOceanClientFromSettings,
   generateGenericServerUserData,
-  DROPLET_SIZES,
   DEFAULT_DROPLET_IMAGE,
 } from "@magimanager/core";
-
-/**
- * Generate a secure random password for SSH access
- */
-function generateSecurePassword(length: number = 16): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%&*';
-  let password = '';
-  const randomBytes = crypto.randomBytes(length);
-  for (let i = 0; i < length; i++) {
-    password += chars[randomBytes[i] % chars.length];
-  }
-  return password;
-}
 
 /**
  * Generate a valid hostname from website name or domain
@@ -116,7 +101,7 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { region = "nyc1", size = "s-1vcpu-1gb" } = body;
+    let { region = "nyc1", size = "s-1vcpu-1gb" } = body;
 
     // Check website exists (domain is optional now - can create server first)
     const website = await prisma.website.findUnique({
@@ -150,8 +135,45 @@ export async function POST(
       );
     }
 
-    // Generate SSH password
-    const sshPassword = generateSecurePassword(16);
+    // Determine image and SSH configuration
+    const useSnapshot = !!settings?.digitaloceanSnapshotId;
+    const imageId = useSnapshot ? settings!.digitaloceanSnapshotId! : DEFAULT_DROPLET_IMAGE;
+
+    // When using a snapshot, we need to use a region where it's available
+    // Snapshots are only available in the region they were created
+    // Fetch snapshot info to get the correct region
+    if (useSnapshot) {
+      try {
+        const snapshot = await client.getSnapshot(settings!.digitaloceanSnapshotId!);
+        if (snapshot && snapshot.regions && snapshot.regions.length > 0) {
+          // Use the first available region for this snapshot
+          const snapshotRegion = snapshot.regions[0];
+          if (snapshotRegion !== region) {
+            console.log(`Overriding region ${region} -> ${snapshotRegion} (snapshot only available there)`);
+            region = snapshotRegion;
+          }
+        }
+      } catch (snapshotError) {
+        console.warn("Could not fetch snapshot info, using default region:", snapshotError);
+        // If we can't get snapshot info, just use nyc1 as that's where our snapshots are
+        region = "nyc1";
+      }
+    }
+
+    // Get SSH key ID for passwordless authentication (preferred)
+    // Falls back to password-based auth if no SSH key configured
+    const sshKeyId = settings?.digitaloceanSshKeyId
+      ? parseInt(settings.digitaloceanSshKeyId)
+      : undefined;
+
+    // Only use cloud-init user-data for fresh images (not snapshots)
+    // Snapshots already have the server configured
+    let userData: string | undefined;
+    if (!useSnapshot) {
+      // Fresh image - use cloud-init to set up the server
+      // Note: SSH key auth doesn't require password setup in cloud-init
+      userData = generateGenericServerUserData({});
+    }
 
     // Update status
     await prisma.website.update({
@@ -159,25 +181,19 @@ export async function POST(
       data: {
         status: "DROPLET_CREATING",
         statusMessage: "Creating server...",
-        sshPassword, // Store the password
+        // SSH auth is handled via key - no password needed per-website
+        sshPassword: null,
       },
     });
 
-    // Determine if we should use snapshot or cloud-init
-    const useSnapshot = !!settings?.digitaloceanSnapshotId;
-    const imageId = useSnapshot ? settings!.digitaloceanSnapshotId! : DEFAULT_DROPLET_IMAGE;
-
-    // Generate generic user-data script (works at IP level, no domain required)
-    // This creates a server with server_name _ that responds to any request
-    const userData = generateGenericServerUserData({ sshPassword });
-
-    // Create droplet with website name (or domain if available)
+    // Create droplet with SSH key (if configured)
     const droplet = await client.createDroplet({
       name: generateDropletName(website.name, website.domain),
       region,
       size,
       image: imageId!,
       userData,
+      sshKeys: sshKeyId ? [sshKeyId] : undefined,
       tags: ["1-click-website", `website-${id}`],
     });
 

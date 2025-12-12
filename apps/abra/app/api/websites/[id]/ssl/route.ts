@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/api-auth";
-import { executeRemoteScript } from "@magimanager/core";
+import { executeRemoteScript, getSshCredentialsFromSettings } from "@magimanager/core";
 
 /**
  * POST /api/websites/[id]/ssl - Install Let's Encrypt SSL certificate
@@ -47,9 +47,13 @@ export async function POST(
       );
     }
 
-    if (!website.sshPassword) {
+    // Get SSH credentials from settings (SSH key preferred, falls back to password)
+    let sshAuth;
+    try {
+      sshAuth = await getSshCredentialsFromSettings();
+    } catch (error) {
       return NextResponse.json(
-        { error: "SSH password not found. Please recreate the droplet." },
+        { error: error instanceof Error ? error.message : "SSH credentials not configured" },
         { status: 400 }
       );
     }
@@ -165,7 +169,7 @@ echo "=== Nginx reloaded successfully ==="
     console.log(`Installing SSL for ${website.domain}...`);
     const result = await executeRemoteScript(
       website.dropletIp,
-      website.sshPassword,
+      sshAuth,
       sslScript,
       { timeout: 120000 } // 2 minute timeout
     );

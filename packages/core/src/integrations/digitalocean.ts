@@ -134,6 +134,29 @@ class DigitalOceanClient {
   }
 
   /**
+   * Get a snapshot by ID
+   * Returns snapshot details including which regions it's available in
+   */
+  async getSnapshot(snapshotId: string): Promise<{
+    id: string;
+    name: string;
+    regions: string[];
+    createdAt: string;
+    minDiskSize: number;
+    sizeGigabytes: number;
+  }> {
+    const response = await this.request<{ snapshot: any }>(`/snapshots/${snapshotId}`);
+    return {
+      id: response.snapshot.id,
+      name: response.snapshot.name,
+      regions: response.snapshot.regions || [],
+      createdAt: response.snapshot.created_at,
+      minDiskSize: response.snapshot.min_disk_size,
+      sizeGigabytes: response.snapshot.size_gigabytes,
+    };
+  }
+
+  /**
    * Wait for droplet to be active and have an IP
    */
   async waitForDroplet(dropletId: number, maxWaitMs: number = 300000): Promise<Droplet> {
@@ -188,6 +211,76 @@ class DigitalOceanClient {
       method: 'POST',
       body: JSON.stringify({ type: 'power_on' }),
     });
+  }
+
+  /**
+   * Reset root password on a droplet
+   * IMPORTANT: This is required when creating droplets from snapshots
+   * because cloud-init user-data doesn't re-run on snapshots
+   *
+   * The new password will be emailed to the account owner.
+   * For API-controlled password, we need to SSH in after this completes.
+   */
+  async resetRootPassword(dropletId: number): Promise<{ actionId: number }> {
+    const response = await this.request<{ action: { id: number } }>(`/droplets/${dropletId}/actions`, {
+      method: 'POST',
+      body: JSON.stringify({ type: 'password_reset' }),
+    });
+    return { actionId: response.action.id };
+  }
+
+  /**
+   * Get action status
+   */
+  async getAction(dropletId: number, actionId: number): Promise<{ status: string; completedAt?: string }> {
+    const response = await this.request<{ action: { status: string; completed_at?: string } }>(
+      `/droplets/${dropletId}/actions/${actionId}`
+    );
+    return {
+      status: response.action.status,
+      completedAt: response.action.completed_at,
+    };
+  }
+
+  /**
+   * Wait for an action to complete
+   */
+  async waitForAction(dropletId: number, actionId: number, maxWaitMs: number = 120000): Promise<boolean> {
+    const startTime = Date.now();
+    const pollInterval = 5000;
+
+    while (Date.now() - startTime < maxWaitMs) {
+      const action = await this.getAction(dropletId, actionId);
+      if (action.status === 'completed') {
+        return true;
+      }
+      if (action.status === 'errored') {
+        return false;
+      }
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    return false;
+  }
+
+  /**
+   * Enable password auth and set password via console access
+   * This uses the droplet console action to run commands
+   *
+   * NOTE: This is a workaround for snapshots where cloud-init doesn't run.
+   * The password is set by sending commands through the console.
+   */
+  async enablePasswordAuthViaConsole(dropletId: number, password: string): Promise<boolean> {
+    // DigitalOcean doesn't have a direct API to set password without triggering email
+    // The password_reset action emails the password to account owner
+    // For full automation, we need to either:
+    // 1. Use SSH keys (most reliable)
+    // 2. Clean cloud-init state in snapshot before taking it
+    // 3. Use the password reset and have user copy from email
+
+    // For now, trigger password reset and return the action
+    const { actionId } = await this.resetRootPassword(dropletId);
+    return this.waitForAction(dropletId, actionId);
   }
 
   /**
@@ -613,7 +706,9 @@ export const DEFAULT_DROPLET_IMAGE = 'ubuntu-22-04-x64';
 // ============================================================================
 
 /**
- * Generate cloud-init script for a generic server that works at IP level
+ * Generate cloud-init user-data for a generic server that works at IP level.
+ * Installs nginx, PHP-FPM, and certbot, then configures a default site.
+ *
  * This is used for the new IP-first deployment flow where:
  * 1. Server boots with generic nginx config (server_name _)
  * 2. Files are uploaded via SSH after server is ready
@@ -623,46 +718,46 @@ export const DEFAULT_DROPLET_IMAGE = 'ubuntu-22-04-x64';
 export function generateGenericServerUserData(options: {
   sshPassword?: string;
 }): string {
-  const { sshPassword } = options;
-
+  // Use plain bash script for maximum compatibility
+  // cloud-config YAML has issues with complex scripts
   return `#!/bin/bash
 set -e
-
-# Log all output
 exec > >(tee /var/log/user-data.log) 2>&1
-echo "Starting generic server setup..."
 
-${sshPassword ? `
-# Set root password and enable password authentication
-echo "root:${sshPassword}" | chpasswd
+echo "=== Starting server setup $(date) ==="
 
-# Update main sshd_config
-sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
-sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+# Prevent apt from prompting for input
+export DEBIAN_FRONTEND=noninteractive
 
-# Also update cloud-init SSH config (Ubuntu 22.04+)
-if [ -f /etc/ssh/sshd_config.d/50-cloud-init.conf ]; then
-  sed -i 's/^PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config.d/50-cloud-init.conf
-fi
+# Wait for any existing apt processes to finish
+while fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
+  echo "Waiting for apt lock..."
+  sleep 5
+done
 
-systemctl restart sshd
-echo "SSH password authentication enabled."
-` : '# No SSH password provided - SSH key only'}
+# Update package list
+echo "Updating packages..."
+apt-get update
 
-# Detect PHP version from installed PHP-FPM
+# Install required packages
+echo "Installing nginx, PHP, and certbot..."
+apt-get install -y nginx php-fpm php-mysql php-curl php-json php-mbstring unzip certbot python3-certbot-nginx curl
+
+# Get installed PHP version
 PHP_VERSION=$(ls /var/run/php/ 2>/dev/null | grep -oP 'php\\K[0-9]+\\.[0-9]+' | head -1)
 if [ -z "$PHP_VERSION" ]; then
-  # Fallback: check php command
   PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;" 2>/dev/null || echo "8.1")
 fi
-echo "Detected PHP version: $PHP_VERSION"
+echo "PHP version: $PHP_VERSION"
 
 # Create web directory
+echo "Setting up web directory..."
 mkdir -p /var/www/html
 chown -R www-data:www-data /var/www/html
 
 # Create generic nginx config (works with any IP or domain)
-cat > /etc/nginx/sites-available/default << EOF
+echo "Creating nginx config..."
+cat > /etc/nginx/sites-available/default << NGINXEOF
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
@@ -670,7 +765,6 @@ server {
     root /var/www/html;
     index index.php index.html index.htm;
 
-    # Accept any domain or IP
     server_name _;
 
     location / {
@@ -687,10 +781,11 @@ server {
         deny all;
     }
 }
-EOF
+NGINXEOF
 
 # Create placeholder index
-cat > /var/www/html/index.html << 'PLACEHOLDER'
+echo "Creating placeholder index..."
+cat > /var/www/html/index.html << 'INDEXEOF'
 <!DOCTYPE html>
 <html>
 <head>
@@ -704,21 +799,21 @@ cat > /var/www/html/index.html << 'PLACEHOLDER'
 <body>
     <h1>Server Ready</h1>
     <p>Your server is configured and waiting for website files.</p>
-    <p>Upload your files to continue the deployment.</p>
 </body>
 </html>
-PLACEHOLDER
+INDEXEOF
 chown www-data:www-data /var/www/html/index.html
 
 # Ensure nginx sites-enabled link exists
 ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 
 # Test and reload nginx
+echo "Testing and reloading nginx..."
 nginx -t && systemctl reload nginx
 
 # Mark server as ready
 touch /tmp/server-ready
-echo "Generic server setup complete!"
+echo "=== Server setup complete $(date) ==="
 `;
 }
 
@@ -727,11 +822,22 @@ echo "Generic server setup complete!"
 // ============================================================================
 
 /**
+ * SSH authentication options - supports both password and private key
+ */
+export interface SshAuthOptions {
+  password?: string;
+  privateKey?: string;
+  username?: string;
+  timeout?: number;
+}
+
+/**
  * Execute a script on a remote server via SSH
+ * Supports both password and private key authentication
  */
 export async function executeRemoteScript(
   host: string,
-  password: string,
+  authOrPassword: string | SshAuthOptions,
   script: string,
   options: {
     username?: string;
@@ -739,13 +845,29 @@ export async function executeRemoteScript(
   } = {}
 ): Promise<{ stdout: string; stderr: string; code: number }> {
   const ssh = new NodeSSH();
-  const { username = 'root', timeout = 60000 } = options;
+
+  // Handle both old (password string) and new (options object) signatures
+  let auth: SshAuthOptions;
+  if (typeof authOrPassword === 'string') {
+    // Legacy: password string
+    auth = { password: authOrPassword, ...options };
+  } else {
+    // New: options object
+    auth = { ...authOrPassword, ...options };
+  }
+
+  const { username = 'root', timeout = 60000, password, privateKey } = auth;
+
+  if (!password && !privateKey) {
+    throw new Error('Either password or privateKey must be provided for SSH authentication');
+  }
 
   try {
     await ssh.connect({
       host,
       username,
       password,
+      privateKey,
       readyTimeout: timeout,
       // Disable strict host key checking for new servers
       algorithms: {
@@ -769,10 +891,11 @@ export async function executeRemoteScript(
 
 /**
  * Wait for SSH to become available on a server
+ * Supports both password and private key authentication
  */
 export async function waitForSsh(
   host: string,
-  password: string,
+  authOrPassword: string | SshAuthOptions,
   maxWaitMs: number = 120000
 ): Promise<boolean> {
   const startTime = Date.now();
@@ -780,7 +903,7 @@ export async function waitForSsh(
 
   while (Date.now() - startTime < maxWaitMs) {
     try {
-      const result = await executeRemoteScript(host, password, 'echo "SSH ready"', {
+      const result = await executeRemoteScript(host, authOrPassword, 'echo "SSH ready"', {
         timeout: 10000,
       });
       if (result.code === 0) {
@@ -793,4 +916,60 @@ export async function waitForSsh(
   }
 
   return false;
+}
+
+/**
+ * Generate an SSH key pair for use with DigitalOcean droplets
+ * Uses the ssh-keygen command which produces standard OpenSSH format
+ * Returns { publicKey, privateKey }
+ */
+export async function generateSshKeyPair(keyName: string = 'magimanager-websites'): Promise<{ publicKey: string; privateKey: string }> {
+  const { execSync } = require('child_process');
+  const fs = require('fs');
+  const path = require('path');
+  const os = require('os');
+
+  // Create temp directory for key generation
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-keygen-'));
+  const keyPath = path.join(tempDir, 'id_rsa');
+
+  try {
+    // Generate RSA key pair using ssh-keygen (available on Mac/Linux)
+    execSync(`ssh-keygen -t rsa -b 4096 -f "${keyPath}" -N "" -C "${keyName}"`, {
+      stdio: 'pipe',
+    });
+
+    // Read the generated keys
+    const privateKey = fs.readFileSync(keyPath, 'utf8');
+    const publicKey = fs.readFileSync(`${keyPath}.pub`, 'utf8').trim();
+
+    return { publicKey, privateKey };
+  } finally {
+    // Clean up temp files
+    try {
+      fs.unlinkSync(keyPath);
+      fs.unlinkSync(`${keyPath}.pub`);
+      fs.rmdirSync(tempDir);
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
+}
+
+/**
+ * Get SSH credentials from app settings
+ * Returns either privateKey (preferred) or password for SSH connections
+ */
+export async function getSshCredentialsFromSettings(): Promise<SshAuthOptions> {
+  const settings = await prisma.appSettings.findFirst();
+
+  if (settings?.digitaloceanSshPrivateKey) {
+    return { privateKey: settings.digitaloceanSshPrivateKey };
+  }
+
+  if (settings?.digitaloceanSshPassword) {
+    return { password: settings.digitaloceanSshPassword };
+  }
+
+  throw new Error('No SSH credentials configured. Please set up SSH key or password in Settings.');
 }

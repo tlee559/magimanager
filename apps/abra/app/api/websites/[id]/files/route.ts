@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/api-auth";
 import {
   executeRemoteScript,
   waitForSsh,
+  getSshCredentialsFromSettings,
 } from "@magimanager/core";
 
 /**
@@ -42,16 +43,20 @@ export async function POST(
       );
     }
 
-    if (!website.sshPassword) {
+    if (!website.zipFileUrl) {
       return NextResponse.json(
-        { error: "SSH password not found. Please recreate the droplet." },
+        { error: "No zip file uploaded. Please upload a zip file first." },
         { status: 400 }
       );
     }
 
-    if (!website.zipFileUrl) {
+    // Get SSH credentials from settings (SSH key preferred, falls back to password)
+    let sshAuth;
+    try {
+      sshAuth = await getSshCredentialsFromSettings();
+    } catch (error) {
       return NextResponse.json(
-        { error: "No zip file uploaded. Please upload a zip file first." },
+        { error: error instanceof Error ? error.message : "SSH credentials not configured" },
         { status: 400 }
       );
     }
@@ -67,7 +72,7 @@ export async function POST(
 
     // Wait for SSH to be available (server might still be booting)
     console.log(`Waiting for SSH on ${website.dropletIp}...`);
-    const sshReady = await waitForSsh(website.dropletIp, website.sshPassword, 120000); // 2 min timeout
+    const sshReady = await waitForSsh(website.dropletIp, sshAuth, 120000); // 2 min timeout
 
     if (!sshReady) {
       await prisma.website.update({
@@ -87,7 +92,7 @@ export async function POST(
     console.log("Checking if cloud-init completed...");
     const cloudInitCheck = await executeRemoteScript(
       website.dropletIp,
-      website.sshPassword,
+      sshAuth,
       'test -f /tmp/server-ready && systemctl is-active nginx && systemctl is-active php*-fpm && echo "READY" || echo "NOT_READY"',
       { timeout: 15000 }
     );
@@ -163,7 +168,7 @@ echo "=== File upload complete ==="
     console.log(`Executing file upload script on ${website.dropletIp}...`);
     const result = await executeRemoteScript(
       website.dropletIp,
-      website.sshPassword,
+      sshAuth,
       script,
       { timeout: 120000 } // 2 minute timeout for large files
     );

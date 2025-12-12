@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/api-auth";
 import {
   executeRemoteScript,
   getNamecheapClientFromSettings,
+  getSshCredentialsFromSettings,
 } from "@magimanager/core";
 
 /**
@@ -49,9 +50,13 @@ export async function POST(
       );
     }
 
-    if (!website.sshPassword) {
+    // Get SSH credentials from settings (SSH key preferred, falls back to password)
+    let sshAuth;
+    try {
+      sshAuth = await getSshCredentialsFromSettings();
+    } catch (error) {
       return NextResponse.json(
-        { error: "SSH password not found. Please recreate the droplet." },
+        { error: error instanceof Error ? error.message : "SSH credentials not configured" },
         { status: 400 }
       );
     }
@@ -123,7 +128,7 @@ echo "=== Nginx configured for ${website.domain} ==="
     console.log(`Configuring nginx for ${website.domain} on ${website.dropletIp}...`);
     const nginxResult = await executeRemoteScript(
       website.dropletIp,
-      website.sshPassword,
+      sshAuth,
       nginxScript,
       { timeout: 30000 }
     );

@@ -229,6 +229,9 @@ model AppSettings {
   namecheapProxyUrl     String?  // Proxy server URL for Namecheap API calls (static IP)
   digitaloceanApiKey    String?
   digitaloceanSnapshotId String?  // Snapshot ID for pre-configured website droplets
+  digitaloceanSshPassword String?  // Default SSH password for website droplets (baked into snapshot)
+  digitaloceanSshKeyId    String?  // DigitalOcean SSH key ID for passwordless auth
+  digitaloceanSshPrivateKey String? @db.Text  // SSH private key for connecting to droplets
 
   // Decommission Alert Settings
   decommissionAlertOnAccountDeath    Boolean @default(true)  // Alert when last account is archived/deleted/banned
