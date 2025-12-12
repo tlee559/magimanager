@@ -11106,11 +11106,14 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
   const [uploadError, setUploadError] = useState("");
 
   // Step 2: Domain
+  const [domainMode, setDomainMode] = useState<"search" | "existing">("existing"); // Default to existing
   const [domainKeyword, setDomainKeyword] = useState("");
   const [domainResults, setDomainResults] = useState<DomainResult[]>([]);
   const [selectedDomain, setSelectedDomain] = useState("");
+  const [existingDomain, setExistingDomain] = useState(""); // For "Use Existing Domain"
   const [searchingDomains, setSearchingDomains] = useState(false);
   const [purchasingDomain, setPurchasingDomain] = useState(false);
+  const [settingDomain, setSettingDomain] = useState(false);
   const [domainError, setDomainError] = useState("");
 
   // Step 3: Server
@@ -11229,6 +11232,39 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
       setDomainError(error instanceof Error ? error.message : "Purchase failed");
     } finally {
       setPurchasingDomain(false);
+    }
+  };
+
+  // Step 2: Set existing domain (no purchase)
+  const handleSetExistingDomain = async () => {
+    const domain = existingDomain.trim().toLowerCase();
+    if (!domain) {
+      setDomainError("Please enter a domain");
+      return;
+    }
+    // Basic validation
+    if (!domain.includes(".") || domain.length < 4) {
+      setDomainError("Please enter a valid domain (e.g., example.com)");
+      return;
+    }
+
+    setSettingDomain(true);
+    setDomainError("");
+
+    try {
+      const res = await fetch(`/api/websites/${currentWebsite?.id}/domain`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "set", domain }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to set domain");
+      setCurrentWebsite(data.website);
+      setStep(3);
+    } catch (error) {
+      setDomainError(error instanceof Error ? error.message : "Failed to set domain");
+    } finally {
+      setSettingDomain(false);
     }
   };
 
@@ -11386,57 +11422,118 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
             <div className="space-y-6">
               <div>
                 <h3 className="text-lg font-medium text-slate-200 mb-4">Step 2: Choose Domain</h3>
-                <p className="text-slate-400 text-sm mb-6">
-                  Search for and purchase a domain name for your website.
+                <p className="text-slate-400 text-sm mb-4">
+                  Use a domain you already own, or search and purchase a new one.
                 </p>
               </div>
 
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={domainKeyword}
-                  onChange={(e) => setDomainKeyword(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSearchDomains()}
-                  placeholder="Enter keyword (e.g., mywebsite)"
-                  className="flex-1 px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
-                />
+              {/* Mode Toggle */}
+              <div className="flex rounded-lg bg-slate-800 p-1 border border-slate-700">
                 <button
-                  onClick={handleSearchDomains}
-                  disabled={searchingDomains || !domainKeyword.trim()}
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white rounded-lg font-medium transition"
+                  onClick={() => { setDomainMode("existing"); setDomainError(""); }}
+                  className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition ${
+                    domainMode === "existing"
+                      ? "bg-emerald-600 text-white"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
                 >
-                  {searchingDomains ? "..." : "Search"}
+                  Use Existing Domain
+                </button>
+                <button
+                  onClick={() => { setDomainMode("search"); setDomainError(""); }}
+                  className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition ${
+                    domainMode === "search"
+                      ? "bg-blue-600 text-white"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  Search & Purchase
                 </button>
               </div>
 
-              {domainResults.length > 0 && (
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-slate-300">Available Domains</label>
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {domainResults.map((result) => (
-                      <button
-                        key={result.domain}
-                        onClick={() => result.available && setSelectedDomain(result.domain)}
-                        disabled={!result.available}
-                        className={`w-full px-4 py-3 rounded-lg border text-left transition ${
-                          selectedDomain === result.domain
-                            ? "bg-emerald-900/30 border-emerald-500 text-emerald-400"
-                            : result.available
-                            ? "bg-slate-800 border-slate-700 text-slate-200 hover:border-slate-600"
-                            : "bg-slate-800/50 border-slate-700/50 text-slate-500"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">{result.domain}</span>
-                          {result.available ? (
-                            <span className="text-emerald-400 text-sm">Available</span>
-                          ) : (
-                            <span className="text-slate-500 text-sm">Taken</span>
-                          )}
-                        </div>
-                      </button>
-                    ))}
+              {/* Existing Domain Mode */}
+              {domainMode === "existing" && (
+                <div className="space-y-4">
+                  <div className="bg-emerald-900/20 rounded-lg p-4 border border-emerald-700/50">
+                    <p className="text-emerald-300 text-sm">
+                      Enter a domain you've already purchased on Namecheap (or any registrar).
+                      After creating the server, you'll get DNS records to configure.
+                    </p>
                   </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Your Domain</label>
+                    <input
+                      type="text"
+                      value={existingDomain}
+                      onChange={(e) => setExistingDomain(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleSetExistingDomain()}
+                      placeholder="example.com"
+                      className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Search & Purchase Mode */}
+              {domainMode === "search" && (
+                <div className="space-y-4">
+                  <div className="bg-amber-900/20 rounded-lg p-4 border border-amber-700/50">
+                    <p className="text-amber-300 text-sm">
+                      Note: Namecheap API requires prepaid account balance. Add funds to your
+                      Namecheap account before purchasing, or use "Use Existing Domain" and
+                      purchase manually on namecheap.com.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={domainKeyword}
+                      onChange={(e) => setDomainKeyword(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleSearchDomains()}
+                      placeholder="Enter keyword (e.g., mywebsite)"
+                      className="flex-1 px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      onClick={handleSearchDomains}
+                      disabled={searchingDomains || !domainKeyword.trim()}
+                      className="px-6 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white rounded-lg font-medium transition"
+                    >
+                      {searchingDomains ? "..." : "Search"}
+                    </button>
+                  </div>
+
+                  {domainResults.length > 0 && (
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-slate-300">Available Domains</label>
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {domainResults.map((result) => (
+                          <button
+                            key={result.domain}
+                            onClick={() => result.available && setSelectedDomain(result.domain)}
+                            disabled={!result.available}
+                            className={`w-full px-4 py-3 rounded-lg border text-left transition ${
+                              selectedDomain === result.domain
+                                ? "bg-emerald-900/30 border-emerald-500 text-emerald-400"
+                                : result.available
+                                ? "bg-slate-800 border-slate-700 text-slate-200 hover:border-slate-600"
+                                : "bg-slate-800/50 border-slate-700/50 text-slate-500"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">{result.domain}</span>
+                              {result.available ? (
+                                <span className="text-emerald-400 text-sm">Available</span>
+                              ) : (
+                                <span className="text-slate-500 text-sm">Taken</span>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -11451,13 +11548,23 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                 >
                   Back
                 </button>
-                <button
-                  onClick={handlePurchaseDomain}
-                  disabled={purchasingDomain || !selectedDomain}
-                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition"
-                >
-                  {purchasingDomain ? "Purchasing..." : `Purchase ${selectedDomain || "Domain"}`}
-                </button>
+                {domainMode === "existing" ? (
+                  <button
+                    onClick={handleSetExistingDomain}
+                    disabled={settingDomain || !existingDomain.trim()}
+                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition"
+                  >
+                    {settingDomain ? "Setting Domain..." : `Use ${existingDomain.trim() || "Domain"}`}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handlePurchaseDomain}
+                    disabled={purchasingDomain || !selectedDomain}
+                    className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition"
+                  >
+                    {purchasingDomain ? "Purchasing..." : `Purchase ${selectedDomain || "Domain"}`}
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -11571,13 +11678,58 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                 </div>
               </div>
 
+              {/* DNS Configuration Instructions */}
+              {currentWebsite?.dropletIp && (
+                <div className="bg-amber-900/20 rounded-lg p-4 border border-amber-700/50">
+                  <h4 className="font-medium text-amber-300 mb-3">⚠️ Configure DNS Records</h4>
+                  <p className="text-amber-200/80 text-sm mb-3">
+                    Go to your domain registrar (Namecheap, etc.) and set these DNS records:
+                  </p>
+                  <div className="bg-slate-900/50 rounded-lg p-3 font-mono text-sm space-y-2">
+                    <div className="flex items-center gap-4">
+                      <span className="text-slate-400 w-16">Type:</span>
+                      <span className="text-amber-300">A Record</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-slate-400 w-16">Host:</span>
+                      <span className="text-emerald-300">@</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-slate-400 w-16">Value:</span>
+                      <span className="text-emerald-300">{currentWebsite.dropletIp}</span>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(currentWebsite.dropletIp!)}
+                        className="text-xs text-slate-400 hover:text-slate-200"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <div className="border-t border-slate-700 my-2"></div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-slate-400 w-16">Type:</span>
+                      <span className="text-amber-300">A Record</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-slate-400 w-16">Host:</span>
+                      <span className="text-emerald-300">www</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-slate-400 w-16">Value:</span>
+                      <span className="text-emerald-300">{currentWebsite.dropletIp}</span>
+                    </div>
+                  </div>
+                  <p className="text-amber-200/60 text-xs mt-3">
+                    DNS changes can take 5-30 minutes to propagate. You can deploy now and SSL will be set up once DNS is ready.
+                  </p>
+                </div>
+              )}
+
               <div className="bg-blue-900/20 rounded-lg p-4 border border-blue-700/50">
                 <h4 className="font-medium text-blue-300 mb-2">What happens when you deploy:</h4>
                 <ul className="text-sm text-blue-200/80 space-y-1 list-disc list-inside">
                   <li>Wait for server to finish setup</li>
-                  <li>Configure DNS to point to server</li>
-                  <li>Website files will be deployed</li>
-                  <li>SSL certificate will be obtained (may take a few minutes)</li>
+                  <li>Website files will be deployed to server</li>
+                  <li>SSL certificate will be obtained (requires DNS to be configured)</li>
                 </ul>
               </div>
 

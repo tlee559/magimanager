@@ -31,7 +31,52 @@ export async function POST(
       );
     }
 
-    // Get Namecheap client
+    // Handle "set" action first - doesn't need Namecheap client
+    if (action === "set") {
+      // Set an existing domain (user already owns it, no purchase needed)
+      if (!domain || typeof domain !== "string") {
+        return NextResponse.json(
+          { error: "Domain is required" },
+          { status: 400 }
+        );
+      }
+
+      const cleanDomain = domain.toLowerCase().trim();
+
+      // Basic validation
+      if (!cleanDomain.includes(".") || cleanDomain.length < 4) {
+        return NextResponse.json(
+          { error: "Please enter a valid domain (e.g., example.com)" },
+          { status: 400 }
+        );
+      }
+
+      // Update website with domain info (no purchase)
+      const updated = await prisma.website.update({
+        where: { id },
+        data: {
+          domain: cleanDomain,
+          status: "DOMAIN_PURCHASED", // Same status, just didn't purchase through ABRA
+          statusMessage: "Existing domain configured. Ready to create server.",
+        },
+      });
+
+      // Log activity
+      await prisma.websiteActivity.create({
+        data: {
+          websiteId: id,
+          action: "DOMAIN_SET",
+          details: `Using existing domain: ${cleanDomain}`,
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        website: updated,
+      });
+    }
+
+    // Get Namecheap client for search/check/purchase
     let client;
     try {
       client = await getNamecheapClientFromSettings();
@@ -171,7 +216,7 @@ export async function POST(
     }
 
     return NextResponse.json(
-      { error: "Invalid action. Use 'search', 'check', or 'purchase'" },
+      { error: "Invalid action. Use 'search', 'check', 'set', or 'purchase'" },
       { status: 400 }
     );
   } catch (error) {

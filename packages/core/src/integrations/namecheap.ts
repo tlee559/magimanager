@@ -378,6 +378,31 @@ class NamecheapClient {
   }
 
   /**
+   * Create a request to add funds via credit card
+   * Returns a redirect URL where user can complete the payment
+   * Note: This requires the user to complete payment in their browser
+   */
+  async createAddFundsRequest(amount: number, returnUrl: string): Promise<{
+    redirectUrl: string;
+    tokenId: string;
+  }> {
+    const xml = await this.request('namecheap.users.createaddfundsrequest', {
+      Amount: amount.toString(),
+      ReturnUrl: returnUrl,
+      PaymentType: 'creditcard',
+    });
+
+    const redirectUrl = getXmlValue(xml, 'RedirectURL') || '';
+    const tokenId = getXmlAttribute(xml, 'CreateaddfundsrequestResult', 'TokenId') || '';
+
+    if (!redirectUrl) {
+      throw new Error('Failed to create add funds request - no redirect URL returned');
+    }
+
+    return { redirectUrl, tokenId };
+  }
+
+  /**
    * Test connection to Namecheap API
    */
   async testConnection(): Promise<{ success: boolean; error?: string; balance?: number }> {
