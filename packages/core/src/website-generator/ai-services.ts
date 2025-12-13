@@ -30,7 +30,8 @@ export interface GenerateImagesOptions {
 // Gemini Content Generation
 // ============================================================================
 
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+// Use latest Gemini 2.0 Flash model
+const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
 function buildContentPrompt(niche: NicheType, description: string, domain: string): string {
   const siteName = domain.split(".")[0].replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase());
@@ -163,7 +164,8 @@ export async function generateContent(options: GenerateContentOptions): Promise<
 // Imagen Image Generation
 // ============================================================================
 
-const IMAGEN_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict";
+// Use latest Imagen 3 model
+const IMAGEN_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict";
 
 function buildImagePrompt(
   type: "hero" | "feature1" | "feature2",
