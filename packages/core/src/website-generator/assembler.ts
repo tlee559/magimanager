@@ -14,6 +14,12 @@ import {
   AnimationPreset,
   LogoIcon,
   NicheType,
+  FeatureLayout,
+  ButtonStyle,
+  CardStyle,
+  TypographyStyle,
+  HeroBackground,
+  HoverEffect,
   selectRandomPresets,
 } from "./presets";
 import {
@@ -64,6 +70,12 @@ export interface SelectedPresets {
   fonts: FontPairing;
   animation: AnimationPreset;
   logoIcon: LogoIcon;
+  featureLayout: FeatureLayout;
+  buttonStyle: ButtonStyle;
+  cardStyle: CardStyle;
+  typography: TypographyStyle;
+  heroBackground: HeroBackground;
+  hoverEffect: HoverEffect;
 }
 
 export interface AssembleOptions {
@@ -78,12 +90,21 @@ export interface AssembleOptions {
 // Variable Replacement
 // ============================================================================
 
+// Helper to convert hex to RGB values
+function hexToRgb(hex: string): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (result) {
+    return `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`;
+  }
+  return "0, 0, 0";
+}
+
 function buildVariables(
   options: AssembleOptions,
   presets: SelectedPresets
 ): Record<string, string> {
   const { niche, content } = options;
-  const { colors, layout, fonts, animation, logoIcon } = presets;
+  const { colors, layout, fonts, animation, logoIcon, featureLayout, buttonStyle, cardStyle, typography, heroBackground, hoverEffect } = presets;
 
   const currentDate = new Date().toLocaleDateString("en-US", {
     year: "numeric",
@@ -101,12 +122,17 @@ function buildVariables(
     CURRENT_DATE: currentDate,
     CURRENT_YEAR: currentYear,
 
-    // Colors
+    // Colors (with RGB variants for rgba usage)
     COLOR_PRIMARY: colors.primary,
+    COLOR_PRIMARY_RGB: hexToRgb(colors.primary),
     COLOR_SECONDARY: colors.secondary,
+    COLOR_SECONDARY_RGB: hexToRgb(colors.secondary),
     COLOR_ACCENT: colors.accent,
+    COLOR_ACCENT_RGB: hexToRgb(colors.accent),
     COLOR_BACKGROUND: colors.background,
+    COLOR_BACKGROUND_RGB: hexToRgb(colors.background),
     COLOR_SURFACE: colors.surface,
+    COLOR_SURFACE_RGB: hexToRgb(colors.surface),
     COLOR_TEXT: colors.text,
     COLOR_TEXT_MUTED: colors.textMuted,
 
@@ -150,6 +176,33 @@ function buildVariables(
 
     // Footer
     FOOTER_TAGLINE: content.footerTagline,
+
+    // NEW: Feature Layout
+    FEATURE_GRID_CLASS: featureLayout.gridClass,
+    FEATURE_CARD_CLASS: featureLayout.cardClass,
+    FEATURE_LAYOUT_ID: featureLayout.id,
+
+    // NEW: Button Style
+    BUTTON_STYLE_CLASS: buttonStyle.className,
+    BUTTON_STYLE_CSS: buttonStyle.css,
+
+    // NEW: Card Style
+    CARD_STYLE_CLASS: cardStyle.className,
+    CARD_STYLE_CSS: cardStyle.css,
+
+    // NEW: Typography
+    HEADING_WEIGHT: typography.headingWeight,
+    HEADING_TRANSFORM: typography.headingTransform,
+    HEADING_LETTER_SPACING: typography.headingLetterSpacing,
+    BODY_LINE_HEIGHT: typography.bodyLineHeight,
+
+    // NEW: Hero Background
+    HERO_BG_CLASS: heroBackground.className,
+    HERO_OVERLAY_STYLE: heroBackground.overlayStyle,
+
+    // NEW: Hover Effects
+    CARD_HOVER_STYLE: hoverEffect.cardHover,
+    BUTTON_HOVER_EFFECT: hoverEffect.buttonHover,
   };
 
   // Niche-specific variables
@@ -348,5 +401,11 @@ export function getPresetInfo(presets: SelectedPresets): Record<string, string> 
     fontPairing: presets.fonts.name,
     animation: presets.animation.name,
     logoIcon: presets.logoIcon.name,
+    featureLayout: presets.featureLayout.name,
+    buttonStyle: presets.buttonStyle.name,
+    cardStyle: presets.cardStyle.name,
+    typography: presets.typography.name,
+    heroBackground: presets.heroBackground.name,
+    hoverEffect: presets.hoverEffect.name,
   };
 }

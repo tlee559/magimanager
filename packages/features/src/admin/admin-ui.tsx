@@ -12216,7 +12216,37 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">Describe Your Website</label>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-medium text-slate-300">Describe Your Website</label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const surpriseDescriptions = [
+                              "Sleek midnight casino with neon accents, high-roller vibes, and a modern Las Vegas feel",
+                              "Tropical paradise casino with tiki vibes, sunset colors, and island-themed slots",
+                              "Futuristic cyber casino with electric blue accents, holographic effects, and a sci-fi atmosphere",
+                              "Classic vintage casino with art deco styling, gold trims, and 1920s glamour",
+                              "Royal palace casino with purple velvet aesthetics, crown motifs, and luxury design",
+                              "Ocean treasure casino with deep sea blues, gold coins, and underwater adventure theme",
+                              "Mystical magic casino with ethereal purple hues, stars, and enchanted forest vibes",
+                              "Fire and flame casino with intense reds and oranges, dramatic lighting, and hot streak energy",
+                              "Ice palace casino with cool blues, crystal effects, and frozen fortune theme",
+                              "Golden empire casino with ancient Egyptian gold, pharaoh symbols, and pyramid treasures",
+                              "Neon nights casino with vibrant pink and cyan, retro-wave style, and electric energy",
+                              "Diamond luxe casino with sparkling silver, elegant minimalism, and VIP exclusivity",
+                              "Lucky dragon casino with Asian-inspired red and gold, fortune symbols, and prosperity themes",
+                              "Wild west casino with frontier brown tones, gold rush vibes, and cowboy adventure",
+                              "Space odyssey casino with cosmic purples, starfield backgrounds, and galactic adventures",
+                            ];
+                            const randomDescription = surpriseDescriptions[Math.floor(Math.random() * surpriseDescriptions.length)];
+                            setAiDescription(randomDescription);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-300 bg-purple-900/30 hover:bg-purple-900/50 border border-purple-700/50 rounded-lg transition"
+                        >
+                          <span>✨</span>
+                          <span>Surprise Me</span>
+                        </button>
+                      </div>
                       <textarea
                         value={aiDescription}
                         onChange={(e) => setAiDescription(e.target.value)}

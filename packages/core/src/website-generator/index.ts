@@ -14,6 +14,12 @@ export {
   type LogoIcon,
   type NicheType,
   type NicheDefinition,
+  type FeatureLayout,
+  type ButtonStyle,
+  type CardStyle,
+  type TypographyStyle,
+  type HeroBackground,
+  type HoverEffect,
 
   // Data
   COLOR_THEMES,
@@ -23,6 +29,12 @@ export {
   LOGO_ICONS,
   NICHES,
   SLOT_SYMBOLS,
+  FEATURE_LAYOUTS,
+  BUTTON_STYLES,
+  CARD_STYLES,
+  TYPOGRAPHY_STYLES,
+  HERO_BACKGROUNDS,
+  HOVER_EFFECTS,
 
   // Functions
   selectRandomPresets,

@@ -426,6 +426,287 @@ export const LOGO_ICONS: LogoIcon[] = [
 ];
 
 // ============================================================================
+// FEATURE SECTION LAYOUTS (5 variants)
+// ============================================================================
+
+export interface FeatureLayout {
+  name: string;
+  id: string;
+  gridClass: string;
+  cardClass: string;
+  description: string;
+}
+
+export const FEATURE_LAYOUTS: FeatureLayout[] = [
+  {
+    name: "Equal Grid",
+    id: "grid-equal",
+    gridClass: "features-grid-equal",
+    cardClass: "feature-card-equal",
+    description: "Three equal-sized cards in a row",
+  },
+  {
+    name: "Large First",
+    id: "large-first",
+    gridClass: "features-grid-large-first",
+    cardClass: "feature-card-varied",
+    description: "One large card, two smaller cards",
+  },
+  {
+    name: "Alternating",
+    id: "alternating",
+    gridClass: "features-grid-alternating",
+    cardClass: "feature-card-horizontal",
+    description: "Alternating left-right layout with images",
+  },
+  {
+    name: "Stacked Cards",
+    id: "stacked",
+    gridClass: "features-grid-stacked",
+    cardClass: "feature-card-stacked",
+    description: "Vertically stacked with overlap effect",
+  },
+  {
+    name: "Masonry",
+    id: "masonry",
+    gridClass: "features-grid-masonry",
+    cardClass: "feature-card-masonry",
+    description: "Pinterest-style masonry grid",
+  },
+];
+
+// ============================================================================
+// BUTTON STYLES (6 variants)
+// ============================================================================
+
+export interface ButtonStyle {
+  name: string;
+  id: string;
+  className: string;
+  css: string;
+}
+
+export const BUTTON_STYLES: ButtonStyle[] = [
+  {
+    name: "Rounded",
+    id: "rounded",
+    className: "btn-rounded",
+    css: "border-radius: 8px;",
+  },
+  {
+    name: "Pill",
+    id: "pill",
+    className: "btn-pill",
+    css: "border-radius: 50px;",
+  },
+  {
+    name: "Sharp",
+    id: "sharp",
+    className: "btn-sharp",
+    css: "border-radius: 0;",
+  },
+  {
+    name: "Gradient",
+    id: "gradient",
+    className: "btn-gradient",
+    css: "background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%); border-radius: 8px;",
+  },
+  {
+    name: "Outline",
+    id: "outline",
+    className: "btn-outline-style",
+    css: "background: transparent; border: 2px solid var(--primary); color: var(--primary); border-radius: 8px;",
+  },
+  {
+    name: "Neon",
+    id: "neon",
+    className: "btn-neon",
+    css: "border-radius: 8px; box-shadow: 0 0 20px var(--primary), 0 0 40px rgba(var(--primary-rgb), 0.3);",
+  },
+];
+
+// ============================================================================
+// CARD STYLES (5 variants)
+// ============================================================================
+
+export interface CardStyle {
+  name: string;
+  id: string;
+  className: string;
+  css: string;
+}
+
+export const CARD_STYLES: CardStyle[] = [
+  {
+    name: "Flat",
+    id: "flat",
+    className: "card-flat",
+    css: "background: var(--surface); border-radius: 12px;",
+  },
+  {
+    name: "Elevated",
+    id: "elevated",
+    className: "card-elevated",
+    css: "background: var(--surface); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.3);",
+  },
+  {
+    name: "Glass",
+    id: "glass",
+    className: "card-glass",
+    css: "background: rgba(255,255,255,0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px;",
+  },
+  {
+    name: "Gradient Border",
+    id: "gradient-border",
+    className: "card-gradient-border",
+    css: "background: var(--surface); border-radius: 16px; border: 2px solid transparent; background-clip: padding-box; position: relative;",
+  },
+  {
+    name: "Neon Glow",
+    id: "neon-glow",
+    className: "card-neon",
+    css: "background: var(--surface); border-radius: 16px; box-shadow: 0 0 30px rgba(var(--primary-rgb), 0.3), inset 0 0 30px rgba(var(--primary-rgb), 0.05);",
+  },
+];
+
+// ============================================================================
+// TYPOGRAPHY STYLES (5 variants)
+// ============================================================================
+
+export interface TypographyStyle {
+  name: string;
+  id: string;
+  headingWeight: string;
+  headingTransform: string;
+  headingLetterSpacing: string;
+  bodyLineHeight: string;
+}
+
+export const TYPOGRAPHY_STYLES: TypographyStyle[] = [
+  {
+    name: "Bold Impact",
+    id: "bold",
+    headingWeight: "800",
+    headingTransform: "uppercase",
+    headingLetterSpacing: "0.05em",
+    bodyLineHeight: "1.7",
+  },
+  {
+    name: "Elegant",
+    id: "elegant",
+    headingWeight: "500",
+    headingTransform: "none",
+    headingLetterSpacing: "0.02em",
+    bodyLineHeight: "1.8",
+  },
+  {
+    name: "Modern Clean",
+    id: "modern",
+    headingWeight: "700",
+    headingTransform: "none",
+    headingLetterSpacing: "-0.02em",
+    bodyLineHeight: "1.6",
+  },
+  {
+    name: "Playful",
+    id: "playful",
+    headingWeight: "700",
+    headingTransform: "none",
+    headingLetterSpacing: "0",
+    bodyLineHeight: "1.7",
+  },
+  {
+    name: "Dramatic",
+    id: "dramatic",
+    headingWeight: "900",
+    headingTransform: "uppercase",
+    headingLetterSpacing: "0.1em",
+    bodyLineHeight: "1.6",
+  },
+];
+
+// ============================================================================
+// HERO BACKGROUND STYLES (4 variants)
+// ============================================================================
+
+export interface HeroBackground {
+  name: string;
+  id: string;
+  className: string;
+  hasOverlay: boolean;
+  overlayStyle: string;
+}
+
+export const HERO_BACKGROUNDS: HeroBackground[] = [
+  {
+    name: "Image with Gradient",
+    id: "gradient-overlay",
+    className: "hero-bg-gradient",
+    hasOverlay: true,
+    overlayStyle: "linear-gradient(135deg, rgba(var(--bg-rgb), 0.9) 0%, rgba(var(--bg-rgb), 0.7) 50%, rgba(var(--bg-rgb), 0.4) 100%)",
+  },
+  {
+    name: "Dark Vignette",
+    id: "vignette",
+    className: "hero-bg-vignette",
+    hasOverlay: true,
+    overlayStyle: "radial-gradient(ellipse at center, rgba(var(--bg-rgb), 0.3) 0%, rgba(var(--bg-rgb), 0.95) 100%)",
+  },
+  {
+    name: "Color Tint",
+    id: "color-tint",
+    className: "hero-bg-tint",
+    hasOverlay: true,
+    overlayStyle: "linear-gradient(180deg, rgba(var(--primary-rgb), 0.4) 0%, rgba(var(--bg-rgb), 0.95) 100%)",
+  },
+  {
+    name: "Minimal",
+    id: "minimal",
+    className: "hero-bg-minimal",
+    hasOverlay: true,
+    overlayStyle: "linear-gradient(180deg, rgba(var(--bg-rgb), 0.85) 0%, rgba(var(--bg-rgb), 0.95) 100%)",
+  },
+];
+
+// ============================================================================
+// HOVER EFFECTS (4 variants)
+// ============================================================================
+
+export interface HoverEffect {
+  name: string;
+  id: string;
+  cardHover: string;
+  buttonHover: string;
+}
+
+export const HOVER_EFFECTS: HoverEffect[] = [
+  {
+    name: "Lift",
+    id: "lift",
+    cardHover: "transform: translateY(-8px); box-shadow: 0 20px 40px rgba(0,0,0,0.3);",
+    buttonHover: "transform: translateY(-3px); box-shadow: 0 10px 30px rgba(var(--primary-rgb), 0.4);",
+  },
+  {
+    name: "Scale",
+    id: "scale",
+    cardHover: "transform: scale(1.03); box-shadow: 0 15px 35px rgba(0,0,0,0.25);",
+    buttonHover: "transform: scale(1.05);",
+  },
+  {
+    name: "Glow",
+    id: "glow",
+    cardHover: "box-shadow: 0 0 30px rgba(var(--primary-rgb), 0.4), 0 10px 40px rgba(0,0,0,0.3);",
+    buttonHover: "box-shadow: 0 0 30px var(--primary), 0 0 60px rgba(var(--primary-rgb), 0.4);",
+  },
+  {
+    name: "Border Glow",
+    id: "border-glow",
+    cardHover: "border-color: var(--primary); box-shadow: 0 0 20px rgba(var(--primary-rgb), 0.3);",
+    buttonHover: "box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.3);",
+  },
+];
+
+// ============================================================================
 // RANDOM SELECTION HELPERS
 // ============================================================================
 
@@ -435,6 +716,12 @@ export function selectRandomPresets(): {
   fonts: FontPairing;
   animation: AnimationPreset;
   logoIcon: LogoIcon;
+  featureLayout: FeatureLayout;
+  buttonStyle: ButtonStyle;
+  cardStyle: CardStyle;
+  typography: TypographyStyle;
+  heroBackground: HeroBackground;
+  hoverEffect: HoverEffect;
 } {
   return {
     colors: COLOR_THEMES[Math.floor(Math.random() * COLOR_THEMES.length)],
@@ -442,6 +729,12 @@ export function selectRandomPresets(): {
     fonts: FONT_PAIRINGS[Math.floor(Math.random() * FONT_PAIRINGS.length)],
     animation: ANIMATION_PRESETS[Math.floor(Math.random() * ANIMATION_PRESETS.length)],
     logoIcon: LOGO_ICONS[Math.floor(Math.random() * LOGO_ICONS.length)],
+    featureLayout: FEATURE_LAYOUTS[Math.floor(Math.random() * FEATURE_LAYOUTS.length)],
+    buttonStyle: BUTTON_STYLES[Math.floor(Math.random() * BUTTON_STYLES.length)],
+    cardStyle: CARD_STYLES[Math.floor(Math.random() * CARD_STYLES.length)],
+    typography: TYPOGRAPHY_STYLES[Math.floor(Math.random() * TYPOGRAPHY_STYLES.length)],
+    heroBackground: HERO_BACKGROUNDS[Math.floor(Math.random() * HERO_BACKGROUNDS.length)],
+    hoverEffect: HOVER_EFFECTS[Math.floor(Math.random() * HOVER_EFFECTS.length)],
   };
 }
 
@@ -451,8 +744,15 @@ export function getTotalCombinations(): number {
     LAYOUT_PRESETS.length *
     FONT_PAIRINGS.length *
     ANIMATION_PRESETS.length *
-    LOGO_ICONS.length
+    LOGO_ICONS.length *
+    FEATURE_LAYOUTS.length *
+    BUTTON_STYLES.length *
+    CARD_STYLES.length *
+    TYPOGRAPHY_STYLES.length *
+    HERO_BACKGROUNDS.length *
+    HOVER_EFFECTS.length
   );
+  // 12 × 6 × 8 × 4 × 22 × 5 × 6 × 5 × 5 × 4 × 4 = 304,128,000 combinations!
 }
 
 // ============================================================================

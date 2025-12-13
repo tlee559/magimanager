@@ -83,28 +83,34 @@ export const INDEX_TEMPLATE = `<!DOCTYPE html>
   </section>
 
   <!-- Features Section -->
-  <section class="features">
+  <section class="features" id="features">
     <div class="container">
       <h2 class="section-title">{{FEATURES_TITLE}}</h2>
-      <div class="features-grid">
-        <div class="feature-card animate-on-scroll">
+      <div class="features-grid {{FEATURE_GRID_CLASS}}">
+        <div class="feature-card {{CARD_STYLE_CLASS}} animate-on-scroll" style="--card-index: 0;">
           <div class="feature-image">
             <img src="images/feature1.png" alt="{{FEATURE_1_TITLE}}">
           </div>
-          <h3>{{FEATURE_1_TITLE}}</h3>
-          <p>{{FEATURE_1_DESCRIPTION}}</p>
+          <div class="feature-content">
+            <h3>{{FEATURE_1_TITLE}}</h3>
+            <p>{{FEATURE_1_DESCRIPTION}}</p>
+          </div>
         </div>
-        <div class="feature-card animate-on-scroll">
+        <div class="feature-card {{CARD_STYLE_CLASS}} animate-on-scroll" style="--card-index: 1;">
           <div class="feature-image">
             <img src="images/feature2.png" alt="{{FEATURE_2_TITLE}}">
           </div>
-          <h3>{{FEATURE_2_TITLE}}</h3>
-          <p>{{FEATURE_2_DESCRIPTION}}</p>
+          <div class="feature-content">
+            <h3>{{FEATURE_2_TITLE}}</h3>
+            <p>{{FEATURE_2_DESCRIPTION}}</p>
+          </div>
         </div>
-        <div class="feature-card animate-on-scroll">
+        <div class="feature-card {{CARD_STYLE_CLASS}} animate-on-scroll" style="--card-index: 2;">
           <div class="feature-icon">{{FEATURE_3_ICON}}</div>
-          <h3>{{FEATURE_3_TITLE}}</h3>
-          <p>{{FEATURE_3_DESCRIPTION}}</p>
+          <div class="feature-content">
+            <h3>{{FEATURE_3_TITLE}}</h3>
+            <p>{{FEATURE_3_DESCRIPTION}}</p>
+          </div>
         </div>
       </div>
     </div>
@@ -526,16 +532,27 @@ export const STYLE_TEMPLATE = `/* ==============================================
 :root {
   /* Colors */
   --color-primary: {{COLOR_PRIMARY}};
+  --color-primary-rgb: {{COLOR_PRIMARY_RGB}};
   --color-secondary: {{COLOR_SECONDARY}};
+  --color-secondary-rgb: {{COLOR_SECONDARY_RGB}};
   --color-accent: {{COLOR_ACCENT}};
+  --color-accent-rgb: {{COLOR_ACCENT_RGB}};
   --color-background: {{COLOR_BACKGROUND}};
+  --color-background-rgb: {{COLOR_BACKGROUND_RGB}};
   --color-surface: {{COLOR_SURFACE}};
+  --color-surface-rgb: {{COLOR_SURFACE_RGB}};
   --color-text: {{COLOR_TEXT}};
   --color-text-muted: {{COLOR_TEXT_MUTED}};
 
   /* Fonts */
   --font-heading: '{{FONT_HEADING}}', sans-serif;
   --font-body: '{{FONT_BODY}}', sans-serif;
+
+  /* Typography */
+  --heading-weight: {{HEADING_WEIGHT}};
+  --heading-transform: {{HEADING_TRANSFORM}};
+  --heading-letter-spacing: {{HEADING_LETTER_SPACING}};
+  --body-line-height: {{BODY_LINE_HEIGHT}};
 
   /* Animations */
   --animation-fade-in: {{ANIMATION_FADE_IN}};
@@ -564,14 +581,16 @@ body {
   font-family: var(--font-body);
   background-color: var(--color-background);
   color: var(--color-text);
-  line-height: 1.6;
+  line-height: var(--body-line-height);
   min-height: 100vh;
 }
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
-  font-weight: 700;
+  font-weight: var(--heading-weight);
   line-height: 1.2;
+  text-transform: var(--heading-transform);
+  letter-spacing: var(--heading-letter-spacing);
 }
 
 a {
@@ -607,7 +626,7 @@ img {
   font-family: var(--font-body);
   font-size: 1rem;
   font-weight: 600;
-  border-radius: 8px;
+  {{BUTTON_STYLE_CSS}}
   border: none;
   cursor: pointer;
   transition: var(--animation-hover);
@@ -620,7 +639,7 @@ img {
 }
 
 .btn-primary:hover {
-  {{BUTTON_HOVER_STYLE}}
+  {{BUTTON_HOVER_EFFECT}}
   color: white;
 }
 
@@ -639,6 +658,52 @@ img {
 .btn-large {
   padding: 18px 48px;
   font-size: 1.125rem;
+}
+
+/* Button Style Variants */
+.btn-pill {
+  border-radius: 50px;
+}
+
+.btn-sharp {
+  border-radius: 0;
+}
+
+.btn-gradient {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+  background-size: 200% 200%;
+  animation: gradient-shift 3s ease infinite;
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.btn-neon {
+  box-shadow:
+    0 0 10px var(--color-primary),
+    0 0 20px rgba(var(--color-primary-rgb), 0.3),
+    0 0 30px rgba(var(--color-primary-rgb), 0.1);
+}
+
+.btn-neon:hover {
+  box-shadow:
+    0 0 20px var(--color-primary),
+    0 0 40px rgba(var(--color-primary-rgb), 0.5),
+    0 0 60px rgba(var(--color-primary-rgb), 0.3);
+}
+
+.btn-outline-style {
+  background: transparent;
+  border: 2px solid var(--color-primary);
+  color: var(--color-primary);
+}
+
+.btn-outline-style:hover {
+  background: var(--color-primary);
+  color: white;
 }
 
 /* ============================================================================
@@ -787,12 +852,7 @@ img {
 .hero-overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    135deg,
-    rgba(0, 0, 0, 0.8) 0%,
-    rgba(0, 0, 0, 0.4) 50%,
-    rgba(0, 0, 0, 0.7) 100%
-  );
+  background: {{HERO_OVERLAY_STYLE}};
 }
 
 .hero-content {
@@ -866,15 +926,78 @@ img {
   margin-bottom: 60px;
 }
 
+/* Base Features Grid - Overridden by layout variants */
 .features-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 32px;
 }
 
+/* Feature Layout Variants */
+.features-grid-equal {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+}
+
+.features-grid-large-first {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 24px;
+}
+
+.features-grid-large-first .feature-card:first-child {
+  grid-row: span 2;
+}
+
+.features-grid-alternating {
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+}
+
+.features-grid-alternating .feature-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  align-items: center;
+  text-align: left;
+}
+
+.features-grid-alternating .feature-card:nth-child(even) {
+  direction: rtl;
+}
+
+.features-grid-alternating .feature-card:nth-child(even) > * {
+  direction: ltr;
+}
+
+.features-grid-stacked {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.features-grid-stacked .feature-card {
+  transform: translateX(calc(var(--card-index, 0) * 20px));
+}
+
+.features-grid-masonry {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.features-grid-masonry .feature-card:nth-child(2) {
+  transform: translateY(40px);
+}
+
+/* Base Feature Card with Dynamic Styling */
 .feature-card {
-  background: var(--color-background);
-  border-radius: var(--card-radius);
+  {{CARD_STYLE_CSS}}
   padding: 32px;
   text-align: center;
   transition: var(--animation-hover);
@@ -882,8 +1005,42 @@ img {
 }
 
 .feature-card:hover {
-  transform: translateY(-8px);
-  border-color: var(--color-primary);
+  {{CARD_HOVER_STYLE}}
+}
+
+/* Card Style Variants */
+.card-glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.card-gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  border-radius: calc(var(--card-radius) + 2px);
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.card-gradient-border:hover::before {
+  opacity: 1;
+}
+
+.card-neon {
+  box-shadow:
+    0 0 20px rgba(var(--color-primary-rgb), 0.2),
+    inset 0 0 20px rgba(var(--color-primary-rgb), 0.05);
+}
+
+.card-neon:hover {
+  box-shadow:
+    0 0 40px rgba(var(--color-primary-rgb), 0.4),
+    inset 0 0 30px rgba(var(--color-primary-rgb), 0.1);
 }
 
 .feature-image {
