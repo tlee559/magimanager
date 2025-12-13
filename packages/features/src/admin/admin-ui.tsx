@@ -506,6 +506,24 @@ export function AdminApp({
     fetchIdentities();
   }
 
+  async function handleToggleStatus(id: string, inactive: boolean) {
+    try {
+      const res = await fetch(`/api/identities/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inactive }),
+      });
+      if (res.ok) {
+        // Update local state immediately for responsive UI
+        setIdentities(prev =>
+          prev.map(i => i.id === id ? { ...i, inactive } : i)
+        );
+      }
+    } catch (error) {
+      console.error("Failed to toggle status:", error);
+    }
+  }
+
   // Build navigation based on role
   const navItems = (() => {
     const items: { id: View; label: string; icon: string; comingSoon?: boolean }[] = [
@@ -902,6 +920,7 @@ export function AdminApp({
                 onCreateNew={() => setView("create-identity")}
                 onImportCSV={() => setView("import-identities")}
                 onSelectIdentity={fetchIdentity}
+                onToggleStatus={handleToggleStatus}
               />
             )}
             {view === "create-identity" && (
@@ -1242,12 +1261,14 @@ function IdentitiesListView({
   onCreateNew,
   onImportCSV,
   onSelectIdentity,
+  onToggleStatus,
 }: {
   identities: Identity[];
   loading: boolean;
   onCreateNew: () => void;
   onImportCSV: () => void;
   onSelectIdentity: (id: string) => void;
+  onToggleStatus: (id: string, inactive: boolean) => void;
 }) {
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -1559,15 +1580,20 @@ function IdentitiesListView({
                     </td>
                     {/* Status Toggle */}
                     <td className="px-4 py-3 text-center">
-                      <span
-                        className={`px-2 py-1 text-xs rounded font-medium ${
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleStatus(identity.id, !identity.inactive);
+                        }}
+                        className={`px-2 py-1 text-xs rounded font-medium transition hover:opacity-80 ${
                           identity.inactive
-                            ? "bg-red-500/20 text-red-400"
-                            : "bg-emerald-500/20 text-emerald-400"
+                            ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                            : "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
                         }`}
+                        title={`Click to mark as ${identity.inactive ? "Active" : "Inactive"}`}
                       >
                         {identity.inactive ? "Inactive" : "Active"}
-                      </span>
+                      </button>
                     </td>
                     <td className="px-4 py-3 text-right text-xs">
                       <span className="text-emerald-400">
