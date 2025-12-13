@@ -1566,6 +1566,7 @@ model Website {
   aiGenerated         Boolean       @default(false)
   aiNiche             String?       // "social-casino" etc.
   aiPresets           String?       @db.Text // JSON of used presets
+  previewToken        String?       // Token for unauthenticated preview access
 
   // Status
   status              WebsiteStatus @default(PENDING)

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/api-auth";
 import { put } from "@vercel/blob";
+import { randomBytes } from "crypto";
 import {
   selectRandomPresets,
   generateWebsiteContent,
@@ -106,6 +107,9 @@ export async function POST(
       contentType: "application/zip",
     });
 
+    // Generate preview token for unauthenticated preview access
+    const previewToken = randomBytes(32).toString("hex");
+
     // Update website with ZIP URL and AI metadata
     const updatedWebsite = await prisma.website.update({
       where: { id },
@@ -116,6 +120,7 @@ export async function POST(
         aiGenerated: true,
         aiNiche: niche,
         aiPresets: JSON.stringify(getPresetInfo(presets)),
+        previewToken,
       },
     });
 
@@ -131,6 +136,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       website: updatedWebsite,
+      previewToken,
       presets: getPresetInfo(presets),
       filesGenerated: [
         "index.html",

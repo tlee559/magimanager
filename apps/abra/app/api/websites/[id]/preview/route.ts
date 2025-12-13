@@ -5,17 +5,33 @@ import { requireAdmin } from "@/lib/api-auth";
 const JSZip = require("jszip");
 
 // GET /api/websites/[id]/preview - Get preview URL or serve preview content
+// Supports token-based access for iframe preview (no auth required with valid token)
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireAdmin();
-  if (!auth.authorized) return auth.error;
+  const { id } = await params;
+  const { searchParams } = new URL(request.url);
+  const file = searchParams.get("file") || "index.html";
+  const token = searchParams.get("token");
+
+  // Check if token-based access (for iframe preview)
+  let authorized = false;
+  if (token) {
+    const website = await prisma.website.findUnique({
+      where: { id },
+      select: { previewToken: true },
+    });
+    authorized = website?.previewToken === token;
+  }
+
+  // If no valid token, require authentication
+  if (!authorized) {
+    const auth = await requireAdmin();
+    if (!auth.authorized) return auth.error;
+  }
 
   try {
-    const { id } = await params;
-    const { searchParams } = new URL(request.url);
-    const file = searchParams.get("file") || "index.html";
 
     const website = await prisma.website.findUnique({
       where: { id },
@@ -95,6 +111,9 @@ export async function GET(
 
     const content = await zipFile.async("string");
 
+    // Build token query param if present
+    const tokenParam = token ? `&token=${token}` : "";
+
     // For HTML files, rewrite relative URLs to go through the preview API
     let processedContent = content;
     if (file.endsWith(".html")) {
@@ -131,20 +150,28 @@ export async function GET(
       // Rewrite navigation links
       processedContent = processedContent.replace(
         /href="index\.html"/g,
-        `href="/api/websites/${id}/preview?file=index.html"`
+        `href="/api/websites/${id}/preview?file=index.html${tokenParam}"`
       );
       processedContent = processedContent.replace(
         /href="terms\.html"/g,
-        `href="/api/websites/${id}/preview?file=terms.html"`
+        `href="/api/websites/${id}/preview?file=terms.html${tokenParam}"`
       );
       processedContent = processedContent.replace(
         /href="privacy\.html"/g,
-        `href="/api/websites/${id}/preview?file=privacy.html"`
+        `href="/api/websites/${id}/preview?file=privacy.html${tokenParam}"`
       );
       processedContent = processedContent.replace(
         /href="play\.html"/g,
-        `href="/api/websites/${id}/preview?file=play.html"`
+        `href="/api/websites/${id}/preview?file=play.html${tokenParam}"`
       );
+
+      // Add token to all rewritten asset URLs (CSS, JS, images)
+      if (token) {
+        processedContent = processedContent.replace(
+          new RegExp(`/api/websites/${id}/preview\\?file=([^"']+)`, "g"),
+          `/api/websites/${id}/preview?file=$1${tokenParam}`
+        );
+      }
     }
 
     return new NextResponse(processedContent, {

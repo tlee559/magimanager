@@ -11793,7 +11793,9 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
 
         setCurrentWebsite(generateData.website);
         setAiPresets(generateData.presets);
-        setPreviewUrl(`/api/websites/${websiteId}/preview?file=index.html`);
+        // Use preview token for iframe access (bypasses auth requirement)
+        const tokenParam = generateData.previewToken ? `&token=${generateData.previewToken}` : "";
+        setPreviewUrl(`/api/websites/${websiteId}/preview?file=index.html${tokenParam}`);
         setPreviewReady(true);
         setAiGenerating(false);
         setAiProgress("");
