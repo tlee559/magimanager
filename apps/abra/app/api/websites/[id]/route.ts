@@ -16,6 +16,9 @@ export async function GET(
     const website = await prisma.website.findUnique({
       where: { id },
       include: {
+        identityProfile: {
+          select: { id: true, fullName: true, geo: true },
+        },
         activities: {
           orderBy: { createdAt: "desc" },
         },
@@ -77,6 +80,7 @@ export async function DELETE(
 }
 
 // PATCH /api/websites/[id] - Update website
+// Supports identity assignment via identityProfileId field
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -90,6 +94,7 @@ export async function PATCH(
 
     const website = await prisma.website.findUnique({
       where: { id },
+      include: { identityProfile: true },
     });
 
     if (!website) {
@@ -99,6 +104,45 @@ export async function PATCH(
       );
     }
 
+    // Handle identity assignment/unassignment
+    let identityUpdateData: { identityProfileId?: string | null } = {};
+    if (body.identityProfileId !== undefined) {
+      const previousIdentityId = website.identityProfileId;
+
+      // Validate identity exists if assigning
+      if (body.identityProfileId !== null) {
+        const identity = await prisma.identityProfile.findUnique({
+          where: { id: body.identityProfileId },
+          include: { linkedWebsite: true },
+        });
+
+        if (!identity) {
+          return NextResponse.json(
+            { error: "Identity not found" },
+            { status: 404 }
+          );
+        }
+
+        // Check if identity already has a linked website (1:1 constraint)
+        if (identity.linkedWebsite && identity.linkedWebsite.id !== id) {
+          return NextResponse.json(
+            { error: "Identity already has a linked website" },
+            { status: 400 }
+          );
+        }
+      }
+
+      // If unassigning, reset websiteCompleted on the previous identity
+      if (body.identityProfileId === null && previousIdentityId) {
+        await prisma.identityProfile.update({
+          where: { id: previousIdentityId },
+          data: { websiteCompleted: false },
+        });
+      }
+
+      identityUpdateData = { identityProfileId: body.identityProfileId };
+    }
+
     const updated = await prisma.website.update({
       where: { id },
       data: {
@@ -106,6 +150,16 @@ export async function PATCH(
         ...(body.status && { status: body.status }),
         ...(body.statusMessage !== undefined && { statusMessage: body.statusMessage }),
         ...(body.errorMessage !== undefined && { errorMessage: body.errorMessage }),
+        ...identityUpdateData,
+      },
+      include: {
+        identityProfile: {
+          select: { id: true, fullName: true, geo: true },
+        },
+        activities: {
+          orderBy: { createdAt: "desc" },
+          take: 5,
+        },
       },
     });
 

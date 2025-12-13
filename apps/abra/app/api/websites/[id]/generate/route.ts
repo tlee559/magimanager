@@ -22,9 +22,10 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { niche, description } = body as {
+    const { niche, description, fileType = "html" } = body as {
       niche: NicheType;
       description: string;
+      fileType?: "html" | "php";
     };
 
     // Validate niche
@@ -106,6 +107,7 @@ export async function POST(
       content,
       images,
       presets,
+      fileType,
     });
 
     // Upload ZIP to Vercel Blob
@@ -143,16 +145,19 @@ export async function POST(
       },
     });
 
+    const ext = fileType === "php" ? ".php" : ".html";
+
     return NextResponse.json({
       success: true,
       website: updatedWebsite,
       previewToken,
       presets: getPresetInfo(presets),
+      fileType,
       filesGenerated: [
-        "index.html",
-        "terms.html",
-        "privacy.html",
-        "play.html",
+        `index${ext}`,
+        `terms${ext}`,
+        `privacy${ext}`,
+        `play${ext}`,
         "css/style.css",
         "css/slots.css",
         "js/slots.js",

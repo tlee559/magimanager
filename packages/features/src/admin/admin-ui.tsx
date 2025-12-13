@@ -87,6 +87,8 @@ type Identity = {
   documents: IdentityDoc[];
   gologinProfile?: GoLoginProfile | null;
   adAccounts?: { id: string; internalId: number; googleCid: string | null }[];
+  // Linked website from Website Wizard (1:1)
+  linkedWebsite?: { id: string; name: string; domain: string | null; status: string } | null;
 };
 
 type IdentityDoc = {
@@ -3932,6 +3934,385 @@ function AssignExistingAccountModal({
 }
 
 // ============================================================================
+// ASSIGN WEBSITE TO IDENTITY MODAL
+// ============================================================================
+
+function AssignWebsiteToIdentityModal({
+  identity,
+  onClose,
+  onAssign,
+}: {
+  identity: Identity;
+  onClose: () => void;
+  onAssign: () => void;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [unassignedWebsites, setUnassignedWebsites] = useState<Website[]>([]);
+  const [selectedWebsiteId, setSelectedWebsiteId] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetchUnassignedWebsites();
+  }, []);
+
+  async function fetchUnassignedWebsites() {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/websites?unassigned=true");
+      if (res.ok) {
+        const data = await res.json();
+        setUnassignedWebsites(data.websites || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch unassigned websites:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleAssign() {
+    if (!selectedWebsiteId) return;
+
+    setAssigning(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/websites/${selectedWebsiteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identityProfileId: identity.id }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to assign website");
+      }
+
+      onAssign();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to assign website");
+    } finally {
+      setAssigning(false);
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "LIVE":
+        return "bg-emerald-500/20 text-emerald-300";
+      case "FILES_UPLOADED":
+      case "DNS_CONFIGURING":
+      case "SSL_PENDING":
+        return "bg-blue-500/20 text-blue-300";
+      case "DROPLET_READY":
+      case "DEPLOYING":
+        return "bg-yellow-500/20 text-yellow-300";
+      case "FAILED":
+        return "bg-red-500/20 text-red-300";
+      default:
+        return "bg-slate-500/20 text-slate-300";
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="bg-slate-900 rounded-xl shadow-xl w-full max-w-lg border border-slate-700 max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-slate-700">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-white">Link Website</h3>
+            <button
+              onClick={onClose}
+              className="p-1 text-slate-400 hover:text-white transition rounded hover:bg-slate-700"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <p className="text-sm text-slate-400 mt-1">
+            Link an unassigned website to {identity.fullName}
+          </p>
+        </div>
+
+        <div className="p-6 flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
+            </div>
+          ) : unassignedWebsites.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="text-slate-500 text-4xl mb-3">🌐</div>
+              <p className="text-slate-400">No unassigned websites available</p>
+              <p className="text-slate-500 text-sm mt-1">
+                All websites are already linked to identity profiles
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-sm text-slate-400 mb-3">
+                Select a website to link ({unassignedWebsites.length} available):
+              </p>
+              {unassignedWebsites.map((website) => (
+                <label
+                  key={website.id}
+                  className={`block p-4 rounded-lg border cursor-pointer transition ${
+                    selectedWebsiteId === website.id
+                      ? "border-emerald-500 bg-emerald-500/10"
+                      : "border-slate-700 hover:border-slate-600"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="website"
+                    value={website.id}
+                    checked={selectedWebsiteId === website.id}
+                    onChange={() => setSelectedWebsiteId(website.id)}
+                    className="sr-only"
+                  />
+                  <div className="flex items-start gap-3">
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${
+                      selectedWebsiteId === website.id ? "border-emerald-500" : "border-slate-500"
+                    }`}>
+                      {selectedWebsiteId === website.id && (
+                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-white">
+                          {website.name}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${getStatusColor(website.status)}`}>
+                          {website.status}
+                        </span>
+                      </div>
+                      {website.domain && (
+                        <div className="text-sm text-emerald-400 mt-1">
+                          {website.domain}
+                        </div>
+                      )}
+                      {website.dropletIp && !website.domain && (
+                        <div className="text-sm text-slate-400 mt-1">
+                          IP: {website.dropletIp}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-4 bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-slate-700 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-slate-300 hover:text-white transition"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleAssign}
+            disabled={!selectedWebsiteId || assigning}
+            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 disabled:opacity-50 transition"
+          >
+            {assigning ? "Linking..." : "Link Website"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// ASSIGN IDENTITY TO WEBSITE MODAL
+// ============================================================================
+
+function AssignIdentityToWebsiteModal({
+  website,
+  onClose,
+  onAssign,
+}: {
+  website: Website;
+  onClose: () => void;
+  onAssign: () => void;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [availableIdentities, setAvailableIdentities] = useState<Identity[]>([]);
+  const [selectedIdentityId, setSelectedIdentityId] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetchAvailableIdentities();
+  }, []);
+
+  async function fetchAvailableIdentities() {
+    setLoading(true);
+    try {
+      // Fetch all identities, then filter on client side for those without linkedWebsite
+      const res = await fetch("/api/identities");
+      if (res.ok) {
+        const data = await res.json();
+        // Filter to only those without a linked website
+        const unlinked = (data.identities || []).filter(
+          (i: Identity) => !i.linkedWebsite
+        );
+        setAvailableIdentities(unlinked);
+      }
+    } catch (err) {
+      console.error("Failed to fetch identities:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleAssign() {
+    if (!selectedIdentityId) return;
+
+    setAssigning(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/websites/${website.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identityProfileId: selectedIdentityId }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to assign identity");
+      }
+
+      onAssign();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to assign identity");
+    } finally {
+      setAssigning(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="bg-slate-900 rounded-xl shadow-xl w-full max-w-lg border border-slate-700 max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-slate-700">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-white">Assign to Identity</h3>
+            <button
+              onClick={onClose}
+              className="p-1 text-slate-400 hover:text-white transition rounded hover:bg-slate-700"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <p className="text-sm text-slate-400 mt-1">
+            Link {website.name} to an identity profile
+          </p>
+        </div>
+
+        <div className="p-6 flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
+            </div>
+          ) : availableIdentities.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="text-slate-500 text-4xl mb-3">👤</div>
+              <p className="text-slate-400">No available identity profiles</p>
+              <p className="text-slate-500 text-sm mt-1">
+                All identities already have linked websites
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-sm text-slate-400 mb-3">
+                Select an identity to link ({availableIdentities.length} available):
+              </p>
+              {availableIdentities.map((identity) => (
+                <label
+                  key={identity.id}
+                  className={`block p-4 rounded-lg border cursor-pointer transition ${
+                    selectedIdentityId === identity.id
+                      ? "border-emerald-500 bg-emerald-500/10"
+                      : "border-slate-700 hover:border-slate-600"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="identity"
+                    value={identity.id}
+                    checked={selectedIdentityId === identity.id}
+                    onChange={() => setSelectedIdentityId(identity.id)}
+                    className="sr-only"
+                  />
+                  <div className="flex items-start gap-3">
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${
+                      selectedIdentityId === identity.id ? "border-emerald-500" : "border-slate-500"
+                    }`}>
+                      {selectedIdentityId === identity.id && (
+                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-white">
+                          {identity.fullName}
+                        </span>
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-700 text-slate-300">
+                          {identity.geo}
+                        </span>
+                      </div>
+                      <div className="text-sm text-slate-400 mt-1">
+                        {identity.email}
+                      </div>
+                      {identity.adAccounts && identity.adAccounts.length > 0 && (
+                        <div className="text-xs text-slate-500 mt-1">
+                          {identity.adAccounts.length} ad account{identity.adAccounts.length !== 1 ? "s" : ""}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-4 bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-slate-700 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-slate-300 hover:text-white transition"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleAssign}
+            disabled={!selectedIdentityId || assigning}
+            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 disabled:opacity-50 transition"
+          >
+            {assigning ? "Assigning..." : "Assign Identity"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // IDENTITY DETAIL VIEW
 // ============================================================================
 
@@ -3981,6 +4362,10 @@ function IdentityDetailView({
   // Optimistic state for website completed checkbox
   const [optimisticWebsiteCompleted, setOptimisticWebsiteCompleted] = useState<boolean | null>(null);
   const websiteCompleted = optimisticWebsiteCompleted ?? identity.websiteCompleted;
+
+  // Linked website state
+  const [showLinkWebsiteModal, setShowLinkWebsiteModal] = useState(false);
+  const [unlinkingWebsite, setUnlinkingWebsite] = useState(false);
 
   // Check if identity already has an ad account
   const hasExistingAccount = identity.adAccounts && identity.adAccounts.length > 0;
@@ -4493,6 +4878,39 @@ function IdentityDetailView({
     }
   }
 
+  async function handleUnlinkWebsite() {
+    if (!identity.linkedWebsite) return;
+
+    const confirmed = await showConfirm(
+      "Unlink Website",
+      `Are you sure you want to unlink ${identity.linkedWebsite.name} from ${identity.fullName}?\n\nThe website will remain active but won't be associated with this identity.`,
+      { confirmText: "Unlink", cancelText: "Cancel" }
+    );
+    if (!confirmed) return;
+
+    setUnlinkingWebsite(true);
+    try {
+      const res = await fetch(`/api/websites/${identity.linkedWebsite.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identityProfileId: null }),
+      });
+
+      if (res.ok) {
+        await showSuccess("Website Unlinked", "Website has been unlinked from this identity");
+        onRefresh();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        await showError("Unlink Failed", data.error || "Failed to unlink website");
+      }
+    } catch (error) {
+      console.error("Unlink website error:", error);
+      await showError("Network Error", "Failed to connect to server");
+    } finally {
+      setUnlinkingWebsite(false);
+    }
+  }
+
   return (
     <>
       <div className="mb-6">
@@ -4551,7 +4969,53 @@ function IdentityDetailView({
               <div className="text-slate-100">{identity.geo}</div>
             </div>
             <div>
-              <div className="text-xs text-slate-500">Website</div>
+              <div className="text-xs text-slate-500">Linked Website</div>
+              {identity.linkedWebsite ? (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${
+                      identity.linkedWebsite.status === "LIVE" ? "bg-emerald-500" :
+                      identity.linkedWebsite.status === "FAILED" ? "bg-red-500" : "bg-yellow-500"
+                    }`} />
+                    <span className="text-white font-medium">{identity.linkedWebsite.name}</span>
+                    {identity.linkedWebsite.domain && (
+                      <a
+                        href={`https://${identity.linkedWebsite.domain}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-emerald-400 hover:text-emerald-300 text-sm"
+                      >
+                        {identity.linkedWebsite.domain}
+                      </a>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleUnlinkWebsite}
+                    disabled={unlinkingWebsite}
+                    className="text-xs text-amber-400 hover:text-amber-300 transition disabled:opacity-50 flex items-center gap-1 w-fit"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.181 8.68a4.503 4.503 0 011.903 6.405m-9.768-2.782L3.56 14.06a4.5 4.5 0 006.364 6.364l3.536-3.536m-6.364 0L5.636 15.41a2.25 2.25 0 003.182 3.182l1.768-1.768M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {unlinkingWebsite ? "Unlinking..." : "Unlink Website"}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowLinkWebsiteModal(true)}
+                  className="text-sm text-blue-400 hover:text-blue-300 transition flex items-center gap-1"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.193-9.193a4.5 4.5 0 00-6.364 6.364l4.5 4.5a4.5 4.5 0 007.244 1.242" />
+                  </svg>
+                  Link Website
+                </button>
+              )}
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">External Website (Legacy)</div>
               {identity.website ? (
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
@@ -4994,6 +5458,18 @@ function IdentityDetailView({
           onClose={() => setShowAssignAccountModal(false)}
           onAssign={() => {
             setShowAssignAccountModal(false);
+            onRefresh();
+          }}
+        />
+      )}
+
+      {/* Link Website Modal */}
+      {showLinkWebsiteModal && (
+        <AssignWebsiteToIdentityModal
+          identity={identity}
+          onClose={() => setShowLinkWebsiteModal(false)}
+          onAssign={() => {
+            setShowLinkWebsiteModal(false);
             onRefresh();
           }}
         />
@@ -10603,11 +11079,11 @@ function FAQView() {
     "1click": [
       {
         question: "What is Website Wizard?",
-        answer: "Website Wizard is a 5-step deployment tool that helps you quickly deploy websites for your ad accounts. It handles: (1) Uploading your website files, (2) Creating a server from a pre-configured snapshot, (3) Deploying files via SSH, (4) Configuring DNS through Namecheap, and (5) Installing SSL via Let's Encrypt. All using secure SSH key authentication - no passwords needed."
+        answer: "Website Wizard is a 5-step deployment tool that helps you quickly deploy websites for your ad accounts. It handles: (1) Creating your website via AI generation or uploading a zip file, (2) Creating a server from a pre-configured snapshot, (3) Deploying files via SSH, (4) Configuring DNS through Namecheap, and (5) Installing SSL via Let's Encrypt. All using secure SSH key authentication - no passwords needed."
       },
       {
         question: "What are the 5 steps in the wizard?",
-        answer: "Step 1: Upload Files - Upload a zip file containing your website. Step 2: Create Server - Spins up a DigitalOcean droplet from your snapshot. Step 3: Deploy Files - Uploads and extracts the zip to /var/www/html via SSH. Step 4: Configure Domain - Sets up DNS A records via Namecheap. Step 5: Install SSL - Runs certbot to get a Let's Encrypt certificate."
+        answer: "Step 1: Create Website - Generate a unique website with AI or upload a zip file. Step 2: Create Server - Spins up a DigitalOcean droplet from your snapshot. Step 3: Deploy Files - Uploads and extracts the zip to /var/www/html via SSH. Step 4: Configure Domain - Sets up DNS A records via Namecheap. Step 5: Install SSL - Runs certbot to get a Let's Encrypt certificate."
       },
       {
         question: "What do I need to set up Website Wizard?",
@@ -10984,6 +11460,9 @@ type Website = {
   createdAt: string;
   createdBy: string;
   activities: WebsiteActivity[];
+  // Identity link (1:1)
+  identityProfileId: string | null;
+  identityProfile: { id: string; fullName: string; geo: string } | null;
 };
 
 type WebsiteActivity = {
@@ -11022,6 +11501,9 @@ function WebsitesView() {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showEditFilesModal, setShowEditFilesModal] = useState(false);
   const [dnsStatus, setDnsStatus] = useState<Record<string, { loading: boolean; data: DnsCheckResult | null; error: string | null }>>({});
+  // Identity assignment state
+  const [websiteForAssign, setWebsiteForAssign] = useState<Website | null>(null);
+  const [unlinkingIdentity, setUnlinkingIdentity] = useState<string | null>(null);
 
   interface DnsCheckResult {
     domain: string;
@@ -11100,6 +11582,31 @@ function WebsitesView() {
       }
     } catch (error) {
       console.error("Failed to delete website:", error);
+    }
+  };
+
+  const handleUnlinkIdentity = async (websiteId: string) => {
+    if (!confirm("Are you sure you want to unlink this identity from the website?")) return;
+
+    setUnlinkingIdentity(websiteId);
+    try {
+      const res = await fetch(`/api/websites/${websiteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identityProfileId: null }),
+      });
+
+      if (res.ok) {
+        fetchWebsites();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Failed to unlink identity");
+      }
+    } catch (error) {
+      console.error("Failed to unlink identity:", error);
+      alert("Failed to unlink identity");
+    } finally {
+      setUnlinkingIdentity(null);
     }
   };
 
@@ -11194,6 +11701,38 @@ function WebsitesView() {
                     {site.errorMessage && (
                       <p className="text-sm text-red-400 mt-2">{site.errorMessage}</p>
                     )}
+
+                    {/* Identity Assignment */}
+                    <div className="flex items-center gap-2 mt-3">
+                      {site.identityProfile ? (
+                        <>
+                          <span className="text-sm text-slate-400">
+                            <span className="mr-1">👤</span>
+                            {site.identityProfile.fullName} ({site.identityProfile.geo})
+                          </span>
+                          <button
+                            onClick={() => handleUnlinkIdentity(site.id)}
+                            disabled={unlinkingIdentity === site.id}
+                            className="text-xs text-amber-400 hover:text-amber-300 transition disabled:opacity-50 flex items-center gap-1"
+                          >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M13.181 8.68a4.503 4.503 0 011.903 6.405m-9.768-2.782L3.56 14.06a4.5 4.5 0 006.364 6.364l3.536-3.536m-6.364 0L5.636 15.41a2.25 2.25 0 003.182 3.182l1.768-1.768M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {unlinkingIdentity === site.id ? "..." : "Unlink"}
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => setWebsiteForAssign(site)}
+                          className="text-sm text-blue-400 hover:text-blue-300 transition flex items-center gap-1"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
+                          </svg>
+                          Assign to Identity
+                        </button>
+                      )}
+                    </div>
 
                     <div className="flex items-center gap-4 mt-3 text-xs text-slate-500">
                       <span>Created {new Date(site.createdAt).toLocaleDateString()}</span>
@@ -11426,6 +11965,18 @@ function WebsitesView() {
           onClose={() => {
             setShowWizard(false);
             setSelectedWebsite(null);
+            fetchWebsites();
+          }}
+        />
+      )}
+
+      {/* Assign Identity Modal */}
+      {websiteForAssign && (
+        <AssignIdentityToWebsiteModal
+          website={websiteForAssign}
+          onClose={() => setWebsiteForAssign(null)}
+          onAssign={() => {
+            setWebsiteForAssign(null);
             fetchWebsites();
           }}
         />
@@ -11899,6 +12450,7 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
   // AI Generation state
   const [aiNiche, setAiNiche] = useState<"social-casino">("social-casino");
   const [aiDescription, setAiDescription] = useState("");
+  const [aiFileType, setAiFileType] = useState<"html" | "php">("html");
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiProgress, setAiProgress] = useState<string>("");
   const [previewReady, setPreviewReady] = useState(false);
@@ -12058,6 +12610,7 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
           body: JSON.stringify({
             niche: aiNiche,
             description: aiDescription.trim(),
+            fileType: aiFileType,
           }),
         });
         const generateData = await generateRes.json();
@@ -12067,7 +12620,8 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
         setAiPresets(generateData.presets);
         // Use preview token for iframe access (bypasses auth requirement)
         const tokenParam = generateData.previewToken ? `&token=${generateData.previewToken}` : "";
-        setPreviewUrl(`/api/websites/${websiteId}/preview?file=index.html${tokenParam}`);
+        const indexFile = aiFileType === "php" ? "index.php" : "index.html";
+        setPreviewUrl(`/api/websites/${websiteId}/preview?file=${indexFile}${tokenParam}`);
         setPreviewReady(true);
         setAiGenerating(false);
         setAiProgress("");
@@ -12436,18 +12990,34 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                       </p>
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">Website Type</label>
-                      <select
-                        value={aiNiche}
-                        onChange={(e) => setAiNiche(e.target.value as "social-casino")}
-                        className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-purple-500"
-                      >
-                        <option value="social-casino">Social Gaming Casino</option>
-                      </select>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Social casino includes a playable slot machine, 18+ verification, and responsible gaming disclaimers.
-                      </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">Website Type</label>
+                        <select
+                          value={aiNiche}
+                          onChange={(e) => setAiNiche(e.target.value as "social-casino")}
+                          className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-purple-500"
+                        >
+                          <option value="social-casino">Social Gaming Casino</option>
+                        </select>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Includes slot machine, 18+ verification, responsible gaming.
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">File Type</label>
+                        <select
+                          value={aiFileType}
+                          onChange={(e) => setAiFileType(e.target.value as "html" | "php")}
+                          className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-purple-500"
+                        >
+                          <option value="html">HTML (.html)</option>
+                          <option value="php">PHP (.php)</option>
+                        </select>
+                        <p className="mt-1 text-xs text-slate-500">
+                          PHP files useful for cloaking setups.
+                        </p>
+                      </div>
                     </div>
 
                     <div>

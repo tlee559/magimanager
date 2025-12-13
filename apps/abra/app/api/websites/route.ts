@@ -3,14 +3,25 @@ import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/api-auth";
 
 // GET /api/websites - List all websites
-export async function GET() {
+// Query params:
+//   ?unassigned=true - Only return websites not linked to an identity
+export async function GET(request: NextRequest) {
   const auth = await requireAdmin();
   if (!auth.authorized) return auth.error;
 
   try {
+    const { searchParams } = new URL(request.url);
+    const unassignedOnly = searchParams.get("unassigned") === "true";
+
+    const whereClause = unassignedOnly ? { identityProfileId: null } : {};
+
     const websites = await prisma.website.findMany({
+      where: whereClause,
       orderBy: { createdAt: "desc" },
       include: {
+        identityProfile: {
+          select: { id: true, fullName: true, geo: true },
+        },
         activities: {
           orderBy: { createdAt: "desc" },
           take: 5,

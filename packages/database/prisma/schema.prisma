@@ -57,6 +57,7 @@ model IdentityProfile {
   gologinProfile GoLoginProfile?
   activities IdentityActivity[]
   authenticators Authenticator[]
+  linkedWebsite Website?  // Linked website from Website Wizard (1:1)
 }
 
 model IdentityDocument {
@@ -1580,11 +1581,16 @@ model Website {
   updatedAt           DateTime      @updatedAt
   createdBy           String        // User ID
 
+  // Identity Profile Link (1:1 relationship)
+  identityProfileId   String?          @unique
+  identityProfile     IdentityProfile? @relation(fields: [identityProfileId], references: [id])
+
   // Relations
   activities          WebsiteActivity[]
 
   @@index([status])
   @@index([createdBy])
+  @@index([identityProfileId])
 }
 
 model WebsiteActivity {

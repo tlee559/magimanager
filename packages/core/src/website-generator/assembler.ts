@@ -100,6 +100,7 @@ export interface AssembleOptions {
   images: GeneratedImages;
   presets?: SelectedPresets;
   featureCount?: number; // 2-5 features
+  fileType?: "html" | "php"; // Default is html
 }
 
 // ============================================================================
@@ -927,15 +928,18 @@ export async function assembleWebsiteFromFiles(options: AssembleOptions): Promis
     applyClassPrefix(replaceVariables(template, variables), classPrefix, true);
   const processJs = (template: string) => replaceVariables(template, variables);
 
+  // Determine file extension based on fileType option
+  const ext = options.fileType === "php" ? ".php" : ".html";
+
   // Add base templates (embedded)
-  zip.file("index.html", processHtml(INDEX_TEMPLATE));
-  zip.file("terms.html", processHtml(TERMS_TEMPLATE));
-  zip.file("privacy.html", processHtml(PRIVACY_TEMPLATE));
+  zip.file(`index${ext}`, processHtml(INDEX_TEMPLATE));
+  zip.file(`terms${ext}`, processHtml(TERMS_TEMPLATE));
+  zip.file(`privacy${ext}`, processHtml(PRIVACY_TEMPLATE));
   zip.file("css/style.css", processCss(STYLE_TEMPLATE));
 
   // Add niche-specific templates
   if (niche === "social-casino") {
-    zip.file("play.html", processHtml(PLAY_TEMPLATE));
+    zip.file(`play${ext}`, processHtml(PLAY_TEMPLATE));
     zip.file("css/slots.css", processCss(SLOTS_CSS_TEMPLATE));
     zip.file("js/slots.js", processJs(SLOTS_JS_TEMPLATE));
   }

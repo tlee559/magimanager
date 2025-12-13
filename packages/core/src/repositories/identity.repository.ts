@@ -19,6 +19,7 @@ export interface IdentityFindOptions {
 export interface IdentityWithRelations extends Omit<Identity, "documents" | "adAccounts"> {
   documents: IdentityDocument[];
   adAccounts?: { id: string; internalId: number; googleCid: string | null }[];
+  linkedWebsite?: { id: string; name: string; domain: string | null; status: string } | null;
 }
 
 class IdentityRepository {
@@ -33,6 +34,9 @@ class IdentityRepository {
       adAccounts: options.includeAccounts !== false
         ? { select: { id: true, internalId: true, googleCid: true } }
         : false,
+      linkedWebsite: {
+        select: { id: true, name: true, domain: true, status: true },
+      },
     };
   }
 
