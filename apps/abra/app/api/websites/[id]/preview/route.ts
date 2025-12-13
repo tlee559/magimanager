@@ -117,34 +117,34 @@ export async function GET(
     // For HTML files, rewrite relative URLs to go through the preview API
     let processedContent = content;
     if (file.endsWith(".html")) {
-      // Rewrite CSS links
+      // Rewrite CSS links (with token if present)
       processedContent = processedContent.replace(
-        /href="css\//g,
-        `href="/api/websites/${id}/preview?file=css/`
+        /href="css\/([^"]+)"/g,
+        `href="/api/websites/${id}/preview?file=css/$1${tokenParam}"`
       );
       processedContent = processedContent.replace(
-        /href='css\//g,
-        `href='/api/websites/${id}/preview?file=css/`
-      );
-
-      // Rewrite JS links
-      processedContent = processedContent.replace(
-        /src="js\//g,
-        `src="/api/websites/${id}/preview?file=js/`
-      );
-      processedContent = processedContent.replace(
-        /src='js\//g,
-        `src='/api/websites/${id}/preview?file=js/`
+        /href='css\/([^']+)'/g,
+        `href='/api/websites/${id}/preview?file=css/$1${tokenParam}'`
       );
 
-      // Rewrite image links
+      // Rewrite JS links (with token if present)
       processedContent = processedContent.replace(
-        /src="images\//g,
-        `src="/api/websites/${id}/preview?file=images/`
+        /src="js\/([^"]+)"/g,
+        `src="/api/websites/${id}/preview?file=js/$1${tokenParam}"`
       );
       processedContent = processedContent.replace(
-        /src='images\//g,
-        `src='/api/websites/${id}/preview?file=images/`
+        /src='js\/([^']+)'/g,
+        `src='/api/websites/${id}/preview?file=js/$1${tokenParam}'`
+      );
+
+      // Rewrite image links (with token if present)
+      processedContent = processedContent.replace(
+        /src="images\/([^"]+)"/g,
+        `src="/api/websites/${id}/preview?file=images/$1${tokenParam}"`
+      );
+      processedContent = processedContent.replace(
+        /src='images\/([^']+)'/g,
+        `src='/api/websites/${id}/preview?file=images/$1${tokenParam}'`
       );
 
       // Rewrite navigation links
@@ -164,14 +164,6 @@ export async function GET(
         /href="play\.html"/g,
         `href="/api/websites/${id}/preview?file=play.html${tokenParam}"`
       );
-
-      // Add token to all rewritten asset URLs (CSS, JS, images)
-      if (token) {
-        processedContent = processedContent.replace(
-          new RegExp(`/api/websites/${id}/preview\\?file=([^"']+)`, "g"),
-          `/api/websites/${id}/preview?file=$1${tokenParam}`
-        );
-      }
     }
 
     return new NextResponse(processedContent, {
