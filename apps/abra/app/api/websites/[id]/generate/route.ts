@@ -80,19 +80,22 @@ export async function POST(
     // Select random presets for uniqueness
     const presets = selectRandomPresets();
 
+    // Use domain if available, otherwise convert website name to domain-like format
+    const siteDomain = website.domain || `${website.name.toLowerCase().replace(/\s+/g, "-")}.com`;
+
     // Generate content and images using AI
     const { content, images } = await generateWebsiteContent({
       apiKey: apiKey!,
       niche,
       description: description.trim(),
-      domain: website.domain || "example.com",
+      domain: siteDomain,
       colors: presets.colors,
     });
 
     // Assemble the website ZIP
     const zipBuffer = await assembleWebsiteFromFiles({
       niche,
-      domain: website.domain || "example.com",
+      domain: siteDomain,
       content,
       images,
       presets,

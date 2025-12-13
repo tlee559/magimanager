@@ -12254,7 +12254,7 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                         <h4 className="font-medium text-emerald-300">Website Generated!</h4>
                       </div>
                       <p className="text-slate-400 text-sm">
-                        Preview your AI-generated website below. Approve to continue or regenerate for a new design.
+                        Your AI-generated website is ready. Preview it in a new tab, then approve to continue or regenerate for a new design.
                       </p>
                     </div>
 
@@ -12272,24 +12272,16 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                       </div>
                     )}
 
-                    <div className="border border-slate-700 rounded-lg overflow-hidden">
-                      <div className="bg-slate-800 px-3 py-2 border-b border-slate-700 flex items-center justify-between">
-                        <span className="text-xs text-slate-400">Preview</span>
-                        <a
-                          href={previewUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-purple-400 hover:text-purple-300"
-                        >
-                          Open in new tab ↗
-                        </a>
-                      </div>
-                      <iframe
-                        src={previewUrl}
-                        className="w-full h-[400px] bg-white"
-                        title="Website Preview"
-                      />
-                    </div>
+                    <a
+                      href={previewUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 w-full py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium transition"
+                    >
+                      <span>👁️</span>
+                      <span>Preview Website in New Tab</span>
+                      <span>↗</span>
+                    </a>
 
                     <div className="flex gap-3">
                       <button
