@@ -109,9 +109,9 @@ set -e
 
 echo "=== Starting file upload process ==="
 
-# Clear existing files in web root
-echo "Clearing /var/www/html..."
-rm -rf /var/www/html/* /var/www/html/.[!.]* 2>/dev/null || true
+# Clear existing files in web root BUT PRESERVE np folder (cloaker preloaded from snapshot)
+echo "Clearing /var/www/html (preserving np folder)..."
+find /var/www/html -mindepth 1 -maxdepth 1 ! -name 'np' -exec rm -rf {} + 2>/dev/null || true
 
 # Download the zip file
 echo "Downloading zip file..."
