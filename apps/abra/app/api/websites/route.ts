@@ -44,11 +44,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!auth.user?.id) {
+      return NextResponse.json(
+        { error: "User ID not found in session" },
+        { status: 401 }
+      );
+    }
+
     const website = await prisma.website.create({
       data: {
         name: name.trim(),
         status: "PENDING",
-        createdBy: auth.user!.id,
+        createdBy: auth.user.id,
       },
     });
 
@@ -65,7 +72,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Failed to create website:", error);
     return NextResponse.json(
-      { error: "Failed to create website" },
+      { error: error instanceof Error ? error.message : "Failed to create website" },
       { status: 500 }
     );
   }
