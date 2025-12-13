@@ -4191,7 +4191,7 @@ function AssignIdentityToWebsiteModal({
     const query = searchQuery.toLowerCase();
     return (
       identity.fullName.toLowerCase().includes(query) ||
-      identity.email.toLowerCase().includes(query) ||
+      (identity.email?.toLowerCase().includes(query) ?? false) ||
       identity.geo.toLowerCase().includes(query)
     );
   });
