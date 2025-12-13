@@ -106,7 +106,8 @@ export async function POST(
       where: { id },
       data: {
         zipFileUrl: blob.url,
-        status: "UPLOADED",
+        status: "PENDING",
+        statusMessage: "AI-generated website ready. Proceed to create server.",
         aiGenerated: true,
         aiNiche: niche,
         aiPresets: JSON.stringify(getPresetInfo(presets)),
