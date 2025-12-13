@@ -10534,19 +10534,35 @@ function FAQView() {
     "1click": [
       {
         question: "What is Website Wizard?",
-        answer: "Website Wizard lets you quickly deploy simple landing pages for your ad accounts. It handles everything automatically: uploading your website files, buying a domain through Namecheap, creating a server on DigitalOcean, and setting up SSL. Each identity can have their own website for their campaigns."
+        answer: "Website Wizard is a 5-step deployment tool that helps you quickly deploy websites for your ad accounts. It handles: (1) Uploading your website files, (2) Creating a server from a pre-configured snapshot, (3) Deploying files via SSH, (4) Configuring DNS through Namecheap, and (5) Installing SSL via Let's Encrypt. All using secure SSH key authentication - no passwords needed."
+      },
+      {
+        question: "What are the 5 steps in the wizard?",
+        answer: "Step 1: Upload Files - Upload a zip file containing your website. Step 2: Create Server - Spins up a DigitalOcean droplet from your snapshot. Step 3: Deploy Files - Uploads and extracts the zip to /var/www/html via SSH. Step 4: Configure Domain - Sets up DNS A records via Namecheap. Step 5: Install SSL - Runs certbot to get a Let's Encrypt certificate."
       },
       {
         question: "What do I need to set up Website Wizard?",
-        answer: "You need three things configured in Settings > Integrations: (1) Namecheap API credentials (for buying domains), (2) DigitalOcean API key (for creating servers), and (3) A proxy server with a static IP (because Namecheap requires IP whitelisting). The proxy server is the tricky part - see below for setup instructions."
+        answer: "You need these configured in Settings > Integrations: (1) DigitalOcean API key, (2) DigitalOcean Snapshot ID (pre-configured server image), (3) SSH Key (public key uploaded to DO, private key stored in settings), (4) Namecheap API credentials, and (5) A proxy server with static IP for Namecheap API calls."
       },
       {
-        question: "Why do I need a proxy server?",
-        answer: "Namecheap's API requires you to whitelist specific IP addresses that can make API calls. The problem is that ABRA runs on Vercel, which uses dynamic IPs that change constantly. So we need a small server with a static IP to act as a middleman - ABRA sends requests to the proxy, and the proxy forwards them to Namecheap using its whitelisted IP."
+        question: "How does SSH key authentication work?",
+        answer: "Instead of passwords, we use SSH keys for secure server access. In Settings, you'll see your SSH public key - this gets added to DigitalOcean. The private key is stored securely and used automatically when deploying files or running commands on servers. This is more secure than passwords and works reliably with automation."
       },
       {
-        question: "How do I set up the proxy server on DigitalOcean?",
-        answer: "1. Log into DigitalOcean and create a new Droplet. 2. Choose the cheapest option ($4-6/mo): Ubuntu 22.04, Basic plan, Regular CPU, smallest size. 3. Pick any region (NYC is fine). 4. Add your SSH key so you can log in. 5. Create the droplet and note its IP address. 6. SSH into the server and follow the proxy setup steps below."
+        question: "What is the DigitalOcean snapshot?",
+        answer: "The snapshot is a pre-configured server image that includes nginx, PHP, and certbot already installed. When creating a new website, we spin up a droplet from this snapshot - much faster than installing everything from scratch. The snapshot should be created in the region where you'll deploy (usually nyc1). The wizard auto-detects the snapshot's region."
+      },
+      {
+        question: "Where are website files stored on the server?",
+        answer: "All website files are deployed to /var/www/html on the server. This is the nginx web root configured in the snapshot. You can SSH into the server using the command shown in the SSH panel (e.g., 'ssh root@IP_ADDRESS') using the SSH key from Settings."
+      },
+      {
+        question: "Why do I need a proxy server for Namecheap?",
+        answer: "Namecheap's API requires whitelisting specific IP addresses. Since ABRA runs on Vercel with dynamic IPs, we need a small server with a static IP to forward API requests. This proxy server is separate from your website servers - it just handles Namecheap API calls."
+      },
+      {
+        question: "How do I set up the proxy server?",
+        answer: "1. Create a small DigitalOcean droplet ($4-6/mo). 2. SSH in and install Node.js. 3. Create /opt/proxy/server.js with the proxy code. 4. Run with PM2: pm2 start server.js --name proxy. 5. In ABRA Settings, set Proxy URL to http://YOUR_IP:3000. 6. Whitelist the proxy IP in your Namecheap account."
       },
       {
         question: "What commands do I run to set up the proxy?",
@@ -10557,24 +10573,12 @@ function FAQView() {
         answer: "Create /opt/proxy/server.js with this code:\\n\\nconst http = require('http');\\nconst https = require('https');\\nconst { URL } = require('url');\\n\\nconst server = http.createServer(async (req, res) => {\\n  res.setHeader('Access-Control-Allow-Origin', '*');\\n  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');\\n  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');\\n\\n  if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }\\n  if (req.method !== 'POST') { res.writeHead(405); res.end('Method not allowed'); return; }\\n\\n  let body = '';\\n  req.on('data', chunk => body += chunk);\\n  req.on('end', async () => {\\n    try {\\n      const { url } = JSON.parse(body);\\n      const parsed = new URL(url);\\n      const client = parsed.protocol === 'https:' ? https : http;\\n      const proxyReq = client.request(url, { method: 'GET' }, proxyRes => {\\n        let data = '';\\n        proxyRes.on('data', chunk => data += chunk);\\n        proxyRes.on('end', () => { res.writeHead(200); res.end(data); });\\n      });\\n      proxyReq.on('error', e => { res.writeHead(500); res.end(e.message); });\\n      proxyReq.end();\\n    } catch (e) { res.writeHead(400); res.end('Invalid request'); }\\n  });\\n});\\n\\nserver.listen(3000, () => console.log('Proxy running on port 3000'));"
       },
       {
-        question: "How do I configure ABRA to use the proxy?",
-        answer: "1. Go to Settings > Integrations in ABRA. 2. In the Namecheap section, enter your Namecheap username and API key. 3. For 'Whitelist IP', enter your proxy server's IP address (the droplet's IP). 4. For 'Proxy URL', enter: http://YOUR_DROPLET_IP:3000 (replace with actual IP). 5. Save settings. 6. Finally, log into Namecheap and whitelist your proxy server's IP in their API settings."
+        question: "How do I check DNS and SSL status?",
+        answer: "Click the 'DNS' button on any website card to see the connection status. It shows: DNS Points to Server (A record check), Site Reachable (HTTP), SSL (HTTPS), and Overall Status. If DNS records are wrong, you'll see a 'Fix DNS Records' button to automatically update them via Namecheap."
       },
       {
-        question: "How do I test if the proxy is working?",
-        answer: "From your terminal, run: curl -X POST http://YOUR_DROPLET_IP:3000 -H 'Content-Type: application/json' -d '{\"url\": \"https://httpbin.org/ip\"}'\\n\\nIf working, you'll see a response showing your droplet's IP address. If you see your droplet's IP in the response, the proxy is working correctly."
-      },
-      {
-        question: "What if domain search shows '.com.com' errors?",
-        answer: "This happens if you type a full domain like 'example.com' in the search. The search is designed for keywords (like 'example') and adds TLDs automatically. You can enter either: (1) Just the keyword: 'mysite' - will search mysite.com, mysite.net, etc., or (2) A full domain: 'mysite.com' - will check that exact domain plus show other TLD options."
-      },
-      {
-        question: "How much does a proxy server cost?",
-        answer: "The smallest DigitalOcean droplet costs about $4-6/month. It's just forwarding small API requests, so you don't need anything powerful. One proxy server can handle all your Namecheap API calls."
-      },
-      {
-        question: "Can I use the same proxy for other things?",
-        answer: "Yes! Any API that requires IP whitelisting can use this same proxy server. Just send a POST request with the target URL in the body. The proxy doesn't care what API you're calling - it just forwards requests."
+        question: "How do I update files on an existing website?",
+        answer: "Click the 'Update Files' button on the website card. Upload a new zip file and it will be deployed to the server, replacing the existing files in /var/www/html. The server and domain configuration remain unchanged."
       }
     ]
   };
