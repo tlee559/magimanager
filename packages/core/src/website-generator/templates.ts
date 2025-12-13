@@ -68,9 +68,7 @@ export const INDEX_TEMPLATE = `<!DOCTYPE html>
   <section class="features" id="features">
     <div class="container">
       <h2 class="section-title">{{FEATURES_TITLE}}</h2>
-      <div class="features-grid {{FEATURE_GRID_CLASS}}">
-        {{FEATURES_HTML}}
-      </div>
+      {{FEATURES_HTML}}
     </div>
   </section>
 
@@ -958,6 +956,47 @@ img {
 
 .features-grid-masonry .feature-card:nth-child(2) {
   transform: translateY(40px);
+}
+
+/* Spacing between multiple feature grids (images section + icons section) */
+.features-grid + .features-grid {
+  margin-top: 48px;
+}
+
+/* Features with images section */
+.features-with-images .feature-card {
+  overflow: hidden;
+}
+
+.features-with-images .feature-image {
+  margin: -32px -32px 24px -32px;
+  border-radius: 16px 16px 0 0;
+  overflow: hidden;
+}
+
+.features-with-images .feature-image img {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+  display: block;
+}
+
+/* Features with icons section */
+.features-with-icons .feature-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  border-radius: 16px;
+  color: white;
+}
+
+.features-with-icons .feature-icon svg {
+  width: 32px;
+  height: 32px;
 }
 
 /* Base Feature Card with Dynamic Styling */

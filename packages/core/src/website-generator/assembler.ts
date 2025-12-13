@@ -114,23 +114,26 @@ function hexToRgb(hex: string): string {
 }
 
 // Generate feature cards HTML dynamically
+// Split features into two sections: first half with images, second half with icons
 function generateFeatureCardsHtml(
   content: GeneratedContent,
   featureCount: number,
   cardStyleClass: string,
-  logoIconSvg: string
+  logoIconSvg: string,
+  featureGridClass: string
 ): string {
-  const cards: string[] = [];
+  // Split features: first section gets images, second section gets icons
+  const imageFeatureCount = Math.ceil(featureCount / 2);
 
-  for (let i = 1; i <= featureCount; i++) {
+  const imageCards: string[] = [];
+  const iconCards: string[] = [];
+
+  // First section: features with images
+  for (let i = 1; i <= imageFeatureCount; i++) {
     const title = content[`feature${i}Title`] || `Feature ${i}`;
     const description = content[`feature${i}Description`] || "";
 
-    // Alternate between image and icon for visual variety
-    const hasImage = i <= 2; // First 2 features have images
-
-    if (hasImage) {
-      cards.push(`
+    imageCards.push(`
         <div class="feature-card ${cardStyleClass} animate-on-scroll" style="--card-index: ${i - 1};">
           <div class="feature-image">
             <img src="images/feature${i}.png" alt="${title}">
@@ -140,21 +143,47 @@ function generateFeatureCardsHtml(
             <p>${description}</p>
           </div>
         </div>
-      `);
-    } else {
-      cards.push(`
-        <div class="feature-card ${cardStyleClass} animate-on-scroll" style="--card-index: ${i - 1};">
+    `);
+  }
+
+  // Second section: features with icons
+  for (let i = imageFeatureCount + 1; i <= featureCount; i++) {
+    const title = content[`feature${i}Title`] || `Feature ${i}`;
+    const description = content[`feature${i}Description`] || "";
+
+    iconCards.push(`
+        <div class="feature-card ${cardStyleClass} animate-on-scroll" style="--card-index: ${i - imageFeatureCount - 1};">
           <div class="feature-icon">${logoIconSvg}</div>
           <div class="feature-content">
             <h3>${title}</h3>
             <p>${description}</p>
           </div>
         </div>
-      `);
-    }
+    `);
   }
 
-  return cards.join("\n");
+  // Combine into two sections with the selected grid layout
+  let html = '';
+
+  // First section with images
+  if (imageCards.length > 0) {
+    html += `
+      <div class="features-grid ${featureGridClass} features-with-images">
+        ${imageCards.join("\n")}
+      </div>
+    `;
+  }
+
+  // Second section with icons (if there are any)
+  if (iconCards.length > 0) {
+    html += `
+      <div class="features-grid ${featureGridClass} features-with-icons">
+        ${iconCards.join("\n")}
+      </div>
+    `;
+  }
+
+  return html;
 }
 
 // Generate optional sections HTML
@@ -594,7 +623,7 @@ function buildVariables(
 
     // Features content - dynamically generated
     FEATURES_TITLE: content.featuresTitle,
-    FEATURES_HTML: generateFeatureCardsHtml(content, featureCount, cardStyle.className, logoIcon.svg),
+    FEATURES_HTML: generateFeatureCardsHtml(content, featureCount, cardStyle.className, logoIcon.svg, featureLayout.gridClass),
 
     // About content
     ABOUT_TITLE: content.aboutTitle,
