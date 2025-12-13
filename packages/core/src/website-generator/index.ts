@@ -20,6 +20,10 @@ export {
   type TypographyStyle,
   type HeroBackground,
   type HoverEffect,
+  type OptionalSection,
+  type NavLayout,
+  type FooterLayout,
+  type ThemedSymbolSet,
 
   // Data
   COLOR_THEMES,
@@ -35,10 +39,16 @@ export {
   TYPOGRAPHY_STYLES,
   HERO_BACKGROUNDS,
   HOVER_EFFECTS,
+  OPTIONAL_SECTIONS,
+  NAV_LAYOUTS,
+  FOOTER_LAYOUTS,
+  THEMED_SYMBOL_SETS,
 
   // Functions
   selectRandomPresets,
   getTotalCombinations,
+  selectOptionalSections,
+  selectSymbolSet,
 } from "./presets";
 
 // Assembler
@@ -61,6 +71,7 @@ export {
   type GenerateImagesOptions,
   type GenerateWebsiteContentOptions,
   type GeneratedWebsiteContent,
+  type GeneratedImagesResult,
 
   // Functions
   generateContent,

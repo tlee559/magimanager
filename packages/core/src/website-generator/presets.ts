@@ -643,28 +643,28 @@ export const HERO_BACKGROUNDS: HeroBackground[] = [
     id: "gradient-overlay",
     className: "hero-bg-gradient",
     hasOverlay: true,
-    overlayStyle: "linear-gradient(135deg, rgba(var(--bg-rgb), 0.9) 0%, rgba(var(--bg-rgb), 0.7) 50%, rgba(var(--bg-rgb), 0.4) 100%)",
+    overlayStyle: "linear-gradient(135deg, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.75) 50%, rgba(0, 0, 0, 0.65) 100%)",
   },
   {
     name: "Dark Vignette",
     id: "vignette",
     className: "hero-bg-vignette",
     hasOverlay: true,
-    overlayStyle: "radial-gradient(ellipse at center, rgba(var(--bg-rgb), 0.3) 0%, rgba(var(--bg-rgb), 0.95) 100%)",
+    overlayStyle: "radial-gradient(ellipse at center, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0.9) 100%)",
   },
   {
     name: "Color Tint",
     id: "color-tint",
     className: "hero-bg-tint",
     hasOverlay: true,
-    overlayStyle: "linear-gradient(180deg, rgba(var(--primary-rgb), 0.4) 0%, rgba(var(--bg-rgb), 0.95) 100%)",
+    overlayStyle: "linear-gradient(180deg, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0.85) 100%)",
   },
   {
     name: "Minimal",
     id: "minimal",
     className: "hero-bg-minimal",
     hasOverlay: true,
-    overlayStyle: "linear-gradient(180deg, rgba(var(--bg-rgb), 0.85) 0%, rgba(var(--bg-rgb), 0.95) 100%)",
+    overlayStyle: "linear-gradient(180deg, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0.85) 100%)",
   },
 ];
 
@@ -753,6 +753,208 @@ export function getTotalCombinations(): number {
     HOVER_EFFECTS.length
   );
   // 12 × 6 × 8 × 4 × 22 × 5 × 6 × 5 × 5 × 4 × 4 = 304,128,000 combinations!
+}
+
+// ============================================================================
+// OPTIONAL SECTIONS (for variety)
+// ============================================================================
+
+export interface OptionalSection {
+  id: string;
+  name: string;
+  probability: number; // 0-1 chance of being included
+}
+
+export const OPTIONAL_SECTIONS: OptionalSection[] = [
+  { id: "stats", name: "Statistics Counter", probability: 0.6 },
+  { id: "testimonials", name: "Testimonials", probability: 0.5 },
+  { id: "faq", name: "FAQ Section", probability: 0.4 },
+  { id: "cta-banner", name: "CTA Banner", probability: 0.7 },
+];
+
+export function selectOptionalSections(): string[] {
+  const selected: string[] = [];
+  for (const section of OPTIONAL_SECTIONS) {
+    if (Math.random() < section.probability) {
+      selected.push(section.id);
+    }
+  }
+  return selected;
+}
+
+// ============================================================================
+// NAVIGATION LAYOUTS (4 variants)
+// ============================================================================
+
+export interface NavLayout {
+  id: string;
+  name: string;
+  style: "standard" | "centered" | "minimal" | "split";
+}
+
+export const NAV_LAYOUTS: NavLayout[] = [
+  { id: "nav-standard", name: "Standard", style: "standard" },
+  { id: "nav-centered", name: "Centered Logo", style: "centered" },
+  { id: "nav-minimal", name: "Minimal", style: "minimal" },
+  { id: "nav-split", name: "Split", style: "split" },
+];
+
+// ============================================================================
+// FOOTER LAYOUTS (4 variants)
+// ============================================================================
+
+export interface FooterLayout {
+  id: string;
+  name: string;
+  style: "standard" | "centered" | "minimal" | "columns";
+}
+
+export const FOOTER_LAYOUTS: FooterLayout[] = [
+  { id: "footer-standard", name: "Standard", style: "standard" },
+  { id: "footer-centered", name: "Centered", style: "centered" },
+  { id: "footer-minimal", name: "Minimal", style: "minimal" },
+  { id: "footer-columns", name: "Multi-Column", style: "columns" },
+];
+
+// ============================================================================
+// THEMED SLOT SYMBOLS
+// ============================================================================
+
+export interface ThemedSymbolSet {
+  name: string;
+  keywords: string[]; // Keywords to match in description
+  symbols: { emoji: string; name: string; multiplier: number }[];
+}
+
+export const THEMED_SYMBOL_SETS: ThemedSymbolSet[] = [
+  {
+    name: "Ocean",
+    keywords: ["ocean", "sea", "beach", "water", "marine", "fish", "aqua", "wave"],
+    symbols: [
+      { emoji: "🐚", name: "shell", multiplier: 2 },
+      { emoji: "🐠", name: "fish", multiplier: 3 },
+      { emoji: "🦀", name: "crab", multiplier: 4 },
+      { emoji: "🐙", name: "octopus", multiplier: 5 },
+      { emoji: "🦈", name: "shark", multiplier: 8 },
+      { emoji: "🐋", name: "whale", multiplier: 10 },
+      { emoji: "🔱", name: "trident", multiplier: 15 },
+      { emoji: "👑", name: "crown", multiplier: 20 },
+    ],
+  },
+  {
+    name: "Space",
+    keywords: ["space", "galaxy", "star", "cosmic", "universe", "planet", "astro", "nebula"],
+    symbols: [
+      { emoji: "⭐", name: "star", multiplier: 2 },
+      { emoji: "🌙", name: "moon", multiplier: 3 },
+      { emoji: "☄️", name: "comet", multiplier: 4 },
+      { emoji: "🪐", name: "planet", multiplier: 5 },
+      { emoji: "🚀", name: "rocket", multiplier: 8 },
+      { emoji: "👽", name: "alien", multiplier: 10 },
+      { emoji: "🌌", name: "galaxy", multiplier: 15 },
+      { emoji: "🛸", name: "ufo", multiplier: 20 },
+    ],
+  },
+  {
+    name: "Egypt",
+    keywords: ["egypt", "pharaoh", "pyramid", "ancient", "cleopatra", "sphinx", "nile", "desert"],
+    symbols: [
+      { emoji: "🪲", name: "scarab", multiplier: 2 },
+      { emoji: "🐪", name: "camel", multiplier: 3 },
+      { emoji: "🏺", name: "vase", multiplier: 4 },
+      { emoji: "👁️", name: "eye", multiplier: 5 },
+      { emoji: "🐍", name: "cobra", multiplier: 8 },
+      { emoji: "🔮", name: "orb", multiplier: 10 },
+      { emoji: "👑", name: "crown", multiplier: 15 },
+      { emoji: "💎", name: "gem", multiplier: 20 },
+    ],
+  },
+  {
+    name: "Fantasy",
+    keywords: ["fantasy", "magic", "dragon", "wizard", "fairy", "mythical", "enchanted", "kingdom"],
+    symbols: [
+      { emoji: "🍄", name: "mushroom", multiplier: 2 },
+      { emoji: "🧚", name: "fairy", multiplier: 3 },
+      { emoji: "🦄", name: "unicorn", multiplier: 4 },
+      { emoji: "🔮", name: "crystal", multiplier: 5 },
+      { emoji: "🧙", name: "wizard", multiplier: 8 },
+      { emoji: "🐉", name: "dragon", multiplier: 10 },
+      { emoji: "⚔️", name: "sword", multiplier: 15 },
+      { emoji: "👑", name: "crown", multiplier: 20 },
+    ],
+  },
+  {
+    name: "Fruits",
+    keywords: ["fruit", "classic", "retro", "traditional", "vegas", "vintage"],
+    symbols: [
+      { emoji: "🍒", name: "cherry", multiplier: 2 },
+      { emoji: "🍋", name: "lemon", multiplier: 3 },
+      { emoji: "🍊", name: "orange", multiplier: 4 },
+      { emoji: "🍇", name: "grape", multiplier: 5 },
+      { emoji: "🍀", name: "clover", multiplier: 8 },
+      { emoji: "💎", name: "diamond", multiplier: 10 },
+      { emoji: "🔔", name: "bell", multiplier: 15 },
+      { emoji: "7️⃣", name: "seven", multiplier: 20 },
+    ],
+  },
+  {
+    name: "Luxury",
+    keywords: ["luxury", "gold", "rich", "wealth", "vip", "premium", "elite", "diamond"],
+    symbols: [
+      { emoji: "💵", name: "cash", multiplier: 2 },
+      { emoji: "💳", name: "card", multiplier: 3 },
+      { emoji: "🎰", name: "slot", multiplier: 4 },
+      { emoji: "💰", name: "bag", multiplier: 5 },
+      { emoji: "🏆", name: "trophy", multiplier: 8 },
+      { emoji: "💎", name: "diamond", multiplier: 10 },
+      { emoji: "👑", name: "crown", multiplier: 15 },
+      { emoji: "🌟", name: "star", multiplier: 20 },
+    ],
+  },
+  {
+    name: "Irish",
+    keywords: ["irish", "luck", "clover", "leprechaun", "pot of gold", "rainbow", "celtic"],
+    symbols: [
+      { emoji: "☘️", name: "shamrock", multiplier: 2 },
+      { emoji: "🌈", name: "rainbow", multiplier: 3 },
+      { emoji: "🎩", name: "hat", multiplier: 4 },
+      { emoji: "🍺", name: "beer", multiplier: 5 },
+      { emoji: "🪙", name: "coin", multiplier: 8 },
+      { emoji: "🍀", name: "clover", multiplier: 10 },
+      { emoji: "💰", name: "pot", multiplier: 15 },
+      { emoji: "🌟", name: "star", multiplier: 20 },
+    ],
+  },
+  {
+    name: "Wild West",
+    keywords: ["western", "cowboy", "wild west", "sheriff", "frontier", "rodeo", "outlaw"],
+    symbols: [
+      { emoji: "🌵", name: "cactus", multiplier: 2 },
+      { emoji: "🐎", name: "horse", multiplier: 3 },
+      { emoji: "🤠", name: "cowboy", multiplier: 4 },
+      { emoji: "🔫", name: "gun", multiplier: 5 },
+      { emoji: "⭐", name: "badge", multiplier: 8 },
+      { emoji: "🎯", name: "target", multiplier: 10 },
+      { emoji: "💰", name: "gold", multiplier: 15 },
+      { emoji: "🏆", name: "wanted", multiplier: 20 },
+    ],
+  },
+];
+
+export function selectSymbolSet(description: string): ThemedSymbolSet {
+  const lowercaseDesc = description.toLowerCase();
+
+  // Find matching theme based on keywords
+  for (const theme of THEMED_SYMBOL_SETS) {
+    for (const keyword of theme.keywords) {
+      if (lowercaseDesc.includes(keyword)) {
+        return theme;
+      }
+    }
+  }
+
+  // Default to random theme
+  return THEMED_SYMBOL_SETS[Math.floor(Math.random() * THEMED_SYMBOL_SETS.length)];
 }
 
 // ============================================================================

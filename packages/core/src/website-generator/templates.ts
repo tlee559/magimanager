@@ -38,25 +38,7 @@ export const INDEX_TEMPLATE = `<!DOCTYPE html>
   {{AGE_VERIFICATION_MODAL}}
 
   <!-- Navigation -->
-  <nav class="navbar">
-    <div class="container">
-      <a href="index.html" class="logo">
-        <span class="logo-icon">{{LOGO_ICON}}</span>
-        <span class="logo-text">{{SITE_NAME}}</span>
-      </a>
-      <div class="nav-links">
-        <a href="index.html" class="active">Home</a>
-        {{NAV_PLAY_LINK}}
-        <a href="terms.html">Terms</a>
-        <a href="privacy.html">Privacy</a>
-      </div>
-      <button class="mobile-menu-btn" onclick="toggleMobileMenu()">
-        <span></span>
-        <span></span>
-        <span></span>
-      </button>
-    </div>
-  </nav>
+  {{NAV_HTML}}
 
   <!-- Mobile Menu -->
   <div id="mobile-menu" class="mobile-menu">
@@ -87,31 +69,7 @@ export const INDEX_TEMPLATE = `<!DOCTYPE html>
     <div class="container">
       <h2 class="section-title">{{FEATURES_TITLE}}</h2>
       <div class="features-grid {{FEATURE_GRID_CLASS}}">
-        <div class="feature-card {{CARD_STYLE_CLASS}} animate-on-scroll" style="--card-index: 0;">
-          <div class="feature-image">
-            <img src="images/feature1.png" alt="{{FEATURE_1_TITLE}}">
-          </div>
-          <div class="feature-content">
-            <h3>{{FEATURE_1_TITLE}}</h3>
-            <p>{{FEATURE_1_DESCRIPTION}}</p>
-          </div>
-        </div>
-        <div class="feature-card {{CARD_STYLE_CLASS}} animate-on-scroll" style="--card-index: 1;">
-          <div class="feature-image">
-            <img src="images/feature2.png" alt="{{FEATURE_2_TITLE}}">
-          </div>
-          <div class="feature-content">
-            <h3>{{FEATURE_2_TITLE}}</h3>
-            <p>{{FEATURE_2_DESCRIPTION}}</p>
-          </div>
-        </div>
-        <div class="feature-card {{CARD_STYLE_CLASS}} animate-on-scroll" style="--card-index: 2;">
-          <div class="feature-icon">{{FEATURE_3_ICON}}</div>
-          <div class="feature-content">
-            <h3>{{FEATURE_3_TITLE}}</h3>
-            <p>{{FEATURE_3_DESCRIPTION}}</p>
-          </div>
-        </div>
+        {{FEATURES_HTML}}
       </div>
     </div>
   </section>
@@ -119,7 +77,7 @@ export const INDEX_TEMPLATE = `<!DOCTYPE html>
   <!-- About Section -->
   <section class="about">
     <div class="container">
-      <div class="about-content">
+      <div class="about-content animate-on-scroll">
         <h2>{{ABOUT_TITLE}}</h2>
         <p>{{ABOUT_DESCRIPTION}}</p>
         {{ABOUT_CTA}}
@@ -127,31 +85,11 @@ export const INDEX_TEMPLATE = `<!DOCTYPE html>
     </div>
   </section>
 
+  <!-- Optional Sections (Stats, Testimonials, FAQ, CTA Banner) -->
+  {{OPTIONAL_SECTIONS_HTML}}
+
   <!-- Footer -->
-  <footer class="footer">
-    <div class="container">
-      <div class="footer-content">
-        <div class="footer-brand">
-          <a href="index.html" class="logo">
-            <span class="logo-icon">{{LOGO_ICON}}</span>
-            <span class="logo-text">{{SITE_NAME}}</span>
-          </a>
-          <p class="footer-tagline">{{FOOTER_TAGLINE}}</p>
-        </div>
-        <div class="footer-links">
-          <h4>Legal</h4>
-          <a href="terms.html">Terms of Service</a>
-          <a href="privacy.html">Privacy Policy</a>
-        </div>
-        {{FOOTER_EXTRA_LINKS}}
-      </div>
-      {{RESPONSIBLE_GAMING_FOOTER}}
-      <div class="footer-bottom">
-        <p>&copy; {{CURRENT_YEAR}} {{SITE_NAME}}. All rights reserved.</p>
-        {{NO_REAL_MONEY_DISCLAIMER}}
-      </div>
-    </div>
-  </footer>
+  {{FOOTER_HTML}}
 
   <script>
     // Cookie consent
@@ -560,8 +498,14 @@ export const STYLE_TEMPLATE = `/* ==============================================
 
   /* Spacing */
   --container-width: 1200px;
-  --section-padding: 80px;
-  --card-radius: 16px;
+  --section-padding: 100px;
+  --card-radius: 20px;
+
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.2);
+  --shadow-glow: 0 0 40px rgba(var(--color-primary-rgb), 0.3);
 }
 
 /* ============================================================================
@@ -658,6 +602,24 @@ img {
 .btn-large {
   padding: 18px 48px;
   font-size: 1.125rem;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Shimmer effect on primary buttons */
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s ease;
+}
+
+.btn-primary:hover::before {
+  left: 100%;
 }
 
 /* Button Style Variants */
@@ -873,6 +835,7 @@ img {
 }
 
 .hero-title {
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
   font-size: clamp(2.5rem, 6vw, 4.5rem);
   margin-bottom: 24px;
   background: linear-gradient(135deg, var(--color-text), var(--color-secondary));
@@ -883,11 +846,13 @@ img {
 
 .hero-subtitle {
   font-size: clamp(1.125rem, 2vw, 1.5rem);
-  color: var(--color-text-muted);
+  color: var(--color-text);
   margin-bottom: 40px;
   max-width: 600px;
   margin-left: auto;
   margin-right: auto;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  opacity: 0.95;
 }
 
 .hero-left .hero-subtitle {
@@ -1446,6 +1411,341 @@ img {
   .age-buttons {
     flex-direction: column;
   }
+
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .testimonials-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cta-banner {
+    flex-direction: column;
+    text-align: center;
+    gap: 24px;
+  }
+
+  .footer-columns .footer-grid {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+}
+
+/* ============================================================================
+   STATS SECTION
+   ============================================================================ */
+.stats-section {
+  padding: 80px 0;
+  background: linear-gradient(180deg, transparent 0%, rgba(var(--color-primary-rgb), 0.05) 50%, transparent 100%);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 40px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.stat-item {
+  text-align: center;
+  padding: 30px 20px;
+  background: var(--color-surface);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: var(--animation-hover);
+}
+
+.stat-item:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+}
+
+.stat-number {
+  display: block;
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 8px;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* ============================================================================
+   TESTIMONIALS SECTION
+   ============================================================================ */
+.testimonials-section {
+  padding: var(--section-padding) 0;
+  background: var(--color-surface);
+}
+
+.testimonials-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 30px;
+  margin-top: 50px;
+}
+
+.testimonial-card {
+  padding: 30px;
+  border-radius: 16px;
+  text-align: center;
+  transition: var(--animation-hover);
+}
+
+.testimonial-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+}
+
+.testimonial-stars {
+  font-size: 1.5rem;
+  margin-bottom: 20px;
+}
+
+.testimonial-text {
+  font-size: 1rem;
+  color: var(--color-text);
+  line-height: 1.7;
+  margin-bottom: 24px;
+  font-style: italic;
+}
+
+.testimonial-author {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.author-name {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.author-title {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* ============================================================================
+   FAQ SECTION
+   ============================================================================ */
+.faq-section {
+  padding: var(--section-padding) 0;
+}
+
+.faq-list {
+  max-width: 800px;
+  margin: 50px auto 0;
+}
+
+.faq-item {
+  margin-bottom: 16px;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: var(--animation-hover);
+}
+
+.faq-question {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-text);
+  transition: background 0.3s ease;
+}
+
+.faq-question:hover {
+  background: rgba(var(--color-primary-rgb), 0.1);
+}
+
+.faq-icon {
+  font-size: 1.5rem;
+  color: var(--color-primary);
+  transition: transform 0.3s ease;
+}
+
+.faq-item.active .faq-icon {
+  transform: rotate(45deg);
+}
+
+.faq-answer {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease, padding 0.3s ease;
+}
+
+.faq-item.active .faq-answer {
+  max-height: 200px;
+  padding: 0 24px 20px;
+}
+
+.faq-answer p {
+  color: var(--color-text-muted);
+  line-height: 1.7;
+}
+
+/* ============================================================================
+   CTA BANNER SECTION
+   ============================================================================ */
+.cta-banner-section {
+  padding: var(--section-padding) 0;
+}
+
+.cta-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 50px 60px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.2) 0%, rgba(var(--color-secondary-rgb), 0.2) 100%);
+  border: 1px solid rgba(var(--color-primary-rgb), 0.3);
+}
+
+.cta-content h2 {
+  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  margin-bottom: 12px;
+}
+
+.cta-content p {
+  color: var(--color-text-muted);
+  font-size: 1.1rem;
+}
+
+/* ============================================================================
+   NAV LAYOUT VARIANTS
+   ============================================================================ */
+.navbar-centered .container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 60px;
+}
+
+.navbar-centered .nav-left,
+.navbar-centered .nav-right {
+  display: flex;
+  gap: 24px;
+}
+
+.navbar-centered .logo {
+  order: 0;
+}
+
+.navbar-minimal {
+  background: transparent;
+  box-shadow: none;
+}
+
+.navbar-minimal .container {
+  justify-content: space-between;
+}
+
+.navbar-minimal .logo-text {
+  display: none;
+}
+
+.navbar-split .container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.navbar-split .nav-center {
+  display: flex;
+  gap: 24px;
+}
+
+.navbar-split .nav-cta .btn {
+  padding: 8px 20px;
+  font-size: 0.875rem;
+}
+
+/* ============================================================================
+   FOOTER LAYOUT VARIANTS
+   ============================================================================ */
+.footer-centered {
+  text-align: center;
+}
+
+.footer-centered .logo {
+  display: inline-flex;
+  margin-bottom: 16px;
+}
+
+.footer-centered .footer-tagline {
+  margin-bottom: 24px;
+}
+
+.footer-links-inline {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 30px;
+}
+
+.footer-links-inline a {
+  color: var(--color-text-muted);
+}
+
+.footer-links-inline a:hover {
+  color: var(--color-primary);
+}
+
+.footer-links-inline .separator {
+  color: var(--color-text-muted);
+}
+
+.footer-minimal {
+  padding: 30px 0;
+}
+
+.footer-minimal .footer-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.footer-columns .footer-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 40px;
+  margin-bottom: 40px;
+}
+
+.footer-col h4 {
+  font-size: 1rem;
+  margin-bottom: 16px;
+  color: var(--color-text);
+}
+
+.footer-col a {
+  display: block;
+  color: var(--color-text-muted);
+  margin-bottom: 10px;
+  font-size: 0.875rem;
+}
+
+.footer-col a:hover {
+  color: var(--color-primary);
+}
+
+.footer-contact {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
 }`;
 
 // ============================================================================
@@ -2156,21 +2456,12 @@ export const SLOTS_JS_TEMPLATE = `/**
   'use strict';
 
   // ============================================================================
-  // Configuration
+  // Configuration (Themed Symbols)
   // ============================================================================
 
-  const SYMBOLS = ['🍒', '🍋', '🍊', '🍇', '💎', '7️⃣', '📊', '⭐'];
-
-  const MULTIPLIERS = {
-    '🍒': 2,
-    '🍋': 3,
-    '🍊': 4,
-    '🍇': 5,
-    '⭐': 8,
-    '💎': 10,
-    '📊': 15,
-    '7️⃣': 20
-  };
+  // Theme: {{SLOT_THEME_NAME}}
+  const SYMBOLS = {{SLOT_SYMBOLS_JSON}};
+  const MULTIPLIERS = {{SLOT_MULTIPLIERS_JSON}};
 
   const REEL_COUNT = 5;
   const VISIBLE_SYMBOLS = 3;

@@ -21,6 +21,13 @@ import {
   HeroBackground,
   HoverEffect,
   selectRandomPresets,
+  selectOptionalSections,
+  selectSymbolSet,
+  NAV_LAYOUTS,
+  FOOTER_LAYOUTS,
+  NavLayout,
+  FooterLayout,
+  ThemedSymbolSet,
 } from "./presets";
 import {
   INDEX_TEMPLATE,
@@ -44,24 +51,30 @@ export interface GeneratedContent {
   heroSubheadline: string;
   heroCtaText: string;
   featuresTitle: string;
-  feature1Title: string;
-  feature1Description: string;
-  feature2Title: string;
-  feature2Description: string;
-  feature3Title: string;
-  feature3Description: string;
+  // Dynamic features (feature1-5)
+  feature1Title?: string;
+  feature1Description?: string;
+  feature2Title?: string;
+  feature2Description?: string;
+  feature3Title?: string;
+  feature3Description?: string;
+  feature4Title?: string;
+  feature4Description?: string;
+  feature5Title?: string;
+  feature5Description?: string;
   aboutTitle: string;
   aboutDescription: string;
   footerTagline: string;
   // Social casino specific
   gameName?: string;
   gameTagline?: string;
+  // Allow dynamic access
+  [key: string]: string | undefined;
 }
 
 export interface GeneratedImages {
   hero: Buffer | Uint8Array;
-  feature1: Buffer | Uint8Array;
-  feature2: Buffer | Uint8Array;
+  features: (Buffer | Uint8Array)[];
 }
 
 export interface SelectedPresets {
@@ -84,6 +97,7 @@ export interface AssembleOptions {
   content: GeneratedContent;
   images: GeneratedImages;
   presets?: SelectedPresets;
+  featureCount?: number; // 2-5 features
 }
 
 // ============================================================================
@@ -99,11 +113,426 @@ function hexToRgb(hex: string): string {
   return "0, 0, 0";
 }
 
+// Generate feature cards HTML dynamically
+function generateFeatureCardsHtml(
+  content: GeneratedContent,
+  featureCount: number,
+  cardStyleClass: string,
+  logoIconSvg: string
+): string {
+  const cards: string[] = [];
+
+  for (let i = 1; i <= featureCount; i++) {
+    const title = content[`feature${i}Title`] || `Feature ${i}`;
+    const description = content[`feature${i}Description`] || "";
+
+    // Alternate between image and icon for visual variety
+    const hasImage = i <= 2; // First 2 features have images
+
+    if (hasImage) {
+      cards.push(`
+        <div class="feature-card ${cardStyleClass} animate-on-scroll" style="--card-index: ${i - 1};">
+          <div class="feature-image">
+            <img src="images/feature${i}.png" alt="${title}">
+          </div>
+          <div class="feature-content">
+            <h3>${title}</h3>
+            <p>${description}</p>
+          </div>
+        </div>
+      `);
+    } else {
+      cards.push(`
+        <div class="feature-card ${cardStyleClass} animate-on-scroll" style="--card-index: ${i - 1};">
+          <div class="feature-icon">${logoIconSvg}</div>
+          <div class="feature-content">
+            <h3>${title}</h3>
+            <p>${description}</p>
+          </div>
+        </div>
+      `);
+    }
+  }
+
+  return cards.join("\n");
+}
+
+// Generate optional sections HTML
+function generateOptionalSectionsHtml(
+  sections: string[],
+  siteName: string,
+  niche: NicheType,
+  cardStyleClass: string
+): string {
+  const html: string[] = [];
+
+  for (const sectionId of sections) {
+    switch (sectionId) {
+      case "stats":
+        html.push(`
+  <!-- Stats Section -->
+  <section class="stats-section">
+    <div class="container">
+      <div class="stats-grid">
+        <div class="stat-item animate-on-scroll">
+          <span class="stat-number" data-target="50000">50K+</span>
+          <span class="stat-label">Happy Players</span>
+        </div>
+        <div class="stat-item animate-on-scroll">
+          <span class="stat-number" data-target="1000000">1M+</span>
+          <span class="stat-label">Games Played</span>
+        </div>
+        <div class="stat-item animate-on-scroll">
+          <span class="stat-number" data-target="500">500+</span>
+          <span class="stat-label">Daily Winners</span>
+        </div>
+        <div class="stat-item animate-on-scroll">
+          <span class="stat-number">24/7</span>
+          <span class="stat-label">Free Entertainment</span>
+        </div>
+      </div>
+    </div>
+  </section>
+        `);
+        break;
+
+      case "testimonials":
+        html.push(`
+  <!-- Testimonials Section -->
+  <section class="testimonials-section">
+    <div class="container">
+      <h2 class="section-title">What Players Say</h2>
+      <div class="testimonials-grid">
+        <div class="testimonial-card ${cardStyleClass} animate-on-scroll">
+          <div class="testimonial-stars">⭐⭐⭐⭐⭐</div>
+          <p class="testimonial-text">"Best free casino experience! I love playing during my breaks. The graphics are amazing!"</p>
+          <div class="testimonial-author">
+            <span class="author-name">Alex M.</span>
+            <span class="author-title">Daily Player</span>
+          </div>
+        </div>
+        <div class="testimonial-card ${cardStyleClass} animate-on-scroll">
+          <div class="testimonial-stars">⭐⭐⭐⭐⭐</div>
+          <p class="testimonial-text">"Finally a site that's actually free! No hidden costs, just pure fun. Highly recommend."</p>
+          <div class="testimonial-author">
+            <span class="author-name">Sarah K.</span>
+            <span class="author-title">Weekend Spinner</span>
+          </div>
+        </div>
+        <div class="testimonial-card ${cardStyleClass} animate-on-scroll">
+          <div class="testimonial-stars">⭐⭐⭐⭐⭐</div>
+          <p class="testimonial-text">"The slot games are so smooth and exciting. Love the daily bonuses!"</p>
+          <div class="testimonial-author">
+            <span class="author-name">Mike R.</span>
+            <span class="author-title">VIP Member</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+        `);
+        break;
+
+      case "faq":
+        html.push(`
+  <!-- FAQ Section -->
+  <section class="faq-section">
+    <div class="container">
+      <h2 class="section-title">Frequently Asked Questions</h2>
+      <div class="faq-list">
+        <div class="faq-item ${cardStyleClass} animate-on-scroll">
+          <div class="faq-question" onclick="this.parentElement.classList.toggle('active')">
+            <span>Is this really free to play?</span>
+            <span class="faq-icon">+</span>
+          </div>
+          <div class="faq-answer">
+            <p>Yes! ${siteName} is 100% free to play. We provide virtual credits for entertainment purposes only. No real money is ever required or involved.</p>
+          </div>
+        </div>
+        <div class="faq-item ${cardStyleClass} animate-on-scroll">
+          <div class="faq-question" onclick="this.parentElement.classList.toggle('active')">
+            <span>Can I win real money?</span>
+            <span class="faq-icon">+</span>
+          </div>
+          <div class="faq-answer">
+            <p>No, this is a social gaming platform for entertainment only. All winnings are virtual credits with no cash value. You cannot exchange credits for real money.</p>
+          </div>
+        </div>
+        <div class="faq-item ${cardStyleClass} animate-on-scroll">
+          <div class="faq-question" onclick="this.parentElement.classList.toggle('active')">
+            <span>What happens if I run out of credits?</span>
+            <span class="faq-icon">+</span>
+          </div>
+          <div class="faq-answer">
+            <p>Don't worry! Your credits automatically refill so you can keep playing. The fun never stops!</p>
+          </div>
+        </div>
+        <div class="faq-item ${cardStyleClass} animate-on-scroll">
+          <div class="faq-question" onclick="this.parentElement.classList.toggle('active')">
+            <span>Is there an age requirement?</span>
+            <span class="faq-icon">+</span>
+          </div>
+          <div class="faq-answer">
+            <p>Yes, you must be 18 years or older to use ${siteName}. This ensures responsible gaming for all our players.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+        `);
+        break;
+
+      case "cta-banner":
+        if (niche === "social-casino") {
+          html.push(`
+  <!-- CTA Banner Section -->
+  <section class="cta-banner-section">
+    <div class="container">
+      <div class="cta-banner ${cardStyleClass}">
+        <div class="cta-content">
+          <h2>Ready to Start Winning?</h2>
+          <p>Join thousands of players enjoying free casino games. No download required!</p>
+        </div>
+        <div class="cta-action">
+          <a href="play.html" class="btn btn-primary btn-large">Play Free Now</a>
+        </div>
+      </div>
+    </div>
+  </section>
+          `);
+        }
+        break;
+    }
+  }
+
+  return html.join("\n");
+}
+
+// Generate navigation HTML based on layout
+function generateNavHtml(navLayout: NavLayout, siteName: string, logoIcon: string, niche: NicheType): string {
+  const playLink = niche === "social-casino" ? '<a href="play.html">Play Now</a>' : '';
+
+  switch (navLayout.style) {
+    case "centered":
+      return `
+  <nav class="navbar navbar-centered">
+    <div class="container">
+      <div class="nav-links nav-left">
+        <a href="index.html" class="active">Home</a>
+        ${playLink}
+      </div>
+      <a href="index.html" class="logo">
+        <span class="logo-icon">${logoIcon}</span>
+        <span class="logo-text">${siteName}</span>
+      </a>
+      <div class="nav-links nav-right">
+        <a href="terms.html">Terms</a>
+        <a href="privacy.html">Privacy</a>
+      </div>
+      <button class="mobile-menu-btn" onclick="toggleMobileMenu()">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>`;
+
+    case "minimal":
+      return `
+  <nav class="navbar navbar-minimal">
+    <div class="container">
+      <a href="index.html" class="logo">
+        <span class="logo-icon">${logoIcon}</span>
+      </a>
+      <div class="nav-links">
+        ${playLink}
+      </div>
+      <button class="mobile-menu-btn" onclick="toggleMobileMenu()">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>`;
+
+    case "split":
+      return `
+  <nav class="navbar navbar-split">
+    <div class="container">
+      <a href="index.html" class="logo">
+        <span class="logo-icon">${logoIcon}</span>
+        <span class="logo-text">${siteName}</span>
+      </a>
+      <div class="nav-center">
+        <a href="index.html" class="active">Home</a>
+        ${playLink}
+        <a href="terms.html">Terms</a>
+        <a href="privacy.html">Privacy</a>
+      </div>
+      <div class="nav-cta">
+        ${niche === "social-casino" ? '<a href="play.html" class="btn btn-primary">Play Free</a>' : ''}
+      </div>
+      <button class="mobile-menu-btn" onclick="toggleMobileMenu()">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>`;
+
+    default: // standard
+      return `
+  <nav class="navbar">
+    <div class="container">
+      <a href="index.html" class="logo">
+        <span class="logo-icon">${logoIcon}</span>
+        <span class="logo-text">${siteName}</span>
+      </a>
+      <div class="nav-links">
+        <a href="index.html" class="active">Home</a>
+        ${playLink}
+        <a href="terms.html">Terms</a>
+        <a href="privacy.html">Privacy</a>
+      </div>
+      <button class="mobile-menu-btn" onclick="toggleMobileMenu()">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>`;
+  }
+}
+
+// Generate footer HTML based on layout
+function generateFooterHtml(
+  footerLayout: FooterLayout,
+  siteName: string,
+  logoIcon: string,
+  footerTagline: string,
+  niche: NicheType,
+  currentYear: string
+): string {
+  const responsibleGaming = niche === "social-casino" ? `
+    <div class="responsible-gaming">
+      <h4>Responsible Gaming</h4>
+      <p>This is a free-to-play social gaming site. No real money gambling. Virtual credits have no cash value.</p>
+    </div>` : '';
+
+  const noRealMoney = niche === "social-casino" ? `
+    <div class="no-real-money">
+      <p>NO REAL MONEY - FOR ENTERTAINMENT PURPOSES ONLY</p>
+    </div>` : '';
+
+  switch (footerLayout.style) {
+    case "centered":
+      return `
+  <footer class="footer footer-centered">
+    <div class="container">
+      <a href="index.html" class="logo">
+        <span class="logo-icon">${logoIcon}</span>
+        <span class="logo-text">${siteName}</span>
+      </a>
+      <p class="footer-tagline">${footerTagline}</p>
+      <div class="footer-links-inline">
+        <a href="terms.html">Terms</a>
+        <span class="separator">•</span>
+        <a href="privacy.html">Privacy</a>
+      </div>
+      ${responsibleGaming}
+      <div class="footer-bottom">
+        <p>&copy; ${currentYear} ${siteName}. All rights reserved.</p>
+        ${noRealMoney}
+      </div>
+    </div>
+  </footer>`;
+
+    case "minimal":
+      return `
+  <footer class="footer footer-minimal">
+    <div class="container">
+      <div class="footer-row">
+        <p>&copy; ${currentYear} ${siteName}</p>
+        <div class="footer-links-inline">
+          <a href="terms.html">Terms</a>
+          <a href="privacy.html">Privacy</a>
+        </div>
+      </div>
+      ${noRealMoney}
+    </div>
+  </footer>`;
+
+    case "columns":
+      return `
+  <footer class="footer footer-columns">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-col">
+          <a href="index.html" class="logo">
+            <span class="logo-icon">${logoIcon}</span>
+            <span class="logo-text">${siteName}</span>
+          </a>
+          <p class="footer-tagline">${footerTagline}</p>
+        </div>
+        <div class="footer-col">
+          <h4>Quick Links</h4>
+          <a href="index.html">Home</a>
+          ${niche === "social-casino" ? '<a href="play.html">Play Now</a>' : ''}
+        </div>
+        <div class="footer-col">
+          <h4>Legal</h4>
+          <a href="terms.html">Terms of Service</a>
+          <a href="privacy.html">Privacy Policy</a>
+        </div>
+        <div class="footer-col">
+          <h4>Support</h4>
+          <p class="footer-contact">Contact us for any questions.</p>
+        </div>
+      </div>
+      ${responsibleGaming}
+      <div class="footer-bottom">
+        <p>&copy; ${currentYear} ${siteName}. All rights reserved.</p>
+        ${noRealMoney}
+      </div>
+    </div>
+  </footer>`;
+
+    default: // standard
+      return `
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-brand">
+          <a href="index.html" class="logo">
+            <span class="logo-icon">${logoIcon}</span>
+            <span class="logo-text">${siteName}</span>
+          </a>
+          <p class="footer-tagline">${footerTagline}</p>
+        </div>
+        <div class="footer-links">
+          <h4>Legal</h4>
+          <a href="terms.html">Terms of Service</a>
+          <a href="privacy.html">Privacy Policy</a>
+        </div>
+        ${niche === "social-casino" ? `
+        <div class="footer-links">
+          <h4>Play</h4>
+          <a href="play.html">Free Slots</a>
+        </div>` : ''}
+      </div>
+      ${responsibleGaming}
+      <div class="footer-bottom">
+        <p>&copy; ${currentYear} ${siteName}. All rights reserved.</p>
+        ${noRealMoney}
+      </div>
+    </div>
+  </footer>`;
+  }
+}
+
 function buildVariables(
   options: AssembleOptions,
-  presets: SelectedPresets
+  presets: SelectedPresets,
+  featureCount: number,
+  optionalSections: string[],
+  navLayout: NavLayout,
+  footerLayout: FooterLayout,
+  symbolSet: ThemedSymbolSet,
+  classPrefix: string
 ): Record<string, string> {
-  const { niche, content } = options;
+  const { niche, content, domain } = options;
   const { colors, layout, fonts, animation, logoIcon, featureLayout, buttonStyle, cardStyle, typography, heroBackground, hoverEffect } = presets;
 
   const currentDate = new Date().toLocaleDateString("en-US", {
@@ -112,6 +541,9 @@ function buildVariables(
     day: "numeric",
   });
   const currentYear = new Date().getFullYear().toString();
+
+  // Get user description for theme-aware features
+  const description = domain || "";
 
   // Base variables
   const variables: Record<string, string> = {
@@ -160,15 +592,9 @@ function buildVariables(
     HERO_SUBHEADLINE: content.heroSubheadline,
     HERO_IMAGE_ALT: `${content.siteName} - ${content.tagline}`,
 
-    // Features content
+    // Features content - dynamically generated
     FEATURES_TITLE: content.featuresTitle,
-    FEATURE_1_TITLE: content.feature1Title,
-    FEATURE_1_DESCRIPTION: content.feature1Description,
-    FEATURE_2_TITLE: content.feature2Title,
-    FEATURE_2_DESCRIPTION: content.feature2Description,
-    FEATURE_3_TITLE: content.feature3Title,
-    FEATURE_3_DESCRIPTION: content.feature3Description,
-    FEATURE_3_ICON: logoIcon.svg,
+    FEATURES_HTML: generateFeatureCardsHtml(content, featureCount, cardStyle.className, logoIcon.svg),
 
     // About content
     ABOUT_TITLE: content.aboutTitle,
@@ -203,6 +629,24 @@ function buildVariables(
     // NEW: Hover Effects
     CARD_HOVER_STYLE: hoverEffect.cardHover,
     BUTTON_HOVER_EFFECT: hoverEffect.buttonHover,
+
+    // Dynamic sections
+    OPTIONAL_SECTIONS_HTML: generateOptionalSectionsHtml(optionalSections, content.siteName, niche, cardStyle.className),
+    NAV_HTML: generateNavHtml(navLayout, content.siteName, logoIcon.svg, niche),
+    FOOTER_HTML: generateFooterHtml(footerLayout, content.siteName, logoIcon.svg, content.footerTagline, niche, currentYear),
+
+    // Class prefix for anti-fingerprinting
+    CLASS_PREFIX: classPrefix,
+
+    // Themed slot symbols
+    SLOT_SYMBOLS_JSON: JSON.stringify(symbolSet.symbols.map(s => s.emoji)),
+    SLOT_MULTIPLIERS_JSON: JSON.stringify(
+      symbolSet.symbols.reduce((acc, s) => {
+        acc[s.emoji] = s.multiplier;
+        return acc;
+      }, {} as Record<string, number>)
+    ),
+    SLOT_THEME_NAME: symbolSet.name,
   };
 
   // Niche-specific variables
@@ -346,39 +790,116 @@ function replaceVariables(template: string, variables: Record<string, string>): 
   return result;
 }
 
+// Apply class prefix to randomize class names for anti-fingerprinting
+function applyClassPrefix(content: string, prefix: string, isCSS: boolean): string {
+  // List of classes to prefix (main structural classes)
+  const classesToPrefix = [
+    'navbar', 'hero', 'features', 'feature-card', 'feature-grid', 'feature-image', 'feature-icon',
+    'about', 'footer', 'container', 'section-title', 'btn', 'logo', 'nav-links',
+    'cookie-banner', 'age-modal', 'mobile-menu', 'animate-on-scroll', 'visible',
+    'stats-section', 'stat-item', 'testimonials-section', 'testimonial-card',
+    'faq-section', 'faq-item', 'cta-banner-section', 'cta-banner',
+    'slot-machine', 'credits-bar', 'game-page', 'paytable'
+  ];
+
+  let result = content;
+
+  for (const className of classesToPrefix) {
+    if (isCSS) {
+      // In CSS: .className -> .prefix_className
+      const cssRegex = new RegExp(`\\.${className}(?=[\\s{:,\\[])`, 'g');
+      result = result.replace(cssRegex, `.${prefix}${className}`);
+    } else {
+      // In HTML: class="className" or class="...className..."
+      const htmlClassRegex = new RegExp(`(class=["'][^"']*?)\\b${className}\\b`, 'g');
+      result = result.replace(htmlClassRegex, `$1${prefix}${className}`);
+    }
+  }
+
+  return result;
+}
+
 // ============================================================================
 // Main Assembly Function (using embedded templates)
 // ============================================================================
 
+// Generate random class prefix for anti-fingerprinting
+function generateClassPrefix(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz';
+  const nums = '0123456789';
+  let prefix = chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < 3; i++) {
+    prefix += (Math.random() > 0.5 ? chars : nums)[Math.floor(Math.random() * (Math.random() > 0.5 ? chars.length : nums.length))];
+  }
+  return prefix + '_';
+}
+
 export async function assembleWebsiteFromFiles(options: AssembleOptions): Promise<Buffer> {
-  const { niche, images } = options;
+  const { niche, images, domain } = options;
 
   // Use provided presets or generate random ones
   const presets = options.presets || selectRandomPresets();
 
+  // Determine feature count from images or default
+  const featureCount = options.featureCount || images.features?.length || 3;
+
+  // Select random optional sections
+  const optionalSections = selectOptionalSections();
+
+  // Select random nav and footer layouts
+  const navLayout = NAV_LAYOUTS[Math.floor(Math.random() * NAV_LAYOUTS.length)];
+  const footerLayout = FOOTER_LAYOUTS[Math.floor(Math.random() * FOOTER_LAYOUTS.length)];
+
+  // Select themed symbols based on description
+  const symbolSet = selectSymbolSet(domain || "");
+
+  // Generate class prefix for anti-fingerprinting
+  const classPrefix = generateClassPrefix();
+
   // Build variable map
-  const variables = buildVariables(options, presets);
+  const variables = buildVariables(
+    options,
+    presets,
+    featureCount,
+    optionalSections,
+    navLayout,
+    footerLayout,
+    symbolSet,
+    classPrefix
+  );
 
   // Create ZIP archive
   const zip = new JSZip();
 
+  // Process templates: replace variables, then apply class prefix
+  const processHtml = (template: string) =>
+    applyClassPrefix(replaceVariables(template, variables), classPrefix, false);
+  const processCss = (template: string) =>
+    applyClassPrefix(replaceVariables(template, variables), classPrefix, true);
+  const processJs = (template: string) => replaceVariables(template, variables);
+
   // Add base templates (embedded)
-  zip.file("index.html", replaceVariables(INDEX_TEMPLATE, variables));
-  zip.file("terms.html", replaceVariables(TERMS_TEMPLATE, variables));
-  zip.file("privacy.html", replaceVariables(PRIVACY_TEMPLATE, variables));
-  zip.file("css/style.css", replaceVariables(STYLE_TEMPLATE, variables));
+  zip.file("index.html", processHtml(INDEX_TEMPLATE));
+  zip.file("terms.html", processHtml(TERMS_TEMPLATE));
+  zip.file("privacy.html", processHtml(PRIVACY_TEMPLATE));
+  zip.file("css/style.css", processCss(STYLE_TEMPLATE));
 
   // Add niche-specific templates
   if (niche === "social-casino") {
-    zip.file("play.html", replaceVariables(PLAY_TEMPLATE, variables));
-    zip.file("css/slots.css", replaceVariables(SLOTS_CSS_TEMPLATE, variables));
-    zip.file("js/slots.js", replaceVariables(SLOTS_JS_TEMPLATE, variables));
+    zip.file("play.html", processHtml(PLAY_TEMPLATE));
+    zip.file("css/slots.css", processCss(SLOTS_CSS_TEMPLATE));
+    zip.file("js/slots.js", processJs(SLOTS_JS_TEMPLATE));
   }
 
   // Add images
   zip.file("images/hero.png", images.hero);
-  zip.file("images/feature1.png", images.feature1);
-  zip.file("images/feature2.png", images.feature2);
+
+  // Add feature images dynamically
+  if (images.features && images.features.length > 0) {
+    for (let i = 0; i < images.features.length; i++) {
+      zip.file(`images/feature${i + 1}.png`, images.features[i]);
+    }
+  }
 
   // Generate ZIP buffer
   const zipBuffer = await zip.generateAsync({
