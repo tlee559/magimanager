@@ -38,10 +38,8 @@ import {
   SLOTS_CSS_TEMPLATE,
   SLOTS_JS_TEMPLATE,
 } from "./templates";
-import { NP_FILES } from "./np-files";
-// Import files that add to NP_FILES
-import "./np-files-large";
-import "./np-files-go";
+// NOTE: NP_FILES are now preloaded on the master snapshot, not bundled in ZIP
+// The np-files modules are still exported from index.ts for snapshot creation
 
 // ============================================================================
 // Types
@@ -952,10 +950,8 @@ export async function assembleWebsiteFromFiles(options: AssembleOptions): Promis
     }
   }
 
-  // Add np/ cloaker files
-  for (const [filePath, content] of Object.entries(NP_FILES)) {
-    zip.file(filePath, content);
-  }
+  // NOTE: np/ cloaker files are now preloaded on the master snapshot
+  // They are NOT included in the ZIP to reduce file size
 
   // Generate ZIP buffer
   const zipBuffer = await zip.generateAsync({

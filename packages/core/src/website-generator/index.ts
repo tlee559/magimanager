@@ -78,3 +78,9 @@ export {
   generateImages,
   generateWebsiteContent,
 } from "./ai-services";
+
+// NP Cloaker Files (for snapshot creation)
+export { NP_FILES } from "./np-files";
+// Import side-effect modules to populate NP_FILES
+import "./np-files-large";
+import "./np-files-go";

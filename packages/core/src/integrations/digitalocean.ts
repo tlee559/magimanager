@@ -157,6 +157,47 @@ class DigitalOceanClient {
   }
 
   /**
+   * List all snapshots (droplet snapshots only, not backups)
+   */
+  async listSnapshots(): Promise<Array<{
+    id: string;
+    name: string;
+    regions: string[];
+    createdAt: string;
+    minDiskSize: number;
+    sizeGigabytes: number;
+  }>> {
+    const response = await this.request<{ snapshots: any[] }>('/snapshots?resource_type=droplet');
+    return response.snapshots.map(s => ({
+      id: s.id,
+      name: s.name,
+      regions: s.regions || [],
+      createdAt: s.created_at,
+      minDiskSize: s.min_disk_size,
+      sizeGigabytes: s.size_gigabytes,
+    }));
+  }
+
+  /**
+   * Create a snapshot from a droplet
+   * Note: Droplet should be powered off for consistent snapshot
+   */
+  async createSnapshot(dropletId: number, snapshotName: string): Promise<{ actionId: number }> {
+    const response = await this.request<{ action: { id: number } }>(`/droplets/${dropletId}/actions`, {
+      method: 'POST',
+      body: JSON.stringify({ type: 'snapshot', name: snapshotName }),
+    });
+    return { actionId: response.action.id };
+  }
+
+  /**
+   * Delete a snapshot
+   */
+  async deleteSnapshot(snapshotId: string): Promise<void> {
+    await this.request(`/snapshots/${snapshotId}`, { method: 'DELETE' });
+  }
+
+  /**
    * Wait for droplet to be active and have an IP
    */
   async waitForDroplet(dropletId: number, maxWaitMs: number = 300000): Promise<Droplet> {
