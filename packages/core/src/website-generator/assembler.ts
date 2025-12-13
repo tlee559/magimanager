@@ -791,32 +791,13 @@ function replaceVariables(template: string, variables: Record<string, string>): 
 }
 
 // Apply class prefix to randomize class names for anti-fingerprinting
+// NOTE: We're disabling class prefixing for now as it breaks JavaScript selectors
+// TODO: If re-enabling, need to also update JS querySelector calls
 function applyClassPrefix(content: string, prefix: string, isCSS: boolean): string {
-  // List of classes to prefix (main structural classes)
-  const classesToPrefix = [
-    'navbar', 'hero', 'features', 'feature-card', 'feature-grid', 'feature-image', 'feature-icon',
-    'about', 'footer', 'container', 'section-title', 'btn', 'logo', 'nav-links',
-    'cookie-banner', 'age-modal', 'mobile-menu', 'animate-on-scroll', 'visible',
-    'stats-section', 'stat-item', 'testimonials-section', 'testimonial-card',
-    'faq-section', 'faq-item', 'cta-banner-section', 'cta-banner',
-    'slot-machine', 'credits-bar', 'game-page', 'paytable'
-  ];
-
-  let result = content;
-
-  for (const className of classesToPrefix) {
-    if (isCSS) {
-      // In CSS: .className -> .prefix_className
-      const cssRegex = new RegExp(`\\.${className}(?=[\\s{:,\\[])`, 'g');
-      result = result.replace(cssRegex, `.${prefix}${className}`);
-    } else {
-      // In HTML: class="className" or class="...className..."
-      const htmlClassRegex = new RegExp(`(class=["'][^"']*?)\\b${className}\\b`, 'g');
-      result = result.replace(htmlClassRegex, `$1${prefix}${className}`);
-    }
-  }
-
-  return result;
+  // Disabled: Class prefixing breaks JavaScript DOM selectors
+  // The slot machine and other interactive elements use querySelector/getElementById
+  // which won't find the prefixed class names
+  return content;
 }
 
 // ============================================================================

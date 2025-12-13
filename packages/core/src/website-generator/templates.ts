@@ -1039,6 +1039,10 @@ img {
   height: 40px;
 }
 
+.feature-content {
+  padding: 16px 0 0;
+}
+
 .feature-card h3 {
   font-size: 1.5rem;
   margin-bottom: 12px;
@@ -1047,6 +1051,7 @@ img {
 
 .feature-card p {
   color: var(--color-text-muted);
+  line-height: 1.6;
 }
 
 /* ============================================================================
@@ -1639,6 +1644,20 @@ img {
   gap: 24px;
 }
 
+.navbar-centered .nav-left a,
+.navbar-centered .nav-right a {
+  color: var(--color-text-muted);
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.navbar-centered .nav-left a:hover,
+.navbar-centered .nav-right a:hover,
+.navbar-centered .nav-left a.active,
+.navbar-centered .nav-right a.active {
+  color: var(--color-text);
+}
+
 .navbar-centered .logo {
   order: 0;
 }
@@ -1665,6 +1684,17 @@ img {
 .navbar-split .nav-center {
   display: flex;
   gap: 24px;
+}
+
+.navbar-split .nav-center a {
+  color: var(--color-text-muted);
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.navbar-split .nav-center a:hover,
+.navbar-split .nav-center a.active {
+  color: var(--color-text);
 }
 
 .navbar-split .nav-cta .btn {
