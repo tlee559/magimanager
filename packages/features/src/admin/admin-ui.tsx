@@ -11194,54 +11194,22 @@ function WebsitesView() {
                           Copy
                         </button>
                       </div>
-                      {site.sshPassword && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-slate-500">Password:</span>
-                          <code className="bg-slate-800 px-2 py-1 rounded text-rose-400">
-                            {site.sshPassword}
-                          </code>
-                          <button
-                            onClick={() => navigator.clipboard.writeText(site.sshPassword!)}
-                            className="text-xs text-slate-400 hover:text-slate-200"
-                          >
-                            Copy
-                          </button>
-                        </div>
-                      )}
                       <div className="flex items-center gap-2">
                         <span className="text-slate-500">Web Root:</span>
                         <code className="bg-slate-800 px-2 py-1 rounded text-amber-400">
-                          /var/www/{site.domain}
+                          /var/www/html
                         </code>
                         <button
-                          onClick={() => navigator.clipboard.writeText(`/var/www/${site.domain}`)}
-                          className="text-xs text-slate-400 hover:text-slate-200"
-                        >
-                          Copy
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-slate-500">SFTP:</span>
-                        <code className="bg-slate-800 px-2 py-1 rounded text-blue-400">
-                          sftp root@{site.dropletIp}
-                        </code>
-                        <button
-                          onClick={() => navigator.clipboard.writeText(`sftp root@${site.dropletIp}`)}
+                          onClick={() => navigator.clipboard.writeText("/var/www/html")}
                           className="text-xs text-slate-400 hover:text-slate-200"
                         >
                           Copy
                         </button>
                       </div>
                     </div>
-                    {site.sshPassword ? (
-                      <p className="text-xs text-slate-500 mt-3">
-                        Use the password above to connect via SSH. Username is <span className="text-slate-300">root</span>.
-                      </p>
-                    ) : (
-                      <p className="text-xs text-slate-500 mt-3">
-                        SSH key was configured when the droplet was created. Check your DigitalOcean account for the SSH key.
-                      </p>
-                    )}
+                    <p className="text-xs text-slate-500 mt-3">
+                      Connect using the SSH key configured in Settings.
+                    </p>
                   </div>
                 )}
 
@@ -11271,61 +11239,47 @@ function WebsitesView() {
                     </div>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
-                        <p className="text-slate-500 text-xs mb-1">A Record (@)</p>
+                        <p className="text-slate-500 text-xs mb-1">DNS Points to Server</p>
                         <div className="flex items-center gap-2">
                           <span className={dnsStatus[site.id].data?.dns.aRecordCorrect ? "text-emerald-400" : "text-red-400"}>
-                            {dnsStatus[site.id].data?.dns.aRecordCorrect ? "✓" : "✗"}
+                            {dnsStatus[site.id].data?.dns.aRecordCorrect ? "✓ Yes" : "✗ No"}
                           </span>
-                          <code className="text-slate-300 text-xs">
-                            {dnsStatus[site.id].data?.dns.aRecords.join(", ") || "Not set"}
-                          </code>
                         </div>
                         {!dnsStatus[site.id].data?.dns.aRecordCorrect && (
                           <p className="text-xs text-slate-500 mt-1">Expected: {site.dropletIp}</p>
                         )}
                       </div>
                       <div>
-                        <p className="text-slate-500 text-xs mb-1">WWW Record</p>
+                        <p className="text-slate-500 text-xs mb-1">Site Reachable (HTTP)</p>
                         <div className="flex items-center gap-2">
-                          <span className={dnsStatus[site.id].data?.dns.wwwCorrect ? "text-emerald-400" : "text-amber-400"}>
-                            {dnsStatus[site.id].data?.dns.wwwCorrect ? "✓" : "!"}
-                          </span>
-                          <code className="text-slate-300 text-xs">
-                            {dnsStatus[site.id].data?.dns.wwwRecords.join(", ") || "Not set"}
-                          </code>
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-slate-500 text-xs mb-1">Site Reachable</p>
-                        <div className="flex items-center gap-2">
-                          <span className={dnsStatus[site.id].data?.site.reachable ? "text-emerald-400" : "text-red-400"}>
-                            {dnsStatus[site.id].data?.site.reachable ? "✓ Yes" : "✗ No"}
+                          <span className={dnsStatus[site.id].data?.site.httpReachable ? "text-emerald-400" : "text-red-400"}>
+                            {dnsStatus[site.id].data?.site.httpReachable ? "✓ Yes" : "✗ No"}
                           </span>
                         </div>
                       </div>
                       <div>
-                        <p className="text-slate-500 text-xs mb-1">SSL Valid</p>
+                        <p className="text-slate-500 text-xs mb-1">SSL (HTTPS)</p>
                         <div className="flex items-center gap-2">
-                          <span className={dnsStatus[site.id].data?.site.sslValid ? "text-emerald-400" : "text-amber-400"}>
-                            {dnsStatus[site.id].data?.site.sslValid ? "✓ Yes" : "! Pending"}
+                          <span className={dnsStatus[site.id].data?.site.httpsReachable ? "text-emerald-400" : "text-amber-400"}>
+                            {dnsStatus[site.id].data?.site.httpsReachable ? "✓ Active" : "! Pending"}
+                          </span>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-slate-500 text-xs mb-1">Overall Status</p>
+                        <div className="flex items-center gap-2">
+                          <span className={dnsStatus[site.id].data?.healthy ? "text-emerald-400" : "text-amber-400"}>
+                            {dnsStatus[site.id].data?.healthy ? "✓ Healthy" : "! " + (dnsStatus[site.id].data?.progress?.stage || "Pending")}
                           </span>
                         </div>
                       </div>
                     </div>
-                    {/* Show helpful message when DNS is correct but site isn't reachable */}
-                    {dnsStatus[site.id].data?.dns.aRecordCorrect && !dnsStatus[site.id].data?.site.reachable && (
+                    {/* Show progress message */}
+                    {dnsStatus[site.id].data?.progress && !dnsStatus[site.id].data?.healthy && (
                       <div className="mt-3 pt-3 border-t border-slate-700/50">
                         <p className="text-amber-400 text-xs">
-                          DNS is correctly configured but the server isn't responding. The server may still be initializing, or check the server logs via SSH.
+                          {dnsStatus[site.id].data?.progress?.message}
                         </p>
-                      </div>
-                    )}
-                    {(dnsStatus[site.id]?.data?.dns?.nameservers?.length ?? 0) > 0 && (
-                      <div className="mt-3 pt-3 border-t border-slate-700/50">
-                        <p className="text-slate-500 text-xs mb-1">Nameservers</p>
-                        <code className="text-slate-400 text-xs">
-                          {dnsStatus[site.id]?.data?.dns?.nameservers?.join(", ")}
-                        </code>
                       </div>
                     )}
                     {dnsStatus[site.id]?.error && (
