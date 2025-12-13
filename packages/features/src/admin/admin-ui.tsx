@@ -507,20 +507,29 @@ export function AdminApp({
   }
 
   async function handleToggleStatus(id: string, inactive: boolean) {
+    // Optimistic update - update UI immediately
+    setIdentities(prev =>
+      prev.map(i => i.id === id ? { ...i, inactive } : i)
+    );
+
     try {
       const res = await fetch(`/api/identities/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inactive }),
       });
-      if (res.ok) {
-        // Update local state immediately for responsive UI
+      if (!res.ok) {
+        // Revert on failure
         setIdentities(prev =>
-          prev.map(i => i.id === id ? { ...i, inactive } : i)
+          prev.map(i => i.id === id ? { ...i, inactive: !inactive } : i)
         );
       }
     } catch (error) {
       console.error("Failed to toggle status:", error);
+      // Revert on error
+      setIdentities(prev =>
+        prev.map(i => i.id === id ? { ...i, inactive: !inactive } : i)
+      );
     }
   }
 
