@@ -926,22 +926,23 @@ img {
 /* Features with images section */
 .features-with-images .feature-card {
   overflow: hidden;
+  padding: 0;
 }
 
 .features-with-images .feature-image {
-  margin: -32px -32px 0 -32px;
+  width: 100%;
   overflow: hidden;
 }
 
 .features-with-images .feature-image img {
   width: 100%;
-  height: 180px;
+  height: 200px;
   object-fit: cover;
   display: block;
 }
 
 .features-with-images .feature-content {
-  padding: 24px 0 0;
+  padding: 24px 32px 32px;
   flex: 1;
   display: flex;
   flex-direction: column;
