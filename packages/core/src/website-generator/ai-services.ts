@@ -164,8 +164,8 @@ export async function generateContent(options: GenerateContentOptions): Promise<
 // Imagen Image Generation
 // ============================================================================
 
-// Use latest Imagen 3 model
-const IMAGEN_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict";
+// Use Imagen 4 model (Imagen 3 was deprecated)
+const IMAGEN_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict";
 
 function buildImagePrompt(
   type: "hero" | "feature1" | "feature2",
