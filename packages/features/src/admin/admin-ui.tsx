@@ -12278,9 +12278,9 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
           {step === 1 && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-medium text-slate-200 mb-4">Step 1: Upload Website Files</h3>
+                <h3 className="text-lg font-medium text-slate-200 mb-4">Step 1: Create Website</h3>
                 <p className="text-slate-400 text-sm mb-6">
-                  Give your website a name and upload a zip file containing your HTML/PHP files.
+                  Give your website a name and generate it with AI, or upload your own files.
                 </p>
               </div>
 
