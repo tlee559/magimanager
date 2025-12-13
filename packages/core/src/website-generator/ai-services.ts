@@ -174,31 +174,60 @@ function buildImagePrompt(
   siteName: string,
   colors: ColorTheme
 ): string {
-  const colorDesc = `with ${colors.name.toLowerCase()} color scheme featuring ${colors.primary} purple and ${colors.secondary} gold tones`;
+  // Extract the theme from the description to make images match the user's vision
+  const theme = description.trim();
+  const colorDesc = `Color palette: ${colors.name} theme with ${colors.primary} as primary color and ${colors.secondary} as accent`;
 
   if (niche === "social-casino") {
+    // Build theme-aware prompts that incorporate the user's description
     switch (type) {
       case "hero":
-        return `Professional casino website hero image, ${colorDesc}. Glamorous slot machines with glowing lights, sparkling gold coins and gems floating in the air, dramatic lighting effects, luxury casino atmosphere. Dark background with neon accents. No text or logos. High quality digital art, 16:9 aspect ratio.`;
+        return `Professional casino website hero image themed around "${theme}".
+Create a stunning, immersive scene that captures the essence of ${theme} combined with casino excitement.
+The image should feature: slot machines or casino elements stylized to match the ${theme} theme, dramatic lighting effects, sparkling coins and gems, magical atmosphere.
+${colorDesc}. Dark luxurious background with glowing neon accents.
+Style: High-end digital art, cinematic lighting, 16:9 aspect ratio.
+IMPORTANT: No text, no logos, no words, no letters. Pure visual imagery only.`;
 
       case "feature1":
-        return `Detailed slot machine reels showing colorful fruit symbols and lucky 7s, ${colorDesc}. Cherries, lemons, diamonds, and stars glowing with golden light. Sparkles and light effects. Dark moody background. No text. Professional digital illustration.`;
+        return `Casino slot machine reels themed around "${theme}".
+Design unique slot symbols inspired by ${theme} - creative icons that match this theme (not generic fruit symbols).
+The symbols should glow with magical light effects, sparkles and particles floating around.
+${colorDesc}. Dark moody background with depth.
+Style: Professional digital illustration, game art quality.
+IMPORTANT: No text, no logos, no words, no letters. Pure visual imagery only.`;
 
       case "feature2":
-        return `Pile of golden virtual coins and colorful casino chips, ${colorDesc}. Treasure chest overflowing with gems and gold. Sparkling magical effect, rays of light. Dark luxurious background. Represents free credits and rewards. No text. High quality 3D render style.`;
+        return `Treasure and rewards themed around "${theme}".
+A pile of golden virtual coins, gems, and treasures styled to match ${theme}.
+Include themed elements related to ${theme} mixed with classic casino rewards (chips, coins, gems).
+Sparkling magical effects, rays of light, luxurious feel.
+${colorDesc}. Dark background with dramatic lighting.
+Style: High quality 3D render, game art aesthetic.
+IMPORTANT: No text, no logos, no words, no letters. Pure visual imagery only.`;
     }
   }
 
-  // Default prompts for other niches
+  // Default prompts for other niches (also theme-aware)
   switch (type) {
     case "hero":
-      return `Professional website hero image, ${colorDesc}. Modern, clean design. Abstract shapes and gradients. No text. High quality digital art, 16:9 aspect ratio.`;
+      return `Professional website hero image themed around "${theme}".
+Create an elegant, modern scene that captures the essence of ${theme}.
+${colorDesc}. Clean, premium aesthetic with subtle gradients.
+Style: High quality digital art, 16:9 aspect ratio.
+IMPORTANT: No text, no logos, no words, no letters. Pure visual imagery only.`;
 
     case "feature1":
-      return `Feature illustration, ${colorDesc}. Professional, modern style. Abstract representation of technology or service. No text.`;
+      return `Feature illustration themed around "${theme}".
+Create an icon or scene representing a key aspect of ${theme}.
+${colorDesc}. Professional, modern style.
+IMPORTANT: No text, no logos, no words, no letters. Pure visual imagery only.`;
 
     case "feature2":
-      return `Feature illustration, ${colorDesc}. Professional, modern style. Abstract representation of value or benefits. No text.`;
+      return `Feature illustration themed around "${theme}".
+Create an icon or scene representing value and benefits related to ${theme}.
+${colorDesc}. Professional, modern style.
+IMPORTANT: No text, no logos, no words, no letters. Pure visual imagery only.`;
   }
 
   return "";
