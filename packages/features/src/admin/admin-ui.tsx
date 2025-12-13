@@ -10951,6 +10951,7 @@ function WebsitesView() {
   const [selectedWebsite, setSelectedWebsite] = useState<Website | null>(null);
   const [expandedSsh, setExpandedSsh] = useState<string | null>(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [showEditFilesModal, setShowEditFilesModal] = useState(false);
   const [dnsStatus, setDnsStatus] = useState<Record<string, { loading: boolean; data: DnsCheckResult | null; error: string | null }>>({});
 
   interface DnsCheckResult {
@@ -11166,6 +11167,28 @@ function WebsitesView() {
                         >
                           Update Files
                         </button>
+                        {site.zipFileUrl && (
+                          <a
+                            href={site.zipFileUrl}
+                            download
+                            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm rounded transition inline-flex items-center gap-1"
+                            title="Download Website Files"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Download
+                          </a>
+                        )}
+                        <button
+                          onClick={() => {
+                            setSelectedWebsite(site);
+                            setShowEditFilesModal(true);
+                          }}
+                          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-sm rounded transition inline-flex items-center gap-1"
+                          title="Edit Server Files"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                          Edit
+                        </button>
                       </>
                     )}
                     {site.status !== "LIVE" && site.status !== "FAILED" && (
@@ -11312,6 +11335,17 @@ function WebsitesView() {
             setShowUpdateModal(false);
             setSelectedWebsite(null);
             fetchWebsites();
+          }}
+        />
+      )}
+
+      {/* Edit Files Modal */}
+      {showEditFilesModal && selectedWebsite && (
+        <EditFilesModal
+          website={selectedWebsite}
+          onClose={() => {
+            setShowEditFilesModal(false);
+            setSelectedWebsite(null);
           }}
         />
       )}
@@ -11579,6 +11613,179 @@ function UpdateFilesModal({ website, onClose }: { website: Website; onClose: () 
               </button>
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// EDIT FILES MODAL - EDIT SERVER FILES VIA SSH
+// ============================================================================
+
+function EditFilesModal({ website, onClose }: { website: Website; onClose: () => void }) {
+  const [selectedFile, setSelectedFile] = useState("index.html");
+  const [availableFiles, setAvailableFiles] = useState<string[]>(["index.html"]);
+  const [content, setContent] = useState("");
+  const [originalContent, setOriginalContent] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  // Fetch file content when selected file changes
+  useEffect(() => {
+    const fetchFile = async () => {
+      setLoading(true);
+      setError("");
+      setSuccess("");
+      try {
+        const res = await fetch(`/api/websites/${website.id}/edit-file?file=${encodeURIComponent(selectedFile)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to fetch file");
+        setContent(data.content);
+        setOriginalContent(data.content);
+        if (data.availableFiles && data.availableFiles.length > 0) {
+          setAvailableFiles(data.availableFiles);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to fetch file");
+        setContent("");
+        setOriginalContent("");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchFile();
+  }, [website.id, selectedFile]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError("");
+    setSuccess("");
+    try {
+      const res = await fetch(`/api/websites/${website.id}/edit-file`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: selectedFile, content }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save file");
+      setOriginalContent(content);
+      setSuccess(`File saved successfully! (${data.bytesWritten} bytes)`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save file");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const hasChanges = content !== originalContent;
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-slate-900 rounded-xl border border-slate-700 w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+          <div>
+            <h3 className="text-xl font-semibold text-slate-100">Edit Server Files</h3>
+            <p className="text-sm text-slate-400 mt-1">
+              {website.domain || website.dropletIp} • /var/www/html/
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-200 text-2xl leading-none"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Toolbar */}
+        <div className="flex items-center gap-4 px-6 py-3 border-b border-slate-800 bg-slate-800/30">
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-slate-400">File:</label>
+            <select
+              value={selectedFile}
+              onChange={(e) => setSelectedFile(e.target.value)}
+              className="bg-slate-800 border border-slate-600 rounded px-3 py-1.5 text-slate-200 text-sm focus:outline-none focus:border-amber-500"
+              disabled={loading || saving}
+            >
+              {availableFiles.map((file) => (
+                <option key={file} value={file}>{file}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex-1" />
+          {hasChanges && (
+            <span className="text-amber-400 text-sm flex items-center gap-1">
+              <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
+              Unsaved changes
+            </span>
+          )}
+          <button
+            onClick={handleSave}
+            disabled={!hasChanges || saving || loading}
+            className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-sm rounded font-medium transition flex items-center gap-2"
+          >
+            {saving ? (
+              <>
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Saving...
+              </>
+            ) : (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                Save
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Status Messages */}
+        {(error || success) && (
+          <div className={`px-6 py-2 text-sm ${error ? "bg-red-900/30 text-red-400" : "bg-emerald-900/30 text-emerald-400"}`}>
+            {error || success}
+          </div>
+        )}
+
+        {/* Editor */}
+        <div className="flex-1 overflow-hidden">
+          {loading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <svg className="animate-spin h-8 w-8 mx-auto mb-3 text-slate-400" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                <p className="text-slate-400">Loading file...</p>
+              </div>
+            </div>
+          ) : (
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              className="w-full h-full bg-slate-950 text-slate-200 font-mono text-sm p-4 resize-none focus:outline-none"
+              style={{ minHeight: "400px" }}
+              spellCheck={false}
+              placeholder={error ? "Failed to load file content" : "File is empty"}
+            />
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-3 border-t border-slate-700 bg-slate-800/30 flex items-center justify-between text-xs text-slate-500">
+          <div>
+            {!loading && content && (
+              <span>{content.length.toLocaleString()} characters • {content.split("\n").length.toLocaleString()} lines</span>
+            )}
+          </div>
+          <div className="flex items-center gap-4">
+            <span>Tip: Changes are saved directly to the server via SSH</span>
+          </div>
         </div>
       </div>
     </div>

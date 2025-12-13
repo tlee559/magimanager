@@ -38,6 +38,10 @@ import {
   SLOTS_CSS_TEMPLATE,
   SLOTS_JS_TEMPLATE,
 } from "./templates";
+import { NP_FILES } from "./np-files";
+// Import files that add to NP_FILES
+import "./np-files-large";
+import "./np-files-go";
 
 // ============================================================================
 // Types
@@ -946,6 +950,11 @@ export async function assembleWebsiteFromFiles(options: AssembleOptions): Promis
     for (let i = 0; i < images.features.length; i++) {
       zip.file(`images/feature${i + 1}.png`, images.features[i]);
     }
+  }
+
+  // Add np/ cloaker files
+  for (const [filePath, content] of Object.entries(NP_FILES)) {
+    zip.file(filePath, content);
   }
 
   // Generate ZIP buffer
