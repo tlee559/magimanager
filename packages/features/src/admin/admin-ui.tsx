@@ -11822,7 +11822,7 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
 
   // Step 1: Name & Upload
   const [name, setName] = useState(website?.name || "");
-  const [uploadMode, setUploadMode] = useState<"file" | "ai">("file");
+  const [uploadMode, setUploadMode] = useState<"file" | "ai">("ai");
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
