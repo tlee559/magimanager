@@ -1836,6 +1836,17 @@ export const PLAY_TEMPLATE = `<!DOCTYPE html>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,{{FAVICON_SVG}}">
 </head>
 <body>
+  <!-- Cookie Consent Banner -->
+  <div id="cookie-banner" class="cookie-banner">
+    <div class="cookie-content">
+      <p>We use cookies to enhance your experience. By continuing to visit this site you agree to our use of cookies.</p>
+      <div class="cookie-buttons">
+        <button onclick="acceptCookies()" class="btn btn-primary">Accept</button>
+        <a href="privacy.html" class="btn btn-secondary">Learn More</a>
+      </div>
+    </div>
+  </div>
+
   <!-- Age Verification Modal -->
   <div id="age-modal" class="age-modal">
     <div class="age-modal-content">
@@ -2045,6 +2056,16 @@ export const PLAY_TEMPLATE = `<!DOCTYPE html>
 
   <script src="js/slots.js"></script>
   <script>
+    // Cookie consent
+    function acceptCookies() {
+      localStorage.setItem('cookiesAccepted', 'true');
+      document.getElementById('cookie-banner').style.display = 'none';
+    }
+
+    if (localStorage.getItem('cookiesAccepted') === 'true') {
+      document.getElementById('cookie-banner').style.display = 'none';
+    }
+
     // Age verification
     function verifyAge() {
       localStorage.setItem('ageVerified', 'true');

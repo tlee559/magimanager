@@ -113,6 +113,41 @@ function hexToRgb(hex: string): string {
   return "0, 0, 0";
 }
 
+// Generate a gradient logo SVG with the first letter of the site name
+function generateLogoSvg(siteName: string, primaryColor: string, secondaryColor: string): string {
+  const letter = siteName.charAt(0).toUpperCase();
+  // Create a unique gradient ID based on colors to avoid conflicts
+  const gradientId = `logo-grad-${primaryColor.replace('#', '')}-${secondaryColor.replace('#', '')}`;
+
+  return `<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="${gradientId}" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:${primaryColor}"/>
+        <stop offset="100%" style="stop-color:${secondaryColor}"/>
+      </linearGradient>
+    </defs>
+    <rect width="40" height="40" rx="8" fill="url(#${gradientId})"/>
+    <text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" fill="white" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="22">${letter}</text>
+  </svg>`;
+}
+
+// Generate a favicon SVG (same as logo but optimized for small sizes)
+function generateFaviconSvg(siteName: string, primaryColor: string, secondaryColor: string): string {
+  const letter = siteName.charAt(0).toUpperCase();
+  const gradientId = `fav-grad-${primaryColor.replace('#', '')}-${secondaryColor.replace('#', '')}`;
+
+  return `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="${gradientId}" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:${primaryColor}"/>
+        <stop offset="100%" style="stop-color:${secondaryColor}"/>
+      </linearGradient>
+    </defs>
+    <rect width="32" height="32" rx="6" fill="url(#${gradientId})"/>
+    <text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" fill="white" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="18">${letter}</text>
+  </svg>`;
+}
+
 // Generate feature cards HTML dynamically
 // Split features into two sections: first half with images, second half with icons
 function generateFeatureCardsHtml(
@@ -562,7 +597,7 @@ function buildVariables(
   classPrefix: string
 ): Record<string, string> {
   const { niche, content, domain } = options;
-  const { colors, layout, fonts, animation, logoIcon, featureLayout, buttonStyle, cardStyle, typography, heroBackground, hoverEffect } = presets;
+  const { colors, layout, fonts, animation, featureLayout, buttonStyle, cardStyle, typography, heroBackground, hoverEffect } = presets;
 
   const currentDate = new Date().toLocaleDateString("en-US", {
     year: "numeric",
@@ -573,6 +608,10 @@ function buildVariables(
 
   // Get user description for theme-aware features
   const description = domain || "";
+
+  // Generate dynamic logo based on site name and theme colors
+  const logoSvg = generateLogoSvg(content.siteName, colors.primary, colors.secondary);
+  const faviconSvg = generateFaviconSvg(content.siteName, colors.primary, colors.secondary);
 
   // Base variables
   const variables: Record<string, string> = {
@@ -610,11 +649,9 @@ function buildVariables(
     ANIMATION_HOVER: animation.hover,
     BUTTON_HOVER_STYLE: animation.buttonHover,
 
-    // Logo
-    LOGO_ICON: logoIcon.svg,
-    FAVICON_SVG: encodeURIComponent(
-      logoIcon.svg.replace("currentColor", colors.primary)
-    ),
+    // Logo (dynamic gradient square with first letter)
+    LOGO_ICON: logoSvg,
+    FAVICON_SVG: encodeURIComponent(faviconSvg),
 
     // Hero content
     HERO_HEADLINE: content.heroHeadline,
@@ -623,7 +660,7 @@ function buildVariables(
 
     // Features content - dynamically generated
     FEATURES_TITLE: content.featuresTitle,
-    FEATURES_HTML: generateFeatureCardsHtml(content, featureCount, cardStyle.className, logoIcon.svg, featureLayout.gridClass),
+    FEATURES_HTML: generateFeatureCardsHtml(content, featureCount, cardStyle.className, logoSvg, featureLayout.gridClass),
 
     // About content
     ABOUT_TITLE: content.aboutTitle,
@@ -661,8 +698,8 @@ function buildVariables(
 
     // Dynamic sections
     OPTIONAL_SECTIONS_HTML: generateOptionalSectionsHtml(optionalSections, content.siteName, niche, cardStyle.className),
-    NAV_HTML: generateNavHtml(navLayout, content.siteName, logoIcon.svg, niche),
-    FOOTER_HTML: generateFooterHtml(footerLayout, content.siteName, logoIcon.svg, content.footerTagline, niche, currentYear),
+    NAV_HTML: generateNavHtml(navLayout, content.siteName, logoSvg, niche),
+    FOOTER_HTML: generateFooterHtml(footerLayout, content.siteName, logoSvg, content.footerTagline, niche, currentYear),
 
     // Class prefix for anti-fingerprinting
     CLASS_PREFIX: classPrefix,
@@ -931,7 +968,7 @@ export function getPresetInfo(presets: SelectedPresets): Record<string, string> 
     layout: presets.layout.name,
     fontPairing: presets.fonts.name,
     animation: presets.animation.name,
-    logoIcon: presets.logoIcon.name,
+    logo: "Dynamic Gradient Letter",
     featureLayout: presets.featureLayout.name,
     buttonStyle: presets.buttonStyle.name,
     cardStyle: presets.cardStyle.name,
