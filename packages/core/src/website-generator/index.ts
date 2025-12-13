@@ -38,10 +38,8 @@ export {
   type AssembleOptions,
 
   // Functions
-  assembleWebsite,
   assembleWebsiteFromFiles,
   getPresetInfo,
-  loadTemplate,
 } from "./assembler";
 
 // AI Services

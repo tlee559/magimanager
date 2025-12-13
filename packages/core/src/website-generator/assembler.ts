@@ -2,6 +2,7 @@
  * Website Assembler
  *
  * Takes presets + AI-generated content and assembles a complete website ZIP.
+ * Templates are embedded directly for serverless compatibility.
  */
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -15,6 +16,15 @@ import {
   NicheType,
   selectRandomPresets,
 } from "./presets";
+import {
+  INDEX_TEMPLATE,
+  TERMS_TEMPLATE,
+  PRIVACY_TEMPLATE,
+  STYLE_TEMPLATE,
+  PLAY_TEMPLATE,
+  SLOTS_CSS_TEMPLATE,
+  SLOTS_JS_TEMPLATE,
+} from "./templates";
 
 // ============================================================================
 // Types
@@ -65,26 +75,6 @@ export interface AssembleOptions {
 }
 
 // ============================================================================
-// Template Loading
-// ============================================================================
-
-// Templates are embedded at build time
-// These are the raw template strings that get compiled into the bundle
-
-const BASE_TEMPLATES = {
-  "index.html": `{{INDEX_TEMPLATE}}`,
-  "terms.html": `{{TERMS_TEMPLATE}}`,
-  "privacy.html": `{{PRIVACY_TEMPLATE}}`,
-  "css/style.css": `{{STYLE_TEMPLATE}}`,
-};
-
-const SOCIAL_CASINO_TEMPLATES = {
-  "play.html": `{{PLAY_TEMPLATE}}`,
-  "css/slots.css": `{{SLOTS_CSS_TEMPLATE}}`,
-  "js/slots.js": `{{SLOTS_JS_TEMPLATE}}`,
-};
-
-// ============================================================================
 // Variable Replacement
 // ============================================================================
 
@@ -92,7 +82,7 @@ function buildVariables(
   options: AssembleOptions,
   presets: SelectedPresets
 ): Record<string, string> {
-  const { niche, domain, content } = options;
+  const { niche, content } = options;
   const { colors, layout, fonts, animation, logoIcon } = presets;
 
   const currentDate = new Date().toLocaleDateString("en-US", {
@@ -304,65 +294,8 @@ function replaceVariables(template: string, variables: Record<string, string>): 
 }
 
 // ============================================================================
-// Main Assembly Function
+// Main Assembly Function (using embedded templates)
 // ============================================================================
-
-export async function assembleWebsite(options: AssembleOptions): Promise<Buffer> {
-  const { niche, images } = options;
-
-  // Use provided presets or generate random ones
-  const presets = options.presets || selectRandomPresets();
-
-  // Build variable map
-  const variables = buildVariables(options, presets);
-
-  // Create ZIP archive
-  const zip = new JSZip();
-
-  // Add base templates
-  for (const [filename, templateContent] of Object.entries(BASE_TEMPLATES)) {
-    // For embedded templates, we need to load them from the actual files
-    // This is a placeholder - actual implementation will load from filesystem or embed
-    const content = replaceVariables(templateContent, variables);
-    zip.file(filename, content);
-  }
-
-  // Add niche-specific templates
-  if (niche === "social-casino") {
-    for (const [filename, templateContent] of Object.entries(SOCIAL_CASINO_TEMPLATES)) {
-      const content = replaceVariables(templateContent, variables);
-      zip.file(filename, content);
-    }
-  }
-
-  // Add images
-  zip.file("images/hero.png", images.hero);
-  zip.file("images/feature1.png", images.feature1);
-  zip.file("images/feature2.png", images.feature2);
-
-  // Generate ZIP buffer
-  const zipBuffer = await zip.generateAsync({
-    type: "nodebuffer",
-    compression: "DEFLATE",
-    compressionOptions: { level: 9 },
-  });
-
-  return zipBuffer;
-}
-
-// ============================================================================
-// Template Loading from Filesystem
-// ============================================================================
-
-import * as fs from "fs";
-import * as path from "path";
-
-const TEMPLATES_DIR = path.join(__dirname, "templates");
-
-export function loadTemplate(templatePath: string): string {
-  const fullPath = path.join(TEMPLATES_DIR, templatePath);
-  return fs.readFileSync(fullPath, "utf-8");
-}
 
 export async function assembleWebsiteFromFiles(options: AssembleOptions): Promise<Buffer> {
   const { niche, images } = options;
@@ -376,35 +309,17 @@ export async function assembleWebsiteFromFiles(options: AssembleOptions): Promis
   // Create ZIP archive
   const zip = new JSZip();
 
-  // Load and process base templates
-  const baseFiles = [
-    "base/index.html",
-    "base/terms.html",
-    "base/privacy.html",
-    "base/css/style.css",
-  ];
+  // Add base templates (embedded)
+  zip.file("index.html", replaceVariables(INDEX_TEMPLATE, variables));
+  zip.file("terms.html", replaceVariables(TERMS_TEMPLATE, variables));
+  zip.file("privacy.html", replaceVariables(PRIVACY_TEMPLATE, variables));
+  zip.file("css/style.css", replaceVariables(STYLE_TEMPLATE, variables));
 
-  for (const templatePath of baseFiles) {
-    const template = loadTemplate(templatePath);
-    const processed = replaceVariables(template, variables);
-    // Remove 'base/' prefix for output
-    const outputPath = templatePath.replace("base/", "");
-    zip.file(outputPath, processed);
-  }
-
-  // Load and process niche-specific templates
+  // Add niche-specific templates
   if (niche === "social-casino") {
-    const nicheFiles = [
-      { src: "niches/social-casino/play.html", dest: "play.html" },
-      { src: "niches/social-casino/css/slots.css", dest: "css/slots.css" },
-      { src: "niches/social-casino/js/slots.js", dest: "js/slots.js" },
-    ];
-
-    for (const { src, dest } of nicheFiles) {
-      const template = loadTemplate(src);
-      const processed = replaceVariables(template, variables);
-      zip.file(dest, processed);
-    }
+    zip.file("play.html", replaceVariables(PLAY_TEMPLATE, variables));
+    zip.file("css/slots.css", replaceVariables(SLOTS_CSS_TEMPLATE, variables));
+    zip.file("js/slots.js", replaceVariables(SLOTS_JS_TEMPLATE, variables));
   }
 
   // Add images
