@@ -889,73 +889,33 @@ img {
   margin-bottom: 60px;
 }
 
-/* Base Features Grid - Overridden by layout variants */
+/* Base Features Grid - Simple responsive layout */
 .features-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 32px;
-}
-
-/* Feature Layout Variants */
-.features-grid-equal {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 32px;
-}
-
-.features-grid-large-first {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  grid-template-rows: auto auto;
-  gap: 24px;
-}
-
-.features-grid-large-first .feature-card:first-child {
-  grid-row: span 2;
-}
-
-.features-grid-alternating {
-  display: flex;
-  flex-direction: column;
-  gap: 48px;
-}
-
-.features-grid-alternating .feature-card {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 40px;
-  align-items: center;
-  text-align: left;
-}
-
-.features-grid-alternating .feature-card:nth-child(even) {
-  direction: rtl;
-}
-
-.features-grid-alternating .feature-card:nth-child(even) > * {
-  direction: ltr;
-}
-
-.features-grid-stacked {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  max-width: 800px;
+  max-width: 1000px;
   margin: 0 auto;
 }
 
-.features-grid-stacked .feature-card {
-  transform: translateX(calc(var(--card-index, 0) * 20px));
+/* Ensure consistent card sizing */
+.features-grid .feature-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
+/* Feature Layout Variants - All use consistent grid */
+.features-grid-equal,
+.features-grid-large-first,
+.features-grid-alternating,
+.features-grid-stacked,
 .features-grid-masonry {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-}
-
-.features-grid-masonry .feature-card:nth-child(2) {
-  transform: translateY(40px);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 32px;
+  max-width: 1000px;
+  margin: 0 auto;
 }
 
 /* Spacing between multiple feature grids (images section + icons section) */
@@ -969,34 +929,51 @@ img {
 }
 
 .features-with-images .feature-image {
-  margin: -32px -32px 24px -32px;
-  border-radius: 16px 16px 0 0;
+  margin: -32px -32px 0 -32px;
   overflow: hidden;
 }
 
 .features-with-images .feature-image img {
   width: 100%;
-  height: 200px;
+  height: 180px;
   object-fit: cover;
   display: block;
 }
 
+.features-with-images .feature-content {
+  padding: 24px 0 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Features with icons section */
+.features-with-icons .feature-card {
+  padding-top: 40px;
+}
+
 .features-with-icons .feature-icon {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 20px;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
   border-radius: 16px;
   color: white;
+  box-shadow: 0 8px 24px rgba(var(--color-primary-rgb), 0.3);
 }
 
 .features-with-icons .feature-icon svg {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
+}
+
+.features-with-icons .feature-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Base Feature Card with Dynamic Styling */
@@ -2076,9 +2053,17 @@ export const PLAY_TEMPLATE = `<!DOCTYPE html>
       window.location.href = 'https://www.google.com';
     }
 
-    if (localStorage.getItem('ageVerified') === 'true') {
-      document.getElementById('age-modal').style.display = 'none';
-    }
+    // Check age verification status - show modal if not verified
+    (function checkAge() {
+      const modal = document.getElementById('age-modal');
+      if (localStorage.getItem('ageVerified') === 'true') {
+        modal.style.display = 'none';
+      } else {
+        // Ensure modal is visible and on top
+        modal.style.display = 'flex';
+        modal.style.zIndex = '9999';
+      }
+    })();
 
     // Mobile menu
     function toggleMobileMenu() {
