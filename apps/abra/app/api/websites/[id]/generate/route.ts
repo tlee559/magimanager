@@ -54,16 +54,21 @@ export async function POST(
       );
     }
 
-    // Get Google API key from settings
-    const settings = await prisma.appSettings.findFirst();
-    const googleApiKey = settings?.googleApiKey;
+    // Get Google API key from env (same as Kadabra) or settings as fallback
+    const googleApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
     if (!googleApiKey) {
-      return NextResponse.json(
-        { error: "Google API key not configured in settings" },
-        { status: 400 }
-      );
+      // Try settings as fallback
+      const settings = await prisma.appSettings.findFirst();
+      if (!settings?.googleApiKey) {
+        return NextResponse.json(
+          { error: "Google API key not configured" },
+          { status: 400 }
+        );
+      }
     }
+
+    const apiKey = googleApiKey || (await prisma.appSettings.findFirst())?.googleApiKey;
 
     // Update website status
     await prisma.website.update({
@@ -76,7 +81,7 @@ export async function POST(
 
     // Generate content and images using AI
     const { content, images } = await generateWebsiteContent({
-      apiKey: googleApiKey,
+      apiKey: apiKey!,
       niche,
       description: description.trim(),
       domain: website.domain || "example.com",
