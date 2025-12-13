@@ -44,7 +44,7 @@ export async function PATCH(request: NextRequest) {
       textverifiedApiKey,
       telegramBotToken,
       telegramChatId,
-      // 1-Click Websites API keys
+      // Website Wizard API keys
       namecheapApiKey,
       namecheapUsername,
       namecheapWhitelistIp,
@@ -105,7 +105,7 @@ export async function PATCH(request: NextRequest) {
           ...(textverifiedApiKey !== undefined && { textverifiedApiKey: textverifiedApiKey || null }),
           ...(telegramBotToken !== undefined && { telegramBotToken: telegramBotToken || null }),
           ...(telegramChatId !== undefined && { telegramChatId: telegramChatId || null }),
-          // 1-Click Websites API keys
+          // Website Wizard API keys
           ...(namecheapApiKey !== undefined && { namecheapApiKey: namecheapApiKey || null }),
           ...(namecheapUsername !== undefined && { namecheapUsername: namecheapUsername || null }),
           ...(namecheapWhitelistIp !== undefined && { namecheapWhitelistIp: namecheapWhitelistIp || null }),

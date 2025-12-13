@@ -222,7 +222,7 @@ model AppSettings {
   telegramBotToken      String?  // Telegram bot token from @BotFather
   telegramChatId        String?  // Telegram chat/group ID for notifications
 
-  // 1-Click Websites API Keys
+  // Website Wizard API Keys
   namecheapApiKey       String?
   namecheapUsername     String?
   namecheapWhitelistIp  String?
@@ -1524,7 +1524,7 @@ model AdSpyJob {
 }
 
 // ============================================================================
-// 1-CLICK WEBSITES
+// WEBSITE WIZARD
 // ============================================================================
 
 enum WebsiteStatus {

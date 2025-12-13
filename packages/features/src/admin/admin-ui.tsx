@@ -553,10 +553,10 @@ export function AdminApp({
       );
     }
 
-    // 1-Click Websites - Admin only
+    // Website Wizard - Admin only
     if (userRole === "SUPER_ADMIN" || userRole === "ADMIN") {
       items.push(
-        { id: "websites" as View, label: "1-Click Websites", icon: "🌐" }
+        { id: "websites" as View, label: "Website Wizard", icon: "🌐" }
       );
     }
 
@@ -693,7 +693,7 @@ export function AdminApp({
               </div>
             )}
             {view === "authenticator" && <h1 className="text-lg font-semibold text-slate-50">2FA Authenticator</h1>}
-            {view === "websites" && <h1 className="text-lg font-semibold text-slate-50">1-Click Websites</h1>}
+            {view === "websites" && <h1 className="text-lg font-semibold text-slate-50">Website Wizard</h1>}
           </div>
           <div className="flex items-center gap-6">
             {/* Notification Bell */}
@@ -7260,7 +7260,7 @@ function SettingsView() {
   const [showGoogleKey, setShowGoogleKey] = useState(false);
   const [showTextverifiedKey, setShowTextverifiedKey] = useState(false);
   const [showTelegramToken, setShowTelegramToken] = useState(false);
-  // 1-Click Websites API keys
+  // Website Wizard API keys
   const [namecheapApiKey, setNamecheapApiKey] = useState<string>("");
   const [namecheapUsername, setNamecheapUsername] = useState<string>("");
   const [namecheapWhitelistIp, setNamecheapWhitelistIp] = useState<string>("");
@@ -7336,7 +7336,7 @@ function SettingsView() {
         setIdentityArchivedAlertEnabled(data.identityArchivedAlertEnabled ?? true);
         setIdentityArchivedAlertViaApp(data.identityArchivedAlertViaApp ?? true);
         setIdentityArchivedAlertViaTelegram(data.identityArchivedAlertViaTelegram ?? true);
-        // 1-Click Websites API keys
+        // Website Wizard API keys
         setNamecheapApiKey(data.namecheapApiKey || "");
         setNamecheapUsername(data.namecheapUsername || "");
         setNamecheapWhitelistIp(data.namecheapWhitelistIp || "");
@@ -7469,7 +7469,7 @@ function SettingsView() {
           identityArchivedAlertEnabled,
           identityArchivedAlertViaApp,
           identityArchivedAlertViaTelegram,
-          // 1-Click Websites API keys
+          // Website Wizard API keys
           namecheapApiKey,
           namecheapUsername,
           namecheapWhitelistIp,
@@ -8195,7 +8195,7 @@ function SettingsView() {
             <div className="space-y-3">
               <h3 className="text-sm font-medium text-slate-200">Namecheap</h3>
               <p className="text-xs text-slate-500">
-                API credentials for domain search and purchase (1-Click Websites). Get your API key from{" "}
+                API credentials for domain search and purchase (Website Wizard). Get your API key from{" "}
                 <a href="https://ap.www.namecheap.com/settings/tools/apiaccess" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">
                   Namecheap API Access
                 </a>
@@ -8281,7 +8281,7 @@ function SettingsView() {
             <div className="space-y-3">
               <h3 className="text-sm font-medium text-slate-200">DigitalOcean</h3>
               <p className="text-xs text-slate-500">
-                API token for creating and managing droplets (1-Click Websites). Get your token from{" "}
+                API token for creating and managing droplets (Website Wizard). Get your token from{" "}
                 <a href="https://cloud.digitalocean.com/account/api/tokens" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">
                   DigitalOcean API Tokens
                 </a>
@@ -10409,7 +10409,7 @@ function FAQView() {
     { id: "team", title: "Team Management", icon: "4" },
     { id: "integrations", title: "Integrations", icon: "5" },
     { id: "dashboard", title: "Dashboard", icon: "6" },
-    { id: "1click", title: "1-Click Websites", icon: "7" },
+    { id: "1click", title: "Website Wizard", icon: "7" },
   ];
 
   const faqContent: Record<FAQSection, FAQItem[]> = {
@@ -10533,11 +10533,11 @@ function FAQView() {
     ],
     "1click": [
       {
-        question: "What is 1-Click Websites?",
-        answer: "1-Click Websites lets you quickly deploy simple landing pages for your ad accounts. It handles everything automatically: uploading your website files, buying a domain through Namecheap, creating a server on DigitalOcean, and setting up SSL. Each identity can have their own website for their campaigns."
+        question: "What is Website Wizard?",
+        answer: "Website Wizard lets you quickly deploy simple landing pages for your ad accounts. It handles everything automatically: uploading your website files, buying a domain through Namecheap, creating a server on DigitalOcean, and setting up SSL. Each identity can have their own website for their campaigns."
       },
       {
-        question: "What do I need to set up 1-Click Websites?",
+        question: "What do I need to set up Website Wizard?",
         answer: "You need three things configured in Settings > Integrations: (1) Namecheap API credentials (for buying domains), (2) DigitalOcean API key (for creating servers), and (3) A proxy server with a static IP (because Namecheap requires IP whitelisting). The proxy server is the tricky part - see below for setup instructions."
       },
       {
@@ -10711,7 +10711,7 @@ function FAQView() {
     </div>
   );
 
-  // Proxy architecture diagram for 1-Click Websites
+  // Proxy architecture diagram for Website Wizard
   const ProxyDiagram = () => (
     <div className="my-6 p-6 bg-slate-800/50 rounded-xl border border-slate-700">
       <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">Why We Need a Proxy Server</h4>
@@ -10751,10 +10751,10 @@ function FAQView() {
     </div>
   );
 
-  // 1-Click Website deployment flow diagram
+  // Website Wizard deployment flow diagram
   const OneClickFlowDiagram = () => (
     <div className="my-6 p-6 bg-slate-800/50 rounded-xl border border-slate-700">
-      <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">1-Click Website Deployment Flow</h4>
+      <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">Website Wizard Deployment Flow</h4>
       <div className="flex flex-wrap items-center justify-center gap-2 md:gap-4">
         {[
           { label: "1. Upload", sub: "ZIP file (50MB max)", color: "bg-indigo-500/20 border-indigo-500/40 text-indigo-300" },
@@ -10838,7 +10838,7 @@ function FAQView() {
           {/* Show roles diagram on team section */}
           {activeSection === "team" && <RolesDiagram />}
 
-          {/* Show 1-Click diagrams */}
+          {/* Show Website Wizard diagrams */}
           {activeSection === "1click" && (
             <>
               <OneClickFlowDiagram />
@@ -10887,7 +10887,7 @@ function FAQView() {
 }
 
 // ============================================================================
-// WEBSITES VIEW - 1-CLICK WEBSITES
+// WEBSITES VIEW - WEBSITE WIZARD
 // ============================================================================
 
 type Website = {
@@ -11061,7 +11061,7 @@ function WebsitesView() {
         <div className="text-center py-16 bg-slate-800/30 rounded-lg border border-slate-700">
           <div className="text-5xl mb-4">🌐</div>
           <h3 className="text-xl font-semibold text-slate-200 mb-2">No websites yet</h3>
-          <p className="text-slate-400 mb-6">Create your first 1-click website to get started</p>
+          <p className="text-slate-400 mb-6">Create your first website to get started</p>
           <button
             onClick={() => setShowWizard(true)}
             className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition"

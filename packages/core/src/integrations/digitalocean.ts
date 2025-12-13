@@ -107,7 +107,7 @@ class DigitalOceanClient {
         image: config.image,
         ssh_keys: config.sshKeys,
         user_data: config.userData,
-        tags: config.tags || ['1-click-website'],
+        tags: config.tags || ['website-wizard'],
         monitoring: true,
         ipv6: false,
       }),

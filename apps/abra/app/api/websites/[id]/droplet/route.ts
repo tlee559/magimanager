@@ -194,7 +194,7 @@ export async function POST(
       image: imageId!,
       userData,
       sshKeys: sshKeyId ? [sshKeyId] : undefined,
-      tags: ["1-click-website", `website-${id}`],
+      tags: ["website-wizard", `website-${id}`],
     });
 
     // Update website with droplet info
