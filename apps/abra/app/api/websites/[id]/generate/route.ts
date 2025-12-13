@@ -96,8 +96,7 @@ export async function POST(
     // Log image sizes for debugging
     console.log("[Generate] Image sizes:", {
       hero: images.hero.length,
-      feature1: images.feature1.length,
-      feature2: images.feature2.length,
+      features: images.features.map((f, i) => `feature${i + 1}: ${f.length}`),
     });
 
     // Assemble the website ZIP
@@ -158,13 +157,11 @@ export async function POST(
         "css/slots.css",
         "js/slots.js",
         "images/hero.png",
-        "images/feature1.png",
-        "images/feature2.png",
+        ...images.features.map((_, i) => `images/feature${i + 1}.png`),
       ],
       imageSizes: {
         hero: images.hero.length,
-        feature1: images.feature1.length,
-        feature2: images.feature2.length,
+        features: images.features.map((f) => f.length),
       },
     });
   } catch (error) {
