@@ -29,7 +29,92 @@ export type NotificationType =
   | "ACCOUNT_SUSPENDED"
   | "ACCOUNT_REACTIVATED"
   | "SYSTEM_ALERT"
-  | "IDENTITY_DECOMMISSIONED";
+  | "IDENTITY_DECOMMISSIONED"
+  | "IDENTITY_INCOMPLETE"
+  | "IDENTITY_PROGRESS"
+  | "IDENTITY_ARCHIVED"
+  | "DECOMMISSION_SCHEDULED"
+  | "DECOMMISSION_REMINDER"
+  | "DECOMMISSION_COMPLETED"
+  | "DECOMMISSION_FAILED"
+  | "APPEAL_DEADLINE_APPROACHING";
+
+// ============================================================================
+// DECOMMISSION SYSTEM
+// ============================================================================
+
+export type DecommissionTriggerType = "manual" | "banned" | "suspended_timeout" | "appeal_timeout" | "inactive_timeout";
+export type DecommissionJobType = "archive" | "delete";
+export type DecommissionJobStatus = "pending" | "in_progress" | "completed" | "failed" | "cancelled";
+export type DecommissionResourceStatus = "pending" | "completed" | "failed" | "skipped";
+
+export interface DecommissionResourceStatuses {
+  droplet: DecommissionResourceStatus;
+  domain: DecommissionResourceStatus;
+  gologin: DecommissionResourceStatus;
+  account: DecommissionResourceStatus;
+}
+
+export interface DecommissionJob {
+  id: string;
+  identityProfileId: string;
+  triggerType: DecommissionTriggerType;
+  triggeredBy: string | null;
+  triggeredAt: Date;
+  jobType: DecommissionJobType;
+  status: DecommissionJobStatus;
+  completedAt: Date | null;
+  resourceStatus: DecommissionResourceStatuses;
+  errorMessage: string | null;
+  scheduledFor: Date | null;
+  reminderSentAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  identityProfile?: {
+    id: string;
+    fullName: string;
+    geo: string;
+    linkedWebsite?: {
+      id: string;
+      name: string;
+      domain: string | null;
+      dropletId: string | null;
+      dropletIp: string | null;
+    } | null;
+    gologinProfile?: {
+      id: string;
+      profileId: string | null;
+    } | null;
+    adAccounts?: {
+      id: string;
+      internalId: number;
+      googleCid: string | null;
+      accountHealth: string;
+    }[];
+  };
+}
+
+// ============================================================================
+// APPEAL TRACKING
+// ============================================================================
+
+export type AppealMethod = "form" | "email" | "phone" | "chat";
+export type AppealResolution = "reinstated" | "banned" | "abandoned";
+
+export interface AppealTracking {
+  id: string;
+  adAccountId: string;
+  appealStartDate: Date;
+  appealDeadline: Date | null;
+  appealAttempts: number;
+  appealNotes: string | null;
+  lastAppealDate: Date | null;
+  lastAppealMethod: AppealMethod | null;
+  resolvedAt: Date | null;
+  resolution: AppealResolution | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 export type AlertType = "suspended" | "banned" | "billing_failed" | "limited" | "no_checkin" | "cert_error" | "ready_handoff";
 export type AlertPriority = "critical" | "warning" | "info";

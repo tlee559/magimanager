@@ -17,7 +17,8 @@ import type {
   NeedsAttentionAccount,
   AlertType,
 } from "@magimanager/shared";
-import { checkAndFireDecommissionAlert } from "./decommission-alert.service";
+import { decommissionService } from "./decommission.service";
+import { appealTrackingService } from "./appeal-tracking.service";
 import { fireIdentityProgressAlert } from "./identity-progress-alert.service";
 import { createCustomerClient } from "./google-ads.service";
 import { decryptToken } from "./oauth.service";
@@ -270,16 +271,29 @@ class AccountService {
           userId
         );
 
-        // Check for decommission alert if account became suspended/banned
+        // Update statusChangedAt for decommission timeout tracking
+        const prisma = getPrisma();
+        await prisma.adAccount.update({
+          where: { id },
+          data: { statusChangedAt: new Date() },
+        });
+
+        // Auto-create appeal tracking when status changes to in-appeal
+        if (data.accountHealth === "in-appeal") {
+          await appealTrackingService.startAppealTracking(id);
+        }
+
+        // Check for decommission if account became suspended/banned
+        // Use new service which creates decommission job for banned accounts
         if (data.accountHealth === "suspended" || data.accountHealth === "banned") {
-          await checkAndFireDecommissionAlert(id, existing.identityProfileId);
+          await decommissionService.checkAndFireDecommissionAlert(id, existing.identityProfileId, data.accountHealth);
         }
       }
 
       // Check for decommission alert if account was archived via update
       if (data.handoffStatus === "archived" && existing.handoffStatus !== "archived") {
         await accountRepository.logActivity(id, "ARCHIVED", "Account archived", userId);
-        await checkAndFireDecommissionAlert(id, existing.identityProfileId);
+        await decommissionService.checkAndFireDecommissionAlert(id, existing.identityProfileId);
       }
 
       return { success: true, data: account };
@@ -300,7 +314,7 @@ class AccountService {
       await accountRepository.delete(id);
 
       // Check for decommission alert
-      await checkAndFireDecommissionAlert(id, identityId);
+      await decommissionService.checkAndFireDecommissionAlert(id, identityId);
 
       return { success: true };
     } catch (error) {
@@ -319,7 +333,7 @@ class AccountService {
       const account = await accountRepository.archive(id, userId);
 
       // Check for decommission alert
-      await checkAndFireDecommissionAlert(id, existing.identityProfileId);
+      await decommissionService.checkAndFireDecommissionAlert(id, existing.identityProfileId);
 
       return { success: true, data: account };
     } catch (error) {

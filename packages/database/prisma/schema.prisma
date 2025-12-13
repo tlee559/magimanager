@@ -49,6 +49,9 @@ model IdentityProfile {
   archived    Boolean @default(false)
   archivedAt  DateTime?
 
+  // Decommission tracking
+  decommissionedAt    DateTime?           // When identity was fully decommissioned
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -58,6 +61,7 @@ model IdentityProfile {
   activities IdentityActivity[]
   authenticators Authenticator[]
   linkedWebsite Website?  // Linked website from Website Wizard (1:1)
+  decommissionJob DecommissionJob?  // Active or completed decommission job
 }
 
 model IdentityDocument {
@@ -157,6 +161,9 @@ model AdAccount {
   recommendationsCachedAt DateTime?
   lastFullCacheAt         DateTime?           // When all data was last fully synced
 
+  // Status change tracking (for decommission triggers)
+  statusChangedAt   DateTime?           // When accountHealth last changed (for timeout tracking)
+
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -167,6 +174,7 @@ model AdAccount {
   checkIns        AccountCheckIn[]
   activities      AccountActivity[]
   dailySnapshots  DailySpendSnapshot[]
+  appealTracking  AppealTracking?     // Appeal tracking when account is in-appeal
 }
 
 model GoLoginProfile {
@@ -263,6 +271,13 @@ model AppSettings {
   identityArchivedAlertViaApp        Boolean @default(true)  // Send in-app notification
   identityArchivedAlertViaTelegram   Boolean @default(true)  // Send Telegram notification
 
+  // Auto-Decommission Settings
+  autoDecommissionSuspendedDays      Int     @default(0)     // 0 = disabled, else auto-decommission after X days suspended
+  autoDecommissionInAppealDays       Int     @default(0)     // 0 = disabled, else auto-decommission after X days in-appeal
+  autoDecommissionInactiveDays       Int     @default(0)     // 0 = disabled, else auto-decommission after X days inactive
+  decommissionReminderDays           Int     @default(3)     // Days before auto-decommission to send reminder
+  decommissionDigestEnabled          Boolean @default(true)  // Enable daily decommission digest
+
   // MCC (Manager Account) Connection
   mccCustomerId        String?   // MCC ID e.g., "7325688009" (no dashes, stored normalized)
   mccConnectionId      String?   // FK to GoogleAdsConnection for MCC OAuth tokens
@@ -280,6 +295,74 @@ model ChildAccountJob {
   googleCid         String?
   errorMessage      String?
   createdAt         DateTime @default(now())
+}
+
+// ============================================================================
+// DECOMMISSION SYSTEM
+// ============================================================================
+
+model DecommissionJob {
+  id                  String    @id @default(cuid())
+  identityProfileId   String    @unique  // One job per identity
+
+  // Trigger info
+  triggerType         String    // "manual" | "banned" | "suspended_timeout" | "appeal_timeout" | "inactive_timeout"
+  triggeredBy         String?   // User ID if manual
+  triggeredAt         DateTime  @default(now())
+
+  // Job type
+  jobType             String    @default("archive") // "archive" | "delete"
+
+  // Status tracking
+  status              String    @default("pending") // "pending" | "in_progress" | "completed" | "failed" | "cancelled"
+  completedAt         DateTime?
+
+  // Resource cleanup status (JSON)
+  // Format: {"droplet":"pending"|"completed"|"failed"|"skipped","domain":"...","gologin":"...","account":"..."}
+  resourceStatus      String    @db.Text
+
+  // Error tracking
+  errorMessage        String?   @db.Text
+
+  // Scheduling for auto-decommission
+  scheduledFor        DateTime? // When to execute (for auto-decommission)
+  reminderSentAt      DateTime? // When reminder notification was sent
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  identityProfile     IdentityProfile @relation(fields: [identityProfileId], references: [id])
+
+  @@index([status])
+  @@index([scheduledFor])
+  @@index([triggerType])
+}
+
+model AppealTracking {
+  id                String    @id @default(cuid())
+  adAccountId       String    @unique  // One appeal tracking per account
+
+  // Appeal details
+  appealStartDate   DateTime  @default(now())  // Auto-set when status changes to in-appeal
+  appealDeadline    DateTime?                  // Optional deadline set by user
+  appealAttempts    Int       @default(1)      // Number of appeal attempts
+  appealNotes       String?   @db.Text         // Notes about the appeal
+
+  // Last appeal attempt details
+  lastAppealDate    DateTime?
+  lastAppealMethod  String?                    // "form" | "email" | "phone" | "chat"
+
+  // Resolution
+  resolvedAt        DateTime?
+  resolution        String?                    // "reinstated" | "banned" | "abandoned"
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  adAccount         AdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+
+  @@index([appealStartDate])
+  @@index([resolution])
 }
 
 // ============================================================================
@@ -405,6 +488,11 @@ enum NotificationType {
   IDENTITY_INCOMPLETE
   IDENTITY_PROGRESS
   IDENTITY_ARCHIVED
+  DECOMMISSION_SCHEDULED
+  DECOMMISSION_REMINDER
+  DECOMMISSION_COMPLETED
+  DECOMMISSION_FAILED
+  APPEAL_DEADLINE_APPROACHING
 }
 
 model Notification {

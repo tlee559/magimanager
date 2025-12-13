@@ -86,7 +86,7 @@ type Identity = {
   updatedAt?: Date;
   documents: IdentityDoc[];
   gologinProfile?: GoLoginProfile | null;
-  adAccounts?: { id: string; internalId: number; googleCid: string | null }[];
+  adAccounts?: { id: string; internalId: number; googleCid: string | null; accountHealth: string }[];
   // Linked website from Website Wizard (1:1)
   linkedWebsite?: { id: string; name: string; domain: string | null; status: string } | null;
 };
@@ -205,7 +205,7 @@ type Notification = {
   createdAt: Date;
 };
 
-export type View = "dashboard" | "identities" | "create-identity" | "identity-detail" | "edit-identity" | "import-identities" | "ad-accounts" | "team" | "settings" | "my-accounts" | "requests" | "admin-requests" | "system" | "sms-dashboard" | "authenticator" | "tutorial" | "faq" | "websites";
+export type View = "dashboard" | "identities" | "create-identity" | "identity-detail" | "edit-identity" | "import-identities" | "ad-accounts" | "team" | "settings" | "my-accounts" | "requests" | "admin-requests" | "system" | "sms-dashboard" | "authenticator" | "tutorial" | "faq" | "websites" | "decommission";
 
 // ============================================================================
 // LOGO COMPONENT
@@ -252,6 +252,7 @@ const VIEW_TO_PATH: Record<View, string> = {
   "tutorial": "/admin/tutorial",
   "faq": "/admin/faq",
   "websites": "/admin/websites",
+  "decommission": "/admin/decommission",
 };
 
 const PATH_TO_VIEW: Record<string, View> = {
@@ -274,6 +275,7 @@ const PATH_TO_VIEW: Record<string, View> = {
   "/admin/tutorial": "tutorial",
   "/admin/faq": "faq",
   "/admin/websites": "websites",
+  "/admin/decommission": "decommission",
 };
 
 function getViewFromPath(pathname: string): View {
@@ -558,7 +560,8 @@ export function AdminApp({
     // Website Wizard - Admin only
     if (userRole === "SUPER_ADMIN" || userRole === "ADMIN") {
       items.push(
-        { id: "websites" as View, label: "Website Wizard", icon: "🌐" }
+        { id: "websites" as View, label: "Website Wizard", icon: "🌐" },
+        { id: "decommission" as View, label: "Decommission", icon: "🗑️" }
       );
     }
 
@@ -696,6 +699,7 @@ export function AdminApp({
             )}
             {view === "authenticator" && <h1 className="text-lg font-semibold text-slate-50">2FA Authenticator</h1>}
             {view === "websites" && <h1 className="text-lg font-semibold text-slate-50">Website Wizard</h1>}
+            {view === "decommission" && <h1 className="text-lg font-semibold text-slate-50">Decommission Center</h1>}
           </div>
           <div className="flex items-center gap-6">
             {/* Notification Bell */}
@@ -1030,6 +1034,7 @@ export function AdminApp({
             {view === "tutorial" && <TutorialView />}
             {view === "faq" && <FAQView />}
             {view === "websites" && <WebsitesView />}
+            {view === "decommission" && <DecommissionView setView={setView} />}
           </div>
         </div>
       </main>
@@ -5509,6 +5514,14 @@ function IdentityDetailView({
       {/* TOTP Authenticator Section */}
       <AuthenticatorSection identityId={identity.id} />
 
+      {/* Appeal Tracking Section - only show if there's an account in-appeal */}
+      {identity.adAccounts?.some(a => a.accountHealth === "in-appeal") && (
+        <AppealTrackingSection
+          identity={identity}
+          onUpdate={onRefresh}
+        />
+      )}
+
       {/* Add Account Modal */}
       {showAddAccountModal && (
         <AddAccountModal
@@ -7827,7 +7840,7 @@ function SnapshotManager() {
 // SETTINGS VIEW
 // ============================================================================
 
-type SettingsTab = "general" | "google-ads" | "notifications" | "integrations" | "system";
+type SettingsTab = "general" | "google-ads" | "notifications" | "decommission" | "integrations" | "system";
 
 function SettingsView() {
   const { showSuccess, showError } = useModal();
@@ -7866,6 +7879,12 @@ function SettingsView() {
   const [identityArchivedAlertEnabled, setIdentityArchivedAlertEnabled] = useState(true);
   const [identityArchivedAlertViaApp, setIdentityArchivedAlertViaApp] = useState(true);
   const [identityArchivedAlertViaTelegram, setIdentityArchivedAlertViaTelegram] = useState(true);
+  // Auto-decommission settings
+  const [autoDecommissionSuspendedDays, setAutoDecommissionSuspendedDays] = useState(0);
+  const [autoDecommissionInAppealDays, setAutoDecommissionInAppealDays] = useState(0);
+  const [autoDecommissionInactiveDays, setAutoDecommissionInactiveDays] = useState(0);
+  const [decommissionReminderDays, setDecommissionReminderDays] = useState(3);
+  const [decommissionDigestEnabled, setDecommissionDigestEnabled] = useState(true);
   // Visibility toggles for API keys
   const [showGologinKey, setShowGologinKey] = useState(false);
   const [showGoogleAdsKey, setShowGoogleAdsKey] = useState(false);
@@ -7948,6 +7967,12 @@ function SettingsView() {
         setIdentityArchivedAlertEnabled(data.identityArchivedAlertEnabled ?? true);
         setIdentityArchivedAlertViaApp(data.identityArchivedAlertViaApp ?? true);
         setIdentityArchivedAlertViaTelegram(data.identityArchivedAlertViaTelegram ?? true);
+        // Auto-decommission settings
+        setAutoDecommissionSuspendedDays(data.autoDecommissionSuspendedDays ?? 0);
+        setAutoDecommissionInAppealDays(data.autoDecommissionInAppealDays ?? 0);
+        setAutoDecommissionInactiveDays(data.autoDecommissionInactiveDays ?? 0);
+        setDecommissionReminderDays(data.decommissionReminderDays ?? 3);
+        setDecommissionDigestEnabled(data.decommissionDigestEnabled ?? true);
         // Website Wizard API keys
         setNamecheapApiKey(data.namecheapApiKey || "");
         setNamecheapUsername(data.namecheapUsername || "");
@@ -8081,6 +8106,12 @@ function SettingsView() {
           identityArchivedAlertEnabled,
           identityArchivedAlertViaApp,
           identityArchivedAlertViaTelegram,
+          // Auto-decommission settings
+          autoDecommissionSuspendedDays,
+          autoDecommissionInAppealDays,
+          autoDecommissionInactiveDays,
+          decommissionReminderDays,
+          decommissionDigestEnabled,
           // Website Wizard API keys
           namecheapApiKey,
           namecheapUsername,
@@ -8121,6 +8152,7 @@ function SettingsView() {
     { id: "general", label: "General" },
     { id: "google-ads", label: "Google Ads" },
     { id: "notifications", label: "Notifications" },
+    { id: "decommission", label: "Decommission" },
     { id: "integrations", label: "Integrations" },
     { id: "system", label: "System" },
   ];
@@ -8718,6 +8750,185 @@ function SettingsView() {
               </label>
             </div>
           </div>
+        </div>
+
+        <div className="pt-2">
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-lg bg-emerald-500 px-6 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400 transition disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save Settings"}
+          </button>
+        </div>
+
+        {settings && (
+          <p className="text-xs text-slate-500">
+            Last updated: {new Date(settings.updatedAt).toLocaleString()}
+          </p>
+        )}
+      </form>
+      )}
+
+      {/* Decommission Tab */}
+      {activeTab === "decommission" && (
+      <form onSubmit={handleSave} className="max-w-2xl space-y-6">
+        {/* Auto-Decommission Settings */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="text-sm font-semibold text-slate-100">
+              Auto-Decommission Rules
+            </h2>
+            <div className="group relative">
+              <span className="text-slate-400 cursor-help text-sm">i</span>
+              <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-80 p-3 bg-slate-800 border border-slate-700 rounded-lg shadow-lg text-xs text-slate-300 z-10">
+                <p className="font-medium text-slate-100 mb-2">How auto-decommission works:</p>
+                <ul className="space-y-1 list-disc list-inside">
+                  <li>When an identity matches a rule, a decommission job is scheduled</li>
+                  <li>A reminder is sent X days before execution</li>
+                  <li>On execution day, all resources are automatically cleaned up</li>
+                  <li>Set to 0 to disable a rule</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-400 mb-4">
+            Automatically schedule decommissioning when identities meet certain conditions.
+            Resources (droplets, domains, profiles) will be cleaned up automatically.
+          </p>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-slate-200">
+                Auto-decommission suspended accounts after
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  value={autoDecommissionSuspendedDays}
+                  onChange={(e) => setAutoDecommissionSuspendedDays(parseInt(e.target.value) || 0)}
+                  className="w-20 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                />
+                <span className="text-sm text-slate-400">days</span>
+              </div>
+              <p className="text-xs text-slate-500">
+                Identities with suspended accounts for this many days will be scheduled for decommission. Set to 0 to disable.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-slate-200">
+                Auto-decommission in-appeal accounts after
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  value={autoDecommissionInAppealDays}
+                  onChange={(e) => setAutoDecommissionInAppealDays(parseInt(e.target.value) || 0)}
+                  className="w-20 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                />
+                <span className="text-sm text-slate-400">days</span>
+              </div>
+              <p className="text-xs text-slate-500">
+                Appeals open for this many days will trigger decommission. Set to 0 to disable.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-slate-200">
+                Auto-decommission inactive identities after
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  value={autoDecommissionInactiveDays}
+                  onChange={(e) => setAutoDecommissionInactiveDays(parseInt(e.target.value) || 0)}
+                  className="w-20 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                />
+                <span className="text-sm text-slate-400">days</span>
+              </div>
+              <p className="text-xs text-slate-500">
+                Identities marked as inactive for this many days will be decommissioned. Set to 0 to disable.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Reminder & Notification Settings */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
+          <h2 className="text-sm font-semibold text-slate-100 mb-4">
+            Reminders & Notifications
+          </h2>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-slate-200">
+                Send reminder before decommission
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  value={decommissionReminderDays}
+                  onChange={(e) => setDecommissionReminderDays(parseInt(e.target.value) || 0)}
+                  className="w-20 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                />
+                <span className="text-sm text-slate-400">days before</span>
+              </div>
+              <p className="text-xs text-slate-500">
+                How many days before scheduled decommission to send a reminder notification
+              </p>
+            </div>
+
+            <div className="pt-2">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={decommissionDigestEnabled}
+                  onChange={(e) => setDecommissionDigestEnabled(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                />
+                <div>
+                  <span className="text-sm text-slate-200">Enable daily digest</span>
+                  <p className="text-xs text-slate-500">
+                    Receive a daily summary of pending, completed, and failed decommissions
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* Resources Cleaned Up */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
+          <h2 className="text-sm font-semibold text-slate-100 mb-4">
+            Resources Cleaned Up During Decommission
+          </h2>
+          <p className="text-xs text-slate-400 mb-4">
+            When a decommission job runs, the following resources are automatically cleaned up:
+          </p>
+          <ul className="space-y-2 text-sm text-slate-300">
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-400 mt-0.5">1.</span>
+              <span><strong>DigitalOcean Droplet</strong> - Deleted via API (stops billing immediately)</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-400 mt-0.5">2.</span>
+              <span><strong>Domain Auto-Renewal</strong> - Disabled on Namecheap (domain expires naturally)</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-400 mt-0.5">3.</span>
+              <span><strong>GoLogin Profile</strong> - Deleted via API (frees up profile slot)</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-400 mt-0.5">4.</span>
+              <span><strong>Ad Account</strong> - Archived in database (records kept for reference)</span>
+            </li>
+          </ul>
         </div>
 
         <div className="pt-2">
@@ -13863,6 +14074,859 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// APPEAL TRACKING SECTION
+// ============================================================================
+
+interface AppealTracking {
+  id: string;
+  adAccountId: string;
+  appealStartDate: string;
+  appealDeadline: string | null;
+  appealAttempts: number;
+  appealNotes: string | null;
+  lastAppealDate: string | null;
+  lastAppealMethod: string | null;
+  resolvedAt: string | null;
+  resolution: string | null;
+}
+
+function AppealTrackingSection({
+  identity,
+  onUpdate,
+}: {
+  identity: Identity;
+  onUpdate: () => void;
+}) {
+  const { showSuccess, showError, showConfirm } = useModal();
+  const [loading, setLoading] = useState(true);
+  const [tracking, setTracking] = useState<AppealTracking | null>(null);
+  const [notes, setNotes] = useState("");
+  const [deadline, setDeadline] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [loggingAttempt, setLoggingAttempt] = useState(false);
+  const [resolving, setResolving] = useState(false);
+
+  // Get the first account that's in-appeal
+  const appealAccount = identity.adAccounts?.find(a => a.accountHealth === "in-appeal");
+
+  useEffect(() => {
+    if (appealAccount) {
+      fetchTracking();
+    }
+  }, [appealAccount?.id]);
+
+  async function fetchTracking() {
+    if (!appealAccount) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/accounts/${appealAccount.id}/appeal`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.tracking) {
+          setTracking(data.tracking);
+          setNotes(data.tracking.appealNotes || "");
+          setDeadline(data.tracking.appealDeadline ? new Date(data.tracking.appealDeadline).toISOString().split("T")[0] : "");
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch appeal tracking:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSave() {
+    if (!appealAccount) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/accounts/${appealAccount.id}/appeal`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          appealNotes: notes,
+          appealDeadline: deadline ? new Date(deadline).toISOString() : null,
+        }),
+      });
+      if (res.ok) {
+        await showSuccess("Saved", "Appeal notes updated");
+        fetchTracking();
+      } else {
+        const data = await res.json();
+        await showError("Save Failed", data.error || "Failed to save");
+      }
+    } catch (error) {
+      await showError("Network Error", "Failed to save appeal notes");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleLogAttempt(method: string) {
+    if (!appealAccount) return;
+    setLoggingAttempt(true);
+    try {
+      const res = await fetch(`/api/accounts/${appealAccount.id}/appeal/attempt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ method }),
+      });
+      if (res.ok) {
+        await showSuccess("Attempt Logged", `Appeal attempt via ${method} recorded`);
+        fetchTracking();
+      } else {
+        const data = await res.json();
+        await showError("Failed", data.error || "Failed to log attempt");
+      }
+    } catch (error) {
+      await showError("Network Error", "Failed to log attempt");
+    } finally {
+      setLoggingAttempt(false);
+    }
+  }
+
+  async function handleResolve(resolution: string) {
+    if (!appealAccount) return;
+    const confirmed = await showConfirm(
+      `Mark as ${resolution.charAt(0).toUpperCase() + resolution.slice(1)}`,
+      resolution === "reinstated"
+        ? "This will mark the account as active again. Continue?"
+        : "This will mark the account as banned and may trigger decommissioning. Continue?"
+    );
+    if (!confirmed) return;
+
+    setResolving(true);
+    try {
+      const res = await fetch(`/api/accounts/${appealAccount.id}/appeal/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resolution }),
+      });
+      if (res.ok) {
+        await showSuccess("Appeal Resolved", `Account marked as ${resolution}`);
+        onUpdate();
+      } else {
+        const data = await res.json();
+        await showError("Failed", data.error || "Failed to resolve appeal");
+      }
+    } catch (error) {
+      await showError("Network Error", "Failed to resolve appeal");
+    } finally {
+      setResolving(false);
+    }
+  }
+
+  if (!appealAccount) return null;
+
+  const daysInAppeal = tracking
+    ? Math.floor((Date.now() - new Date(tracking.appealStartDate).getTime()) / (1000 * 60 * 60 * 24))
+    : 0;
+
+  return (
+    <div className="rounded-xl border border-amber-700/50 bg-amber-950/20 p-5 mt-6">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">⚠️</span>
+          <h3 className="text-sm font-semibold text-amber-300">Appeal Tracking</h3>
+        </div>
+        <span className="text-xs text-amber-400">
+          Account #{appealAccount.internalId} is in appeal
+        </span>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-4 text-slate-400">Loading...</div>
+      ) : tracking ? (
+        <div className="space-y-4">
+          {/* Stats Row */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-slate-900/60 rounded-lg p-3 text-center">
+              <div className="text-xl font-bold text-amber-400">{daysInAppeal}</div>
+              <div className="text-xs text-slate-400">Days in Appeal</div>
+            </div>
+            <div className="bg-slate-900/60 rounded-lg p-3 text-center">
+              <div className="text-xl font-bold text-slate-100">{tracking.appealAttempts}</div>
+              <div className="text-xs text-slate-400">Appeal Attempts</div>
+            </div>
+            <div className="bg-slate-900/60 rounded-lg p-3 text-center">
+              <div className="text-xl font-bold text-slate-100">
+                {tracking.lastAppealMethod || "—"}
+              </div>
+              <div className="text-xs text-slate-400">Last Method</div>
+            </div>
+          </div>
+
+          {/* Deadline & Notes */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Appeal Deadline</label>
+              <input
+                type="date"
+                value={deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+                className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-amber-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Last Appeal Date</label>
+              <div className="px-3 py-2 text-sm text-slate-300 bg-slate-900/60 rounded-lg">
+                {tracking.lastAppealDate
+                  ? new Date(tracking.lastAppealDate).toLocaleDateString()
+                  : "No attempts yet"}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Notes</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-amber-500 resize-none"
+              placeholder="Add notes about the appeal..."
+            />
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600 transition disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save Notes"}
+            </button>
+
+            {/* Log Attempt Dropdown */}
+            <div className="relative group">
+              <button
+                disabled={loggingAttempt}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition disabled:opacity-50"
+              >
+                {loggingAttempt ? "Logging..." : "Log Appeal Attempt ▾"}
+              </button>
+              <div className="absolute left-0 top-full mt-1 hidden group-hover:block bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-10 min-w-[120px]">
+                {["form", "email", "phone", "chat"].map((method) => (
+                  <button
+                    key={method}
+                    onClick={() => handleLogAttempt(method)}
+                    className="block w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-slate-700 first:rounded-t-lg last:rounded-b-lg"
+                  >
+                    {method.charAt(0).toUpperCase() + method.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Resolution Buttons */}
+            <button
+              onClick={() => handleResolve("reinstated")}
+              disabled={resolving}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 transition disabled:opacity-50"
+            >
+              Mark Reinstated
+            </button>
+            <button
+              onClick={() => handleResolve("banned")}
+              disabled={resolving}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-600 text-white hover:bg-red-500 transition disabled:opacity-50"
+            >
+              Mark Banned
+            </button>
+            <button
+              onClick={() => handleResolve("abandoned")}
+              disabled={resolving}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-600 text-white hover:bg-slate-500 transition disabled:opacity-50"
+            >
+              Abandon Appeal
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="text-center py-4 text-slate-400">
+          No appeal tracking data available
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// DECOMMISSION VIEW
+// ============================================================================
+
+interface DecommissionJob {
+  id: string;
+  identityProfileId: string;
+  triggerType: string;
+  triggeredBy: string | null;
+  triggeredAt: string;
+  jobType: string;
+  status: string;
+  completedAt: string | null;
+  resourceStatus: string;
+  errorMessage: string | null;
+  scheduledFor: string | null;
+  reminderSentAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  identityProfile: {
+    id: string;
+    fullName: string;
+    linkedWebsite: {
+      id: string;
+      domain: string;
+      dropletId: string | null;
+      dropletIp: string | null;
+    } | null;
+    gologinProfile: string | null;
+    adAccounts: {
+      id: string;
+      internalId: number;
+      googleCid: string | null;
+      accountHealth: string;
+    }[];
+  };
+}
+
+interface DecommissionCandidate {
+  id: string;
+  fullName: string;
+  reason: string;
+  daysSinceTriggered: number;
+  linkedWebsite: {
+    domain: string;
+    dropletId: string | null;
+  } | null;
+  adAccounts: {
+    internalId: number;
+    accountHealth: string;
+  }[];
+}
+
+function DecommissionView({ setView }: { setView: (view: View) => void }) {
+  const { showSuccess, showError, showConfirm } = useModal();
+  const [jobs, setJobs] = useState<DecommissionJob[]>([]);
+  const [candidates, setCandidates] = useState<{
+    suspended: DecommissionCandidate[];
+    inAppeal: DecommissionCandidate[];
+    inactive: DecommissionCandidate[];
+  }>({ suspended: [], inAppeal: [], inactive: [] });
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"pending" | "completed" | "failed" | "candidates">("pending");
+  const [executingJob, setExecutingJob] = useState<string | null>(null);
+  const [cancellingJob, setCancellingJob] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchJobs();
+    fetchCandidates();
+  }, []);
+
+  async function fetchJobs() {
+    try {
+      const res = await fetch("/api/decommission");
+      if (res.ok) {
+        const data = await res.json();
+        setJobs(data.jobs || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch decommission jobs:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function fetchCandidates() {
+    try {
+      const res = await fetch("/api/decommission/candidates");
+      if (res.ok) {
+        const data = await res.json();
+        setCandidates(data.candidates || { suspended: [], inAppeal: [], inactive: [] });
+      }
+    } catch (error) {
+      console.error("Failed to fetch candidates:", error);
+    }
+  }
+
+  async function handleExecute(jobId: string) {
+    const confirmed = await showConfirm(
+      "Execute Decommission",
+      "Are you sure you want to execute this decommission now? This will delete the droplet, disable domain auto-renewal, delete the GoLogin profile, and archive the ad account."
+    );
+    if (!confirmed) return;
+
+    setExecutingJob(jobId);
+    try {
+      const res = await fetch(`/api/decommission/${jobId}/execute`, { method: "POST" });
+      if (res.ok) {
+        await showSuccess("Decommission Executed", "The decommission job has been executed successfully.");
+        fetchJobs();
+      } else {
+        const data = await res.json();
+        await showError("Execution Failed", data.error || "Failed to execute decommission");
+      }
+    } catch (error) {
+      await showError("Network Error", "Failed to execute decommission");
+    } finally {
+      setExecutingJob(null);
+    }
+  }
+
+  async function handleCancel(jobId: string) {
+    const confirmed = await showConfirm(
+      "Cancel Decommission",
+      "Are you sure you want to cancel this scheduled decommission?"
+    );
+    if (!confirmed) return;
+
+    setCancellingJob(jobId);
+    try {
+      const res = await fetch(`/api/decommission/${jobId}/cancel`, { method: "POST" });
+      if (res.ok) {
+        await showSuccess("Decommission Cancelled", "The decommission job has been cancelled.");
+        fetchJobs();
+      } else {
+        const data = await res.json();
+        await showError("Cancellation Failed", data.error || "Failed to cancel decommission");
+      }
+    } catch (error) {
+      await showError("Network Error", "Failed to cancel decommission");
+    } finally {
+      setCancellingJob(null);
+    }
+  }
+
+  async function handleRetry(jobId: string) {
+    setExecutingJob(jobId);
+    try {
+      const res = await fetch(`/api/decommission/${jobId}/retry`, { method: "POST" });
+      if (res.ok) {
+        await showSuccess("Retry Initiated", "The decommission job is being retried.");
+        fetchJobs();
+      } else {
+        const data = await res.json();
+        await showError("Retry Failed", data.error || "Failed to retry decommission");
+      }
+    } catch (error) {
+      await showError("Network Error", "Failed to retry decommission");
+    } finally {
+      setExecutingJob(null);
+    }
+  }
+
+  function parseResourceStatus(statusJson: string): Record<string, string> {
+    try {
+      return JSON.parse(statusJson);
+    } catch {
+      return {};
+    }
+  }
+
+  function getStatusBadge(status: string) {
+    switch (status) {
+      case "pending":
+        return <span className="px-2 py-0.5 text-xs font-medium rounded bg-amber-500/20 text-amber-400">Pending</span>;
+      case "in_progress":
+        return <span className="px-2 py-0.5 text-xs font-medium rounded bg-blue-500/20 text-blue-400">In Progress</span>;
+      case "completed":
+        return <span className="px-2 py-0.5 text-xs font-medium rounded bg-emerald-500/20 text-emerald-400">Completed</span>;
+      case "failed":
+        return <span className="px-2 py-0.5 text-xs font-medium rounded bg-red-500/20 text-red-400">Failed</span>;
+      case "cancelled":
+        return <span className="px-2 py-0.5 text-xs font-medium rounded bg-slate-500/20 text-slate-400">Cancelled</span>;
+      default:
+        return <span className="px-2 py-0.5 text-xs font-medium rounded bg-slate-500/20 text-slate-400">{status}</span>;
+    }
+  }
+
+  function getTriggerLabel(triggerType: string) {
+    switch (triggerType) {
+      case "manual":
+        return "Manual";
+      case "banned":
+        return "Account Banned";
+      case "suspended_timeout":
+        return "Suspended Timeout";
+      case "appeal_timeout":
+        return "Appeal Timeout";
+      case "inactive_timeout":
+        return "Inactive Timeout";
+      default:
+        return triggerType;
+    }
+  }
+
+  const pendingJobs = jobs.filter(j => j.status === "pending" || j.status === "in_progress");
+  const completedJobs = jobs.filter(j => j.status === "completed");
+  const failedJobs = jobs.filter(j => j.status === "failed");
+  const totalCandidates = candidates.suspended.length + candidates.inAppeal.length + candidates.inactive.length;
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-8 w-64" />
+        <div className="grid grid-cols-4 gap-4">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+        </div>
+        <Skeleton className="h-64" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-slate-400 max-w-2xl">
+          Manage decommissioning of identity resources. When identities are no longer in use, decommission them to stop billing on droplets, domains, and other services.
+        </p>
+        <button
+          onClick={() => setView("settings")}
+          className="text-xs text-slate-400 hover:text-emerald-400 transition"
+        >
+          Configure auto-decommission settings →
+        </button>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-4 gap-4">
+        <button
+          onClick={() => setActiveTab("pending")}
+          className={`p-4 rounded-xl border transition text-left ${
+            activeTab === "pending"
+              ? "border-amber-500/50 bg-amber-500/10"
+              : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
+          }`}
+        >
+          <div className="text-2xl font-bold text-amber-400">{pendingJobs.length}</div>
+          <div className="text-xs text-slate-400 mt-1">Pending / In Progress</div>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("completed")}
+          className={`p-4 rounded-xl border transition text-left ${
+            activeTab === "completed"
+              ? "border-emerald-500/50 bg-emerald-500/10"
+              : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
+          }`}
+        >
+          <div className="text-2xl font-bold text-emerald-400">{completedJobs.length}</div>
+          <div className="text-xs text-slate-400 mt-1">Completed</div>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("failed")}
+          className={`p-4 rounded-xl border transition text-left ${
+            activeTab === "failed"
+              ? "border-red-500/50 bg-red-500/10"
+              : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
+          }`}
+        >
+          <div className="text-2xl font-bold text-red-400">{failedJobs.length}</div>
+          <div className="text-xs text-slate-400 mt-1">Failed</div>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("candidates")}
+          className={`p-4 rounded-xl border transition text-left ${
+            activeTab === "candidates"
+              ? "border-blue-500/50 bg-blue-500/10"
+              : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
+          }`}
+        >
+          <div className="text-2xl font-bold text-blue-400">{totalCandidates}</div>
+          <div className="text-xs text-slate-400 mt-1">Candidates</div>
+        </button>
+      </div>
+
+      {/* Tabs Content */}
+      {activeTab === "pending" && (
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60">
+          <div className="p-4 border-b border-slate-800">
+            <h3 className="text-sm font-semibold text-slate-100">Pending Decommissions</h3>
+            <p className="text-xs text-slate-400 mt-1">Jobs waiting to be executed or currently in progress</p>
+          </div>
+          {pendingJobs.length === 0 ? (
+            <div className="p-8 text-center">
+              <p className="text-slate-400">No pending decommission jobs</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-800">
+              {pendingJobs.map((job) => {
+                const resourceStatus = parseResourceStatus(job.resourceStatus);
+                return (
+                  <div key={job.id} className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-slate-100">{job.identityProfile.fullName}</span>
+                          {getStatusBadge(job.status)}
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          Trigger: {getTriggerLabel(job.triggerType)} • Type: {job.jobType}
+                        </div>
+                        {job.scheduledFor && (
+                          <div className="text-xs text-amber-400">
+                            Scheduled for: {new Date(job.scheduledFor).toLocaleDateString()}
+                          </div>
+                        )}
+                        <div className="flex gap-4 mt-2 text-xs text-slate-500">
+                          {job.identityProfile.linkedWebsite && (
+                            <span>Domain: {job.identityProfile.linkedWebsite.domain}</span>
+                          )}
+                          {job.identityProfile.linkedWebsite?.dropletId && (
+                            <span>Droplet: {job.identityProfile.linkedWebsite.dropletIp}</span>
+                          )}
+                        </div>
+                        {/* Resource Status */}
+                        <div className="flex gap-2 mt-2">
+                          {Object.entries(resourceStatus).map(([resource, status]) => (
+                            <span
+                              key={resource}
+                              className={`px-2 py-0.5 text-xs rounded ${
+                                status === "completed" ? "bg-emerald-500/20 text-emerald-400" :
+                                status === "failed" ? "bg-red-500/20 text-red-400" :
+                                status === "in_progress" ? "bg-blue-500/20 text-blue-400" :
+                                "bg-slate-500/20 text-slate-400"
+                              }`}
+                            >
+                              {resource}: {status}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleExecute(job.id)}
+                          disabled={executingJob === job.id || job.status === "in_progress"}
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition disabled:opacity-50"
+                        >
+                          {executingJob === job.id ? "Executing..." : "Execute Now"}
+                        </button>
+                        <button
+                          onClick={() => handleCancel(job.id)}
+                          disabled={cancellingJob === job.id || job.status === "in_progress"}
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600 transition disabled:opacity-50"
+                        >
+                          {cancellingJob === job.id ? "Cancelling..." : "Cancel"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "completed" && (
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60">
+          <div className="p-4 border-b border-slate-800">
+            <h3 className="text-sm font-semibold text-slate-100">Completed Decommissions</h3>
+            <p className="text-xs text-slate-400 mt-1">Successfully decommissioned identities</p>
+          </div>
+          {completedJobs.length === 0 ? (
+            <div className="p-8 text-center">
+              <p className="text-slate-400">No completed decommission jobs</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-800">
+              {completedJobs.map((job) => {
+                const resourceStatus = parseResourceStatus(job.resourceStatus);
+                return (
+                  <div key={job.id} className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-slate-100">{job.identityProfile.fullName}</span>
+                          {getStatusBadge(job.status)}
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          Trigger: {getTriggerLabel(job.triggerType)} • Completed: {job.completedAt ? new Date(job.completedAt).toLocaleString() : "N/A"}
+                        </div>
+                        <div className="flex gap-2 mt-2">
+                          {Object.entries(resourceStatus).map(([resource, status]) => (
+                            <span
+                              key={resource}
+                              className={`px-2 py-0.5 text-xs rounded ${
+                                status === "completed" ? "bg-emerald-500/20 text-emerald-400" :
+                                status === "skipped" ? "bg-slate-500/20 text-slate-400" :
+                                "bg-red-500/20 text-red-400"
+                              }`}
+                            >
+                              {resource}: {status}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "failed" && (
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60">
+          <div className="p-4 border-b border-slate-800">
+            <h3 className="text-sm font-semibold text-slate-100">Failed Decommissions</h3>
+            <p className="text-xs text-slate-400 mt-1">Jobs that encountered errors - manual intervention may be required</p>
+          </div>
+          {failedJobs.length === 0 ? (
+            <div className="p-8 text-center">
+              <p className="text-slate-400">No failed decommission jobs</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-800">
+              {failedJobs.map((job) => {
+                const resourceStatus = parseResourceStatus(job.resourceStatus);
+                return (
+                  <div key={job.id} className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-slate-100">{job.identityProfile.fullName}</span>
+                          {getStatusBadge(job.status)}
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          Trigger: {getTriggerLabel(job.triggerType)}
+                        </div>
+                        {job.errorMessage && (
+                          <div className="text-xs text-red-400 mt-1">
+                            Error: {job.errorMessage}
+                          </div>
+                        )}
+                        <div className="flex gap-2 mt-2">
+                          {Object.entries(resourceStatus).map(([resource, status]) => (
+                            <span
+                              key={resource}
+                              className={`px-2 py-0.5 text-xs rounded ${
+                                status === "completed" ? "bg-emerald-500/20 text-emerald-400" :
+                                status === "failed" ? "bg-red-500/20 text-red-400" :
+                                "bg-slate-500/20 text-slate-400"
+                              }`}
+                            >
+                              {resource}: {status}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleRetry(job.id)}
+                        disabled={executingJob === job.id}
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-500 text-slate-950 hover:bg-amber-400 transition disabled:opacity-50"
+                      >
+                        {executingJob === job.id ? "Retrying..." : "Retry"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "candidates" && (
+        <div className="space-y-4">
+          {/* Suspended Candidates */}
+          {candidates.suspended.length > 0 && (
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60">
+              <div className="p-4 border-b border-slate-800">
+                <h3 className="text-sm font-semibold text-slate-100">Suspended Accounts</h3>
+                <p className="text-xs text-slate-400 mt-1">Identities with suspended accounts approaching auto-decommission threshold</p>
+              </div>
+              <div className="divide-y divide-slate-800">
+                {candidates.suspended.map((c) => (
+                  <div key={c.id} className="p-4 flex items-center justify-between">
+                    <div>
+                      <span className="font-medium text-slate-100">{c.fullName}</span>
+                      <div className="text-xs text-slate-400 mt-1">
+                        Suspended for {c.daysSinceTriggered} days
+                        {c.linkedWebsite && <span> • {c.linkedWebsite.domain}</span>}
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 text-xs font-medium rounded bg-amber-500/20 text-amber-400">
+                      {c.reason}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* In-Appeal Candidates */}
+          {candidates.inAppeal.length > 0 && (
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60">
+              <div className="p-4 border-b border-slate-800">
+                <h3 className="text-sm font-semibold text-slate-100">In-Appeal Accounts</h3>
+                <p className="text-xs text-slate-400 mt-1">Identities with accounts in appeal approaching timeout</p>
+              </div>
+              <div className="divide-y divide-slate-800">
+                {candidates.inAppeal.map((c) => (
+                  <div key={c.id} className="p-4 flex items-center justify-between">
+                    <div>
+                      <span className="font-medium text-slate-100">{c.fullName}</span>
+                      <div className="text-xs text-slate-400 mt-1">
+                        In appeal for {c.daysSinceTriggered} days
+                        {c.linkedWebsite && <span> • {c.linkedWebsite.domain}</span>}
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 text-xs font-medium rounded bg-blue-500/20 text-blue-400">
+                      {c.reason}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Inactive Candidates */}
+          {candidates.inactive.length > 0 && (
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60">
+              <div className="p-4 border-b border-slate-800">
+                <h3 className="text-sm font-semibold text-slate-100">Inactive Identities</h3>
+                <p className="text-xs text-slate-400 mt-1">Identities marked as inactive approaching auto-decommission</p>
+              </div>
+              <div className="divide-y divide-slate-800">
+                {candidates.inactive.map((c) => (
+                  <div key={c.id} className="p-4 flex items-center justify-between">
+                    <div>
+                      <span className="font-medium text-slate-100">{c.fullName}</span>
+                      <div className="text-xs text-slate-400 mt-1">
+                        Inactive for {c.daysSinceTriggered} days
+                        {c.linkedWebsite && <span> • {c.linkedWebsite.domain}</span>}
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 text-xs font-medium rounded bg-slate-500/20 text-slate-400">
+                      {c.reason}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {totalCandidates === 0 && (
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-8 text-center">
+              <p className="text-slate-400">No candidates for auto-decommission</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Candidates appear here when identities meet auto-decommission criteria but haven&apos;t been scheduled yet
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

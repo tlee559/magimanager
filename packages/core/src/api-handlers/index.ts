@@ -53,3 +53,25 @@ export {
   authenticatorCodeHandler,
   parseOtpUriHandler,
 } from "./authenticators.handler";
+
+// Decommission handlers
+export {
+  decommissionGetHandler,
+  decommissionStartHandler,
+  decommissionGetByIdHandler,
+  decommissionExecuteHandler,
+  decommissionCancelHandler,
+  decommissionRetryHandler,
+  decommissionCandidatesHandler,
+} from "./decommission.handler";
+
+// Appeal handlers
+export {
+  appealGetHandler,
+  appealPostHandler,
+  appealPatchHandler,
+  appealAttemptHandler,
+  appealResolveHandler,
+  appealsGetHandler,
+  appealsDeadlinesHandler,
+} from "./appeal.handler";

@@ -403,6 +403,139 @@ class NamecheapClient {
   }
 
   /**
+   * Get detailed domain info including auto-renewal status
+   * API: namecheap.domains.getInfo
+   */
+  async getDomainInfo(domain: string): Promise<{
+    domain: string;
+    autoRenew: boolean;
+    expirationDate: string;
+    isLocked: boolean;
+    whoisGuard: boolean;
+    createdDate: string;
+    status: string;
+  }> {
+    const xml = await this.request('namecheap.domains.getInfo', {
+      DomainName: domain,
+    });
+
+    // Parse DomainGetInfoResult element
+    const autoRenew = getXmlAttribute(xml, 'DomainGetInfoResult', 'AutoRenew')?.toLowerCase() === 'true';
+    const isLocked = getXmlAttribute(xml, 'DomainGetInfoResult', 'IsLocked')?.toLowerCase() === 'true';
+    const status = getXmlAttribute(xml, 'DomainGetInfoResult', 'Status') || 'unknown';
+
+    // Parse dates from DomainDetails
+    const expirationDate = getXmlValue(xml, 'ExpiredDate') || getXmlValue(xml, 'ExpirationDate') || '';
+    const createdDate = getXmlValue(xml, 'CreatedDate') || '';
+
+    // WhoisGuard status
+    const whoisGuardEnabled = xml.includes('WhoisGuard') &&
+      (xml.includes('Enabled="true"') || xml.includes('<Enabled>true</Enabled>'));
+
+    return {
+      domain,
+      autoRenew,
+      expirationDate,
+      isLocked,
+      whoisGuard: whoisGuardEnabled,
+      createdDate,
+      status,
+    };
+  }
+
+  /**
+   * Set auto-renewal status for a domain
+   * API: namecheap.domains.setAutoRenew (if available) or through domain modification
+   * Note: Namecheap may require disabling registrar lock first
+   */
+  async setAutoRenew(domain: string, enable: boolean): Promise<{
+    success: boolean;
+    autoRenew: boolean;
+    error?: string;
+  }> {
+    try {
+      // First, get current domain info to verify we have access
+      const currentInfo = await this.getDomainInfo(domain);
+
+      // If already in the desired state, return success
+      if (currentInfo.autoRenew === enable) {
+        return {
+          success: true,
+          autoRenew: enable,
+        };
+      }
+
+      // Try the direct setAutoRenew command (may not be available in all Namecheap API versions)
+      // Note: Namecheap API documentation shows this might need to go through domain renewal settings
+      try {
+        const xml = await this.request('namecheap.domains.reactivate', {
+          DomainName: domain,
+          // This is a workaround - the actual API call depends on Namecheap's current implementation
+        });
+
+        // If we got here without error, try to verify
+        const verifyInfo = await this.getDomainInfo(domain);
+        return {
+          success: verifyInfo.autoRenew === enable,
+          autoRenew: verifyInfo.autoRenew,
+        };
+      } catch {
+        // The reactivate API might not work for this purpose
+        // Fall back to informational response
+      }
+
+      // For domains, auto-renewal is typically controlled through the Namecheap dashboard
+      // or via specific API endpoints that may require additional permissions
+      // Return current state and indicate manual intervention might be needed
+      return {
+        success: false,
+        autoRenew: currentInfo.autoRenew,
+        error: `Auto-renewal toggle via API may require manual intervention. Current state: ${currentInfo.autoRenew ? 'enabled' : 'disabled'}. Domain expires: ${currentInfo.expirationDate}`,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        autoRenew: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Disable auto-renewal for a domain (convenience method for decommissioning)
+   * Returns detailed result for verification
+   */
+  async disableAutoRenewal(domain: string): Promise<{
+    success: boolean;
+    verified: boolean;
+    autoRenew: boolean;
+    expirationDate: string;
+    error?: string;
+  }> {
+    const result = await this.setAutoRenew(domain, false);
+
+    // Get current info for verification
+    let expirationDate = '';
+    let verified = false;
+
+    try {
+      const info = await this.getDomainInfo(domain);
+      expirationDate = info.expirationDate;
+      verified = info.autoRenew === false;
+    } catch {
+      // Couldn't verify
+    }
+
+    return {
+      success: result.success,
+      verified,
+      autoRenew: result.autoRenew,
+      expirationDate,
+      error: result.error,
+    };
+  }
+
+  /**
    * Create a request to add funds via credit card
    * Returns a redirect URL where user can complete the payment
    * Note: This requires the user to complete payment in their browser

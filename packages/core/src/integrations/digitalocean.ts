@@ -225,6 +225,56 @@ class DigitalOceanClient {
   }
 
   /**
+   * Delete a droplet and verify it's gone
+   * Used for decommissioning to ensure billing stops
+   */
+  async deleteDropletWithVerification(dropletId: number): Promise<{
+    success: boolean;
+    verified: boolean;
+    error?: string;
+  }> {
+    try {
+      // Delete the droplet
+      await this.deleteDroplet(dropletId);
+
+      // Wait a moment for deletion to propagate
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Verify deletion by checking if droplet still exists
+      try {
+        await this.getDroplet(dropletId);
+        // If we get here, droplet still exists
+        return {
+          success: false,
+          verified: false,
+          error: 'Droplet still exists after deletion attempt',
+        };
+      } catch (error) {
+        // 404 means droplet is gone - success!
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('404')) {
+          return {
+            success: true,
+            verified: true,
+          };
+        }
+        // Some other error
+        return {
+          success: true,
+          verified: false,
+          error: `Deletion sent but verification failed: ${errorMessage}`,
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        verified: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
    * Reboot a droplet
    */
   async rebootDroplet(dropletId: number): Promise<void> {

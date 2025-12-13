@@ -14,8 +14,17 @@ export * from "./oauth.service";
 // Google Ads Service - All Google Ads API interactions
 export * from "./google-ads.service";
 
-// Decommission Alert Service - Alerts when identities lose all active accounts
-export * from "./decommission-alert.service";
+// Decommission Service - Comprehensive decommission job management and resource cleanup
+export { decommissionService } from "./decommission.service";
+export type {
+  CleanupResult,
+  DecommissionJobWithIdentity,
+  StartDecommissionOptions,
+} from "./decommission.service";
+
+// Appeal Tracking Service - Manage appeals for suspended/in-appeal accounts
+export { appealTrackingService } from "./appeal-tracking.service";
+export type { AppealTrackingWithAccount, UpdateAppealInput } from "./appeal-tracking.service";
 
 // Incomplete Identity Alert Service - Alerts when identity profiles are missing items
 export * from "./incomplete-identity-alert.service";
