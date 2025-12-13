@@ -174,8 +174,9 @@ async function main() {
   }
   console.log("   SSH is ready");
 
-  // Wait for cloud-init to settle
-  await new Promise((r) => setTimeout(r, 15000));
+  // Wait for cloud-init to settle (increased to 60s to ensure apt is fully available)
+  console.log("   Waiting for cloud-init to complete...");
+  await new Promise((r) => setTimeout(r, 60000));
 
   // Step 4: Install packages
   console.log("📥 Step 4: Installing packages (this may take a few minutes)...");
@@ -183,8 +184,12 @@ async function main() {
 set -e
 export DEBIAN_FRONTEND=noninteractive
 
-# Wait for any existing apt processes
-while fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
+# Wait for cloud-init to finish completely
+cloud-init status --wait 2>/dev/null || sleep 30
+
+# Wait for any existing apt processes (both locks)
+while fuser /var/lib/dpkg/lock >/dev/null 2>&1 || fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || fuser /var/cache/apt/archives/lock >/dev/null 2>&1; do
+  echo "Waiting for apt locks to be released..."
   sleep 5
 done
 

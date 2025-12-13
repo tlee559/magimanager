@@ -7212,16 +7212,13 @@ function SystemView() {
 }
 
 // ============================================================================
-// SNAPSHOT MANAGER - DIGITALOCEAN MASTER SNAPSHOT MANAGEMENT
+// SNAPSHOT MANAGER - DIGITALOCEAN MASTER SNAPSHOT DISPLAY
 // ============================================================================
 
 function SnapshotManager() {
   const [snapshots, setSnapshots] = useState<Array<{ id: string; name: string; createdAt: string; regions: string[] }>>([]);
   const [currentSnapshotId, setCurrentSnapshotId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState("");
-  const [progress, setProgress] = useState("");
 
   useEffect(() => {
     fetchSnapshots();
@@ -7242,134 +7239,38 @@ function SnapshotManager() {
     }
   };
 
-  const createNewSnapshot = async () => {
-    if (!confirm("This will create a new master snapshot with php-sqlite3, php-apcu, and the np/ cloaker folder pre-installed. This process takes 5-10 minutes. Continue?")) {
-      return;
-    }
-
-    setCreating(true);
-    setError("");
-    setProgress("Creating temporary droplet...");
-
-    try {
-      const res = await fetch("/api/digitalocean/snapshots", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: `magimanager-master-${Date.now()}` }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to create snapshot");
-      }
-
-      setProgress("");
-      alert(`Success! New snapshot created: ${data.snapshot?.name || "Unknown"}`);
-      fetchSnapshots();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create snapshot");
-    } finally {
-      setCreating(false);
-      setProgress("");
-    }
-  };
-
-  const setActiveSnapshot = async (snapshotId: string) => {
-    try {
-      const res = await fetch("/api/digitalocean/snapshots", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ snapshotId }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to update snapshot");
-      }
-
-      setCurrentSnapshotId(snapshotId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update snapshot");
-    }
-  };
-
   if (loading) {
     return (
       <div className="space-y-3">
         <h3 className="text-sm font-medium text-slate-200">Master Snapshot</h3>
-        <div className="animate-pulse bg-slate-800 rounded-lg h-20"></div>
+        <div className="animate-pulse bg-slate-800 rounded-lg h-12"></div>
       </div>
     );
   }
 
+  // Find the active snapshot
+  const activeSnapshot = snapshots.find(s => s.id === currentSnapshotId);
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-slate-200">Master Snapshot</h3>
-        <button
-          onClick={createNewSnapshot}
-          disabled={creating}
-          className="px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded transition"
-        >
-          {creating ? "Creating..." : "Create New Snapshot"}
-        </button>
-      </div>
-
+      <h3 className="text-sm font-medium text-slate-200">Master Snapshot</h3>
       <p className="text-xs text-slate-500">
-        The master snapshot is used as the base image for all new website servers.
-        It includes nginx, PHP (with sqlite3 & apcu), certbot, and the np/ cloaker folder pre-installed.
+        Base image for website servers (nginx, PHP, certbot, np/ cloaker pre-installed).
       </p>
 
-      {error && (
-        <div className="text-red-400 text-xs bg-red-900/20 px-3 py-2 rounded">{error}</div>
-      )}
-
-      {progress && (
-        <div className="text-blue-400 text-xs bg-blue-900/20 px-3 py-2 rounded flex items-center gap-2">
-          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
-          {progress}
-        </div>
-      )}
-
-      {snapshots.length === 0 ? (
-        <div className="bg-slate-800/50 rounded-lg p-4 text-center text-slate-400 text-sm">
-          No snapshots found. Create one to enable the Website Wizard.
+      {activeSnapshot ? (
+        <div className="bg-emerald-900/20 border border-emerald-600/50 rounded-lg p-3">
+          <div className="text-sm text-slate-200 flex items-center gap-2">
+            {activeSnapshot.name}
+            <span className="text-xs bg-emerald-600 text-white px-2 py-0.5 rounded">Active</span>
+          </div>
+          <div className="text-xs text-slate-500 mt-1">
+            ID: {activeSnapshot.id} • Created: {new Date(activeSnapshot.createdAt).toLocaleDateString()}
+          </div>
         </div>
       ) : (
-        <div className="space-y-2 max-h-48 overflow-y-auto">
-          {snapshots.map((snapshot) => (
-            <div
-              key={snapshot.id}
-              className={`flex items-center justify-between p-3 rounded-lg border ${
-                snapshot.id === currentSnapshotId
-                  ? "bg-emerald-900/20 border-emerald-600/50"
-                  : "bg-slate-800/50 border-slate-700"
-              }`}
-            >
-              <div>
-                <div className="text-sm text-slate-200 flex items-center gap-2">
-                  {snapshot.name}
-                  {snapshot.id === currentSnapshotId && (
-                    <span className="text-xs bg-emerald-600 text-white px-2 py-0.5 rounded">Active</span>
-                  )}
-                </div>
-                <div className="text-xs text-slate-500">
-                  ID: {snapshot.id} • Created: {new Date(snapshot.createdAt).toLocaleDateString()}
-                </div>
-              </div>
-              {snapshot.id !== currentSnapshotId && (
-                <button
-                  onClick={() => setActiveSnapshot(snapshot.id)}
-                  className="text-xs text-emerald-400 hover:text-emerald-300"
-                >
-                  Set Active
-                </button>
-              )}
-            </div>
-          ))}
+        <div className="bg-amber-900/20 border border-amber-600/50 rounded-lg p-3 text-amber-300 text-sm">
+          No snapshot configured. Run the create-snapshot script to set up.
         </div>
       )}
     </div>
