@@ -10960,8 +10960,15 @@ function WebsitesView() {
       nameservers: string[];
     };
     site: {
-      reachable: boolean;
-      sslValid: boolean;
+      httpReachable: boolean;
+      httpsReachable: boolean;
+      httpStatus: number | null;
+      error: string | null;
+    };
+    progress: {
+      stage: string;
+      message: string;
+      percentage: number;
     };
     healthy: boolean;
   }
