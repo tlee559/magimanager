@@ -55,7 +55,7 @@ export async function POST(
     }
 
     // Get Google API key from settings
-    const settings = await prisma.settings.findFirst();
+    const settings = await prisma.appSettings.findFirst();
     const googleApiKey = settings?.googleApiKey;
 
     if (!googleApiKey) {
