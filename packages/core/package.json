@@ -23,6 +23,7 @@
     "@magimanager/realtime": "*",
     "@magimanager/shared": "*",
     "bcryptjs": "^3.0.3",
+    "jszip": "^3.10.1",
     "node-ssh": "^13.2.1"
   },
   "peerDependencies": {

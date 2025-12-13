@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="{{META_DESCRIPTION}}">
+  <title>{{SITE_NAME}} - {{TAGLINE}}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="{{GOOGLE_FONTS_URL}}" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,{{FAVICON_SVG}}">
+</head>
+<body>
+  <!-- Cookie Consent Banner -->
+  <div id="cookie-banner" class="cookie-banner">
+    <div class="cookie-content">
+      <p>We use cookies to enhance your experience. By continuing to visit this site you agree to our use of cookies.</p>
+      <div class="cookie-buttons">
+        <button onclick="acceptCookies()" class="btn btn-primary">Accept</button>
+        <a href="privacy.html" class="btn btn-secondary">Learn More</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Age Verification Modal (for social casino) -->
+  {{AGE_VERIFICATION_MODAL}}
+
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="container">
+      <a href="index.html" class="logo">
+        <span class="logo-icon">{{LOGO_ICON}}</span>
+        <span class="logo-text">{{SITE_NAME}}</span>
+      </a>
+      <div class="nav-links">
+        <a href="index.html" class="active">Home</a>
+        {{NAV_PLAY_LINK}}
+        <a href="terms.html">Terms</a>
+        <a href="privacy.html">Privacy</a>
+      </div>
+      <button class="mobile-menu-btn" onclick="toggleMobileMenu()">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Mobile Menu -->
+  <div id="mobile-menu" class="mobile-menu">
+    <a href="index.html" class="active">Home</a>
+    {{NAV_PLAY_LINK}}
+    <a href="terms.html">Terms</a>
+    <a href="privacy.html">Privacy</a>
+  </div>
+
+  <!-- Hero Section -->
+  <section class="hero hero-{{LAYOUT_STYLE}}">
+    <div class="hero-background">
+      <img src="images/hero.png" alt="{{HERO_IMAGE_ALT}}" class="hero-image">
+      <div class="hero-overlay"></div>
+    </div>
+    <div class="container hero-content">
+      <h1 class="hero-title animate-fade-in">{{HERO_HEADLINE}}</h1>
+      <p class="hero-subtitle animate-fade-in-delay">{{HERO_SUBHEADLINE}}</p>
+      <div class="hero-cta animate-fade-in-delay-2">
+        {{HERO_CTA_BUTTON}}
+      </div>
+      {{HERO_DISCLAIMER}}
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section class="features">
+    <div class="container">
+      <h2 class="section-title">{{FEATURES_TITLE}}</h2>
+      <div class="features-grid">
+        <div class="feature-card animate-on-scroll">
+          <div class="feature-image">
+            <img src="images/feature1.png" alt="{{FEATURE_1_TITLE}}">
+          </div>
+          <h3>{{FEATURE_1_TITLE}}</h3>
+          <p>{{FEATURE_1_DESCRIPTION}}</p>
+        </div>
+        <div class="feature-card animate-on-scroll">
+          <div class="feature-image">
+            <img src="images/feature2.png" alt="{{FEATURE_2_TITLE}}">
+          </div>
+          <h3>{{FEATURE_2_TITLE}}</h3>
+          <p>{{FEATURE_2_DESCRIPTION}}</p>
+        </div>
+        <div class="feature-card animate-on-scroll">
+          <div class="feature-icon">{{FEATURE_3_ICON}}</div>
+          <h3>{{FEATURE_3_TITLE}}</h3>
+          <p>{{FEATURE_3_DESCRIPTION}}</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- About Section -->
+  <section class="about">
+    <div class="container">
+      <div class="about-content">
+        <h2>{{ABOUT_TITLE}}</h2>
+        <p>{{ABOUT_DESCRIPTION}}</p>
+        {{ABOUT_CTA}}
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-brand">
+          <a href="index.html" class="logo">
+            <span class="logo-icon">{{LOGO_ICON}}</span>
+            <span class="logo-text">{{SITE_NAME}}</span>
+          </a>
+          <p class="footer-tagline">{{FOOTER_TAGLINE}}</p>
+        </div>
+        <div class="footer-links">
+          <h4>Legal</h4>
+          <a href="terms.html">Terms of Service</a>
+          <a href="privacy.html">Privacy Policy</a>
+        </div>
+        {{FOOTER_EXTRA_LINKS}}
+      </div>
+      {{RESPONSIBLE_GAMING_FOOTER}}
+      <div class="footer-bottom">
+        <p>&copy; {{CURRENT_YEAR}} {{SITE_NAME}}. All rights reserved.</p>
+        {{NO_REAL_MONEY_DISCLAIMER}}
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Cookie consent
+    function acceptCookies() {
+      localStorage.setItem('cookiesAccepted', 'true');
+      document.getElementById('cookie-banner').style.display = 'none';
+    }
+
+    if (localStorage.getItem('cookiesAccepted') === 'true') {
+      document.getElementById('cookie-banner').style.display = 'none';
+    }
+
+    // Mobile menu
+    function toggleMobileMenu() {
+      document.getElementById('mobile-menu').classList.toggle('active');
+      document.querySelector('.mobile-menu-btn').classList.toggle('active');
+    }
+
+    // Scroll animations
+    const observerOptions = {
+      threshold: 0.1,
+      rootMargin: '0px 0px -50px 0px'
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+        }
+      });
+    }, observerOptions);
+
+    document.querySelectorAll('.animate-on-scroll').forEach(el => {
+      observer.observe(el);
+    });
+
+    {{AGE_VERIFICATION_SCRIPT}}
+  </script>
+</body>
+</html>

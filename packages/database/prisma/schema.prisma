@@ -1562,6 +1562,11 @@ model Website {
   dropletSize         String?       // e.g., "s-1vcpu-1gb"
   sshPassword         String?       // Generated SSH root password
 
+  // AI Generation
+  aiGenerated         Boolean       @default(false)
+  aiNiche             String?       // "social-casino" etc.
+  aiPresets           String?       @db.Text // JSON of used presets
+
   // Status
   status              WebsiteStatus @default(PENDING)
   statusMessage       String?       // Human-readable status message

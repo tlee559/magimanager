@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Play free social slots at {{SITE_NAME}} - No real money, just fun!">
+  <title>Play Now - {{SITE_NAME}}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="{{GOOGLE_FONTS_URL}}" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/slots.css">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,{{FAVICON_SVG}}">
+</head>
+<body>
+  <!-- Age Verification Modal -->
+  <div id="age-modal" class="age-modal">
+    <div class="age-modal-content">
+      <h2>Age Verification Required</h2>
+      <p>You must be 18 years or older to access this site.</p>
+      <div class="age-warning">
+        <p>This is a social gaming site. No real money gambling. For entertainment purposes only.</p>
+      </div>
+      <div class="age-buttons">
+        <button onclick="verifyAge()" class="btn btn-primary btn-large">I am 18 or older</button>
+        <button onclick="denyAge()" class="btn btn-secondary">I am under 18</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="container">
+      <a href="index.html" class="logo">
+        <span class="logo-icon">{{LOGO_ICON}}</span>
+        <span class="logo-text">{{SITE_NAME}}</span>
+      </a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="play.html" class="active">Play</a>
+        <a href="terms.html">Terms</a>
+        <a href="privacy.html">Privacy</a>
+      </div>
+      <button class="mobile-menu-btn" onclick="toggleMobileMenu()">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Mobile Menu -->
+  <div id="mobile-menu" class="mobile-menu">
+    <a href="index.html">Home</a>
+    <a href="play.html" class="active">Play</a>
+    <a href="terms.html">Terms</a>
+    <a href="privacy.html">Privacy</a>
+  </div>
+
+  <!-- Game Section -->
+  <main class="game-page">
+    <div class="container">
+      <!-- Credits Display -->
+      <div class="credits-bar">
+        <div class="credits-display">
+          <span class="credits-label">Credits</span>
+          <span class="credits-value" id="credits">1,000</span>
+        </div>
+        <div class="win-display">
+          <span class="win-label">Last Win</span>
+          <span class="win-value" id="last-win">0</span>
+        </div>
+      </div>
+
+      <!-- Slot Machine -->
+      <div class="slot-machine">
+        <div class="slot-header">
+          <h1>{{GAME_NAME}}</h1>
+          <p class="slot-tagline">{{GAME_TAGLINE}}</p>
+        </div>
+
+        <!-- Reels Container -->
+        <div class="reels-container">
+          <div class="reel-window">
+            <div class="reel" id="reel-0">
+              <div class="symbol">🍒</div>
+              <div class="symbol">🍋</div>
+              <div class="symbol">🍊</div>
+            </div>
+          </div>
+          <div class="reel-window">
+            <div class="reel" id="reel-1">
+              <div class="symbol">🍇</div>
+              <div class="symbol">💎</div>
+              <div class="symbol">7️⃣</div>
+            </div>
+          </div>
+          <div class="reel-window">
+            <div class="reel" id="reel-2">
+              <div class="symbol">📊</div>
+              <div class="symbol">⭐</div>
+              <div class="symbol">🍒</div>
+            </div>
+          </div>
+          <div class="reel-window">
+            <div class="reel" id="reel-3">
+              <div class="symbol">🍋</div>
+              <div class="symbol">🍊</div>
+              <div class="symbol">🍇</div>
+            </div>
+          </div>
+          <div class="reel-window">
+            <div class="reel" id="reel-4">
+              <div class="symbol">💎</div>
+              <div class="symbol">7️⃣</div>
+              <div class="symbol">📊</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Win Line Indicator -->
+        <div class="win-line"></div>
+
+        <!-- Controls -->
+        <div class="slot-controls">
+          <div class="bet-controls">
+            <button class="btn btn-secondary" onclick="decreaseBet()">-</button>
+            <div class="bet-display">
+              <span class="bet-label">Bet</span>
+              <span class="bet-value" id="current-bet">10</span>
+            </div>
+            <button class="btn btn-secondary" onclick="increaseBet()">+</button>
+          </div>
+          <button class="btn btn-primary btn-spin" id="spin-btn" onclick="spin()">
+            <span class="spin-text">SPIN</span>
+          </button>
+          <button class="btn btn-secondary btn-max" onclick="maxBet()">MAX BET</button>
+        </div>
+
+        <!-- Win Message -->
+        <div class="win-message" id="win-message">
+          <div class="win-message-content">
+            <span class="win-type" id="win-type">BIG WIN!</span>
+            <span class="win-amount" id="win-amount">+500</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Paytable -->
+      <div class="paytable">
+        <h3>Paytable</h3>
+        <div class="paytable-grid">
+          <div class="paytable-item">
+            <span class="paytable-symbols">7️⃣ 7️⃣ 7️⃣ 7️⃣ 7️⃣</span>
+            <span class="paytable-multiplier">x100</span>
+          </div>
+          <div class="paytable-item">
+            <span class="paytable-symbols">💎 💎 💎 💎 💎</span>
+            <span class="paytable-multiplier">x50</span>
+          </div>
+          <div class="paytable-item">
+            <span class="paytable-symbols">📊 📊 📊 📊 📊</span>
+            <span class="paytable-multiplier">x25</span>
+          </div>
+          <div class="paytable-item">
+            <span class="paytable-symbols">⭐ ⭐ ⭐ ⭐ ⭐</span>
+            <span class="paytable-multiplier">x15</span>
+          </div>
+          <div class="paytable-item">
+            <span class="paytable-symbols">🍇 🍇 🍇 🍇 🍇</span>
+            <span class="paytable-multiplier">x10</span>
+          </div>
+          <div class="paytable-item">
+            <span class="paytable-symbols">Any 3+ matching</span>
+            <span class="paytable-multiplier">x2-x5</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Disclaimers -->
+      <div class="game-disclaimers">
+        <div class="disclaimer-box">
+          <p><strong>FOR ENTERTAINMENT ONLY</strong></p>
+          <p>This is a social gaming experience. No real money is involved. Virtual credits have no cash value and cannot be exchanged for real money or prizes.</p>
+        </div>
+        <div class="disclaimer-box warning">
+          <p><strong>18+ ONLY</strong></p>
+          <p>This site is intended for adult audiences only. Please play responsibly.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-brand">
+          <a href="index.html" class="logo">
+            <span class="logo-icon">{{LOGO_ICON}}</span>
+            <span class="logo-text">{{SITE_NAME}}</span>
+          </a>
+        </div>
+        <div class="footer-links">
+          <h4>Legal</h4>
+          <a href="terms.html">Terms of Service</a>
+          <a href="privacy.html">Privacy Policy</a>
+        </div>
+      </div>
+      <div class="responsible-gaming">
+        <h4>Responsible Gaming</h4>
+        <p>This is a free-to-play social gaming site. No real money gambling. If you or someone you know has a gambling problem, please seek help.</p>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; {{CURRENT_YEAR}} {{SITE_NAME}}. All rights reserved.</p>
+        <div class="no-real-money">
+          <p>NO REAL MONEY - FOR ENTERTAINMENT PURPOSES ONLY</p>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/slots.js"></script>
+  <script>
+    // Age verification
+    function verifyAge() {
+      localStorage.setItem('ageVerified', 'true');
+      document.getElementById('age-modal').style.display = 'none';
+    }
+
+    function denyAge() {
+      window.location.href = 'https://www.google.com';
+    }
+
+    if (localStorage.getItem('ageVerified') === 'true') {
+      document.getElementById('age-modal').style.display = 'none';
+    }
+
+    // Mobile menu
+    function toggleMobileMenu() {
+      document.getElementById('mobile-menu').classList.toggle('active');
+      document.querySelector('.mobile-menu-btn').classList.toggle('active');
+    }
+  </script>
+</body>
+</html>

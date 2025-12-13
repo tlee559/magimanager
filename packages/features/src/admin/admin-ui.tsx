@@ -11615,11 +11615,20 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
 
   // Step 1: Name & Upload
   const [name, setName] = useState(website?.name || "");
-  const [uploadMode, setUploadMode] = useState<"file" | "gdrive">("file");
+  const [uploadMode, setUploadMode] = useState<"file" | "gdrive" | "ai">("file");
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [gdriveUrl, setGdriveUrl] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+
+  // AI Generation state
+  const [aiNiche, setAiNiche] = useState<"social-casino">("social-casino");
+  const [aiDescription, setAiDescription] = useState("");
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiProgress, setAiProgress] = useState<string>("");
+  const [previewReady, setPreviewReady] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [aiPresets, setAiPresets] = useState<Record<string, string> | null>(null);
 
   // Step 2: Server
   const [region, setRegion] = useState("nyc1");
@@ -11726,17 +11735,23 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
     }
   }, [currentWebsite?.status]);
 
-  // Step 1: Create website and upload zip
+  // Step 1: Create website and upload zip (or generate with AI)
   const handleUpload = async () => {
     if (!name.trim()) {
       setUploadError("Please enter a website name");
       return;
     }
-    if (uploadMode === "file" && !zipFile && !currentWebsite?.zipFileUrl) {
+
+    // AI mode validation
+    if (uploadMode === "ai") {
+      if (!aiDescription.trim() || aiDescription.trim().length < 10) {
+        setUploadError("Please describe your website (at least 10 characters)");
+        return;
+      }
+    } else if (uploadMode === "file" && !zipFile && !currentWebsite?.zipFileUrl) {
       setUploadError("Please select a zip file");
       return;
-    }
-    if (uploadMode === "gdrive" && !gdriveUrl.trim() && !currentWebsite?.zipFileUrl) {
+    } else if (uploadMode === "gdrive" && !gdriveUrl.trim() && !currentWebsite?.zipFileUrl) {
       setUploadError("Please enter a Google Drive link");
       return;
     }
@@ -11758,6 +11773,32 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
         if (!createRes.ok) throw new Error(createData.error || "Failed to create website");
         websiteId = createData.website.id;
         setCurrentWebsite(createData.website);
+      }
+
+      // AI Generation mode
+      if (uploadMode === "ai") {
+        setAiGenerating(true);
+        setAiProgress("Creating your website with AI...");
+
+        const generateRes = await fetch(`/api/websites/${websiteId}/generate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            niche: aiNiche,
+            description: aiDescription.trim(),
+          }),
+        });
+        const generateData = await generateRes.json();
+        if (!generateRes.ok) throw new Error(generateData.error || "AI generation failed");
+
+        setCurrentWebsite(generateData.website);
+        setAiPresets(generateData.presets);
+        setPreviewUrl(`/api/websites/${websiteId}/preview?file=index.html`);
+        setPreviewReady(true);
+        setAiGenerating(false);
+        setAiProgress("");
+        // Don't advance to step 2 yet - show preview first
+        return;
       }
 
       // Upload zip if provided (either file or Google Drive)
@@ -11786,9 +11827,27 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
       setStep(2);
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "Upload failed");
+      setAiGenerating(false);
+      setAiProgress("");
     } finally {
       setUploading(false);
     }
+  };
+
+  // Handle approving AI preview and continuing to step 2
+  const handleApprovePreview = () => {
+    setPreviewReady(false);
+    setPreviewUrl(null);
+    setStep(2);
+  };
+
+  // Handle regenerating AI website
+  const handleRegenerate = async () => {
+    setPreviewReady(false);
+    setPreviewUrl(null);
+    setAiPresets(null);
+    // Trigger regeneration
+    await handleUpload();
   };
 
   // Step 2: Search domains
@@ -12046,7 +12105,7 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                 {/* Upload Mode Toggle */}
                 <div className="flex gap-2 p-1 bg-slate-800 rounded-lg mb-4 border border-slate-700">
                   <button
-                    onClick={() => { setUploadMode("file"); setGdriveUrl(""); }}
+                    onClick={() => { setUploadMode("file"); setGdriveUrl(""); setPreviewReady(false); }}
                     className={`flex-1 py-2 px-3 rounded text-sm font-medium transition ${
                       uploadMode === "file"
                         ? "bg-slate-700 text-white"
@@ -12056,18 +12115,28 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                     Upload File
                   </button>
                   <button
-                    onClick={() => { setUploadMode("gdrive"); setZipFile(null); }}
+                    onClick={() => { setUploadMode("gdrive"); setZipFile(null); setPreviewReady(false); }}
                     className={`flex-1 py-2 px-3 rounded text-sm font-medium transition ${
                       uploadMode === "gdrive"
                         ? "bg-slate-700 text-white"
                         : "text-slate-400 hover:text-slate-200"
                     }`}
                   >
-                    Google Drive Link
+                    Google Drive
+                  </button>
+                  <button
+                    onClick={() => { setUploadMode("ai"); setZipFile(null); setGdriveUrl(""); }}
+                    className={`flex-1 py-2 px-3 rounded text-sm font-medium transition ${
+                      uploadMode === "ai"
+                        ? "bg-purple-600 text-white"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    AI Create
                   </button>
                 </div>
 
-                {uploadMode === "file" ? (
+                {uploadMode === "file" && (
                   <div className="border-2 border-dashed border-slate-700 rounded-lg p-8 text-center hover:border-slate-600 transition">
                     <input
                       type="file"
@@ -12098,7 +12167,9 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                       )}
                     </label>
                   </div>
-                ) : (
+                )}
+
+                {uploadMode === "gdrive" && (
                   <div>
                     <input
                       type="url"
@@ -12115,19 +12186,152 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                     )}
                   </div>
                 )}
+
+                {uploadMode === "ai" && !previewReady && (
+                  <div className="space-y-4">
+                    <div className="bg-purple-900/20 border border-purple-700/50 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-2xl">✨</span>
+                        <h4 className="font-medium text-purple-300">AI Website Generator</h4>
+                      </div>
+                      <p className="text-slate-400 text-sm">
+                        Generate a unique website using AI. Each site gets unique copy, images, colors, and layout.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Website Type</label>
+                      <select
+                        value={aiNiche}
+                        onChange={(e) => setAiNiche(e.target.value as "social-casino")}
+                        className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-purple-500"
+                      >
+                        <option value="social-casino">Social Gaming Casino</option>
+                      </select>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Social casino includes a playable slot machine, 18+ verification, and responsible gaming disclaimers.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Describe Your Website</label>
+                      <textarea
+                        value={aiDescription}
+                        onChange={(e) => setAiDescription(e.target.value)}
+                        placeholder="e.g., Vegas-themed social casino with classic slots and a luxurious gold and purple color scheme..."
+                        rows={3}
+                        className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-purple-500 resize-none"
+                      />
+                      <p className="mt-1 text-xs text-slate-500">
+                        Describe the theme, style, or vibe you want. AI will generate unique copy, images, and design.
+                      </p>
+                    </div>
+
+                    {aiGenerating && (
+                      <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                        <div className="flex items-center gap-3">
+                          <div className="animate-spin rounded-full h-5 w-5 border-2 border-purple-500 border-t-transparent" />
+                          <span className="text-slate-300">{aiProgress || "Generating..."}</span>
+                        </div>
+                        <div className="mt-3 bg-slate-700 rounded-full h-2 overflow-hidden">
+                          <div className="bg-purple-500 h-full animate-pulse" style={{ width: "60%" }} />
+                        </div>
+                        <p className="mt-2 text-xs text-slate-500">
+                          This may take 30-60 seconds. AI is creating copy and generating images.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {uploadMode === "ai" && previewReady && previewUrl && (
+                  <div className="space-y-4">
+                    <div className="bg-emerald-900/20 border border-emerald-700/50 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-2xl">✅</span>
+                        <h4 className="font-medium text-emerald-300">Website Generated!</h4>
+                      </div>
+                      <p className="text-slate-400 text-sm">
+                        Preview your AI-generated website below. Approve to continue or regenerate for a new design.
+                      </p>
+                    </div>
+
+                    {aiPresets && (
+                      <div className="flex flex-wrap gap-2">
+                        <span className="px-2 py-1 bg-slate-800 rounded text-xs text-slate-400">
+                          Theme: {aiPresets.colorTheme}
+                        </span>
+                        <span className="px-2 py-1 bg-slate-800 rounded text-xs text-slate-400">
+                          Font: {aiPresets.fontPairing}
+                        </span>
+                        <span className="px-2 py-1 bg-slate-800 rounded text-xs text-slate-400">
+                          Layout: {aiPresets.layout}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="border border-slate-700 rounded-lg overflow-hidden">
+                      <div className="bg-slate-800 px-3 py-2 border-b border-slate-700 flex items-center justify-between">
+                        <span className="text-xs text-slate-400">Preview</span>
+                        <a
+                          href={previewUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-purple-400 hover:text-purple-300"
+                        >
+                          Open in new tab ↗
+                        </a>
+                      </div>
+                      <iframe
+                        src={previewUrl}
+                        className="w-full h-[400px] bg-white"
+                        title="Website Preview"
+                      />
+                    </div>
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleRegenerate}
+                        disabled={aiGenerating}
+                        className="flex-1 py-2 px-4 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded-lg font-medium transition"
+                      >
+                        Regenerate
+                      </button>
+                      <button
+                        onClick={handleApprovePreview}
+                        className="flex-1 py-2 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition"
+                      >
+                        Approve & Continue
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {uploadError && (
                 <p className="text-red-400 text-sm">{uploadError}</p>
               )}
 
-              <button
-                onClick={handleUpload}
-                disabled={uploading || (!name.trim() && !currentWebsite)}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition"
-              >
-                {uploading ? "Uploading..." : "Continue to Server Creation"}
-              </button>
+              {/* Show button only if not in preview mode */}
+              {!(uploadMode === "ai" && previewReady) && (
+                <button
+                  onClick={handleUpload}
+                  disabled={uploading || aiGenerating || (!name.trim() && !currentWebsite)}
+                  className={`w-full py-3 ${
+                    uploadMode === "ai"
+                      ? "bg-purple-600 hover:bg-purple-500"
+                      : "bg-emerald-600 hover:bg-emerald-500"
+                  } disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition`}
+                >
+                  {uploading || aiGenerating
+                    ? uploadMode === "ai"
+                      ? "Generating..."
+                      : "Uploading..."
+                    : uploadMode === "ai"
+                    ? "Generate Website"
+                    : "Continue to Server Creation"}
+                </button>
+              )}
             </div>
           )}
 
