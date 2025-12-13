@@ -70,6 +70,7 @@ class IdentityRepository {
         documents: { orderBy: { uploadedAt: "desc" } },
         gologinProfile: true,
         adAccounts: { select: { id: true, internalId: true, googleCid: true } },
+        linkedWebsite: { select: { id: true, name: true, domain: true, status: true } },
       },
     });
 
@@ -120,6 +121,7 @@ class IdentityRepository {
         documents: true,
         gologinProfile: true,
         adAccounts: { select: { id: true, internalId: true, googleCid: true } },
+        linkedWebsite: { select: { id: true, name: true, domain: true, status: true } },
       },
     });
 
@@ -163,6 +165,7 @@ class IdentityRepository {
         documents: true,
         gologinProfile: true,
         adAccounts: { select: { id: true, internalId: true, googleCid: true } },
+        linkedWebsite: { select: { id: true, name: true, domain: true, status: true } },
       },
     });
 
