@@ -84,12 +84,20 @@ export async function POST(
     const siteDomain = website.domain || `${website.name.toLowerCase().replace(/\s+/g, "-")}.com`;
 
     // Generate content and images using AI
+    console.log("[Generate] Starting AI content generation...");
     const { content, images } = await generateWebsiteContent({
       apiKey: apiKey!,
       niche,
       description: description.trim(),
       domain: siteDomain,
       colors: presets.colors,
+    });
+
+    // Log image sizes for debugging
+    console.log("[Generate] Image sizes:", {
+      hero: images.hero.length,
+      feature1: images.feature1.length,
+      feature2: images.feature2.length,
     });
 
     // Assemble the website ZIP
@@ -153,6 +161,11 @@ export async function POST(
         "images/feature1.png",
         "images/feature2.png",
       ],
+      imageSizes: {
+        hero: images.hero.length,
+        feature1: images.feature1.length,
+        feature2: images.feature2.length,
+      },
     });
   } catch (error) {
     console.error("Website generation failed:", error);

@@ -208,6 +208,8 @@ async function generateSingleImage(
   apiKey: string,
   prompt: string
 ): Promise<Buffer> {
+  console.log("[Imagen] Generating image with prompt:", prompt.substring(0, 100) + "...");
+
   const response = await fetch(`${IMAGEN_API_URL}?key=${apiKey}`, {
     method: "POST",
     headers: {
@@ -226,22 +228,26 @@ async function generateSingleImage(
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("Imagen API error:", errorText);
+    console.error("[Imagen] API error status:", response.status);
+    console.error("[Imagen] API error:", errorText);
 
     // If Imagen fails, generate a placeholder
     return generatePlaceholderImage();
   }
 
   const data = await response.json();
+  console.log("[Imagen] Response keys:", Object.keys(data));
 
   // Extract base64 image from response
   const base64Image = data.predictions?.[0]?.bytesBase64Encoded;
   if (!base64Image) {
-    console.warn("No image generated, using placeholder");
+    console.warn("[Imagen] No bytesBase64Encoded in response:", JSON.stringify(data).substring(0, 500));
     return generatePlaceholderImage();
   }
 
-  return Buffer.from(base64Image, "base64");
+  const imageBuffer = Buffer.from(base64Image, "base64");
+  console.log("[Imagen] Generated image size:", imageBuffer.length, "bytes");
+  return imageBuffer;
 }
 
 function generatePlaceholderImage(): Buffer {
