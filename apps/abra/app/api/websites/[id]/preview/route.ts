@@ -205,7 +205,7 @@ export async function POST(
 
     // List all files in ZIP
     const files: string[] = [];
-    zip.forEach((relativePath) => {
+    zip.forEach((relativePath: string) => {
       files.push(relativePath);
     });
 
