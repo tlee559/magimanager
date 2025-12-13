@@ -11822,9 +11822,8 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
 
   // Step 1: Name & Upload
   const [name, setName] = useState(website?.name || "");
-  const [uploadMode, setUploadMode] = useState<"file" | "gdrive" | "ai">("file");
+  const [uploadMode, setUploadMode] = useState<"file" | "ai">("file");
   const [zipFile, setZipFile] = useState<File | null>(null);
-  const [gdriveUrl, setGdriveUrl] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
 
@@ -11958,9 +11957,6 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
     } else if (uploadMode === "file" && !zipFile && !currentWebsite?.zipFileUrl) {
       setUploadError("Please select a zip file");
       return;
-    } else if (uploadMode === "gdrive" && !gdriveUrl.trim() && !currentWebsite?.zipFileUrl) {
-      setUploadError("Please enter a Google Drive link");
-      return;
     }
 
     setUploading(true);
@@ -12010,17 +12006,8 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
         return;
       }
 
-      // Upload zip if provided (either file or Google Drive)
-      if (uploadMode === "gdrive" && gdriveUrl.trim()) {
-        const uploadRes = await fetch(`/api/websites/${websiteId}/upload`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ gdriveUrl: gdriveUrl.trim() }),
-        });
-        const uploadData = await uploadRes.json();
-        if (!uploadRes.ok) throw new Error(uploadData.error || "Failed to upload from Google Drive");
-        setCurrentWebsite(uploadData.website);
-      } else if (zipFile) {
+      // Upload zip if provided
+      if (zipFile) {
         const formData = new FormData();
         formData.append("file", zipFile);
 
@@ -12314,7 +12301,7 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                 {/* Upload Mode Toggle */}
                 <div className="flex gap-2 p-1 bg-slate-800 rounded-lg mb-4 border border-slate-700">
                   <button
-                    onClick={() => { setUploadMode("file"); setGdriveUrl(""); setPreviewReady(false); }}
+                    onClick={() => { setUploadMode("file"); setPreviewReady(false); }}
                     className={`flex-1 py-2 px-3 rounded text-sm font-medium transition ${
                       uploadMode === "file"
                         ? "bg-slate-700 text-white"
@@ -12324,17 +12311,7 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                     Upload File
                   </button>
                   <button
-                    onClick={() => { setUploadMode("gdrive"); setZipFile(null); setPreviewReady(false); }}
-                    className={`flex-1 py-2 px-3 rounded text-sm font-medium transition ${
-                      uploadMode === "gdrive"
-                        ? "bg-slate-700 text-white"
-                        : "text-slate-400 hover:text-slate-200"
-                    }`}
-                  >
-                    Google Drive
-                  </button>
-                  <button
-                    onClick={() => { setUploadMode("ai"); setZipFile(null); setGdriveUrl(""); }}
+                    onClick={() => { setUploadMode("ai"); setZipFile(null); }}
                     className={`flex-1 py-2 px-3 rounded text-sm font-medium transition ${
                       uploadMode === "ai"
                         ? "bg-purple-600 text-white"
@@ -12375,24 +12352,6 @@ function WebsiteWizard({ website, onClose }: { website: Website | null; onClose:
                         </div>
                       )}
                     </label>
-                  </div>
-                )}
-
-                {uploadMode === "gdrive" && (
-                  <div>
-                    <input
-                      type="url"
-                      value={gdriveUrl}
-                      onChange={(e) => setGdriveUrl(e.target.value)}
-                      placeholder="https://drive.google.com/file/d/..."
-                      className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
-                    />
-                    <p className="mt-2 text-xs text-slate-500">
-                      Paste a Google Drive share link. The file must be shared publicly or with "Anyone with the link".
-                    </p>
-                    {currentWebsite?.zipFileUrl && (
-                      <p className="mt-2 text-emerald-400 text-sm">✅ File already uploaded. Enter a new link to replace it.</p>
-                    )}
                   </div>
                 )}
 
